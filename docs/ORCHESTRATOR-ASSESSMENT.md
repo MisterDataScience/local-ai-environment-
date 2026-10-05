@@ -57,3 +57,7 @@ Search isolation requires special care: Open WebUI distinguishes search from web
 - [Gluetun shared networking](https://github.com/qdm12/gluetun-wiki/blob/main/setup/connect-a-container-to-gluetun.md)
 - [Gluetun firewall configuration](https://github.com/qdm12/gluetun-wiki/blob/main/setup/options/firewall.md)
 - [NordVPN's Gluetun/OpenVPN guide](https://support.nordvpn.com/hc/en-us/articles/47830508425745-How-to-set-up-an-OpenVPN-manual-connection-to-NordVPN-with-Gluetun)
+
+## Subsequent remote-access addition
+
+The installer now optionally configures Tailscale Serve for Open WebUI and a separate media-only loopback listener. New generated-media links use a private HTTPS hostname instead of localhost when enabled. This does not replace the orchestrator or add global profiles, search or unattended startup. See REMOTE-ACCESS.md; native tailnet and browser validation are pending.

@@ -16,3 +16,5 @@ models/
 acceptance-report.json
 install-state.json
 accepted-fingerprint.txt
+remote-acceptance-report.json
+Remote AI Address.txt

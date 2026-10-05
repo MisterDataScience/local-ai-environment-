@@ -1,8 +1,8 @@
 Authoring checks completed 2026-10-05.
-10 installer tests passed.
-16 gateway tests passed.
-Python syntax and bootstrap shell syntax passed.
-Verified: text preset routing, per-model timeout/context enforcement, no preload on listing, explicit text-model handoff and migration preservation.
-No native Mac runtime, model downloads or Apple GPU inference was available here.
-The installer tests every configured text model plus image/video handoffs on the target Mac.
-Native idle-expiry timing and browser model-selection behaviour remain to be checked on the Mac.
+20 installer/remote-access tests passed.
+18 gateway tests passed.
+Python and shell syntax, ZIP integrity passed.
+Remote tests cover private proxy setup, configuration preservation, public/conflicting route rejection, rollback, untrusted package rejection, CLI invocation, timeout, disabling only matching routes and HTTPS self-check logic.
+The media-only HTTP listener was exercised locally and rejects API endpoints/traversal.
+No real Mac package installation, tailnet, TLS certificates, Apple GPU inference or other-device browser was available here.
+Runtime records private HTTPS/media checks on the Mac; another-device browser checks remain pending.

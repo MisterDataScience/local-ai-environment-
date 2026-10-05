@@ -16,7 +16,7 @@ This replaces the manual installation sequence with one installer for an **Apple
 5. Leave Terminal open while it works. Model downloads are large, and the video acceptance test may take a long time. The installer prints its current stage. macOS may request approval to run downloaded software.
 6. When installation and acceptance tests succeed, it starts the system and opens Safari at **http://127.0.0.1:8081**. Choose Everyday (`local-ai`), Small (`local-ai-small`) or Large (`local-ai-large`) in the model selector. Everyday remains the default.
 
-No Homebrew commands, manual model placement, environment activation, API-key copying, WebUI provider setup or account creation are required. The installer uses a local single-user WebUI with login disabled, bound exclusively to loopback. Keep it local: do not change the host to `0.0.0.0` or expose the port on a network with this configuration.
+No Homebrew commands, manual model placement, environment activation, API-key copying, WebUI provider setup or account creation are required. The installer uses a local single-user WebUI with login disabled, bound exclusively to loopback. Keep the native listeners on loopback. For access from your other devices, use the optional private Tailscale stage described below.
 
 ## What it installs
 
@@ -130,3 +130,23 @@ Edit `~/LocalAI-Automated/control/config.json` while services are stopped. The `
 The new installer adds Small and Large presets to older configurations once, preserving the existing default model and secrets, with a private `config.before-text-presets.json` backup. Later reruns preserve edited presets. Downloads and native acceptance checks follow the configured models. The three default text downloads total roughly 31 GB; this is download size, not peak runtime memory. Large-model memory and performance still require validation on your Mac.
 
 To upgrade an earlier installation, stop Local AI, extract this updated bundle and rerun the same installation command. Changed code/configuration invalidates the previous acceptance fingerprint. The installer runs generation checks again and stops if any configured model fails.
+
+## Optional private remote access
+
+To include Tailscale in the installation, run this wrapper instead of the ordinary command:
+
+```bash
+/bin/bash "$HOME/Downloads/mac-local-ai-installer/Install Local AI with Remote Access.command"
+```
+
+After local model checks pass, the installer downloads/verifies the official Tailscale standalone package if needed, asks macOS to install it, opens Tailscale for your sign-in/extension approval and configures private HTTPS for chat and generated media. Approve Tailscale HTTPS if prompted. An existing Tailscale app is reused without replacement. No password/auth key is stored by Local AI.
+
+Install Tailscale on your other devices and sign in to the same personal account. Bookmark the Chat address in `~/LocalAI-Automated/Remote AI Address.txt`. The Mac must stay awake and Local AI must be running. The two private HTTPS ports are 443 for chat and 8443 for media. The additional media-only listener is loopback port 8002; it does not expose the gateway API.
+
+Access uses Tailscale's permissions and the existing single-user WebUI database, without a separate WebUI password. Permitted tailnet devices/users see the same chats and media. Keep this on your personal tailnet. The helper does not enable Funnel, exit-node routing, public port forwarding or Proton search.
+
+The updated installer also creates Enable Remote Access.command and Disable Remote Access.command under `~/LocalAI-Automated`. Stop Local AI before running either and restart afterward. Enabling later does not redownload models. Disabling removes only the matching Local AI routes, leaving Tailscale and other services in place.
+
+Runtime checks HTTPS chat health and a temporary media file, recording `remote-acceptance-report.json`. A failure is reported while local chat continues. A real iPad/phone/Windows browser check is still required. Existing localhost links in old chats are not migrated. New media links use the private address.
+
+This remains a Terminal-supervised application; remote access does not add automatic background startup or wake-on-demand. The installer may require a restart if macOS/Tailscale requests one. Resume setup after that restart.

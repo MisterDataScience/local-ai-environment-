@@ -16,4 +16,4 @@ if [ ! -x "$AI_INSTALL_ROOT/tools/uv/uv" ]; then
 fi
 echo "Starting installation. Leave this Terminal open."
 "$AI_INSTALL_ROOT/tools/uv/uv" run --python 3.11 --no-project \
-  installer.py --root "$AI_INSTALL_ROOT" --uv "$AI_INSTALL_ROOT/tools/uv/uv"
+  installer.py --root "$AI_INSTALL_ROOT" --uv "$AI_INSTALL_ROOT/tools/uv/uv" "$@"

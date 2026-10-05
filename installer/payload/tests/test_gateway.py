@@ -5,7 +5,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -20,6 +20,59 @@ def request(text):
 
 
 class GatewayTests(unittest.TestCase):
+    def test_new_generated_media_uses_private_https_when_enabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "workflows").mkdir()
+            (root / "workflows/image.json").write_text(json.dumps(
+                {"1": {"inputs": {"text": "__LOCAL_AI_PROMPT__"}}}))
+            comfy = root / "comfy"
+            (comfy / "output").mkdir(parents=True)
+            (comfy / "output/result.png").write_bytes(b"generated image")
+            engine = gateway.Engine({"comfy_dir": str(comfy), "remote_access": {
+                "enabled": True, "media_url": "https://mac.example.ts.net:8443"}}, root)
+            try:
+                def start():
+                    engine.process = Mock()
+                    engine.process.poll.return_value = None
+                replies = [{"prompt_id": "job"}, {"job": {"status": {"completed": True},
+                           "outputs": {"7": {"images": [{"filename": "result.png", "type": "output"}]}}}}]
+                with patch.object(engine, "unload_ollama"), patch.object(engine, "start_comfy", side_effect=start), \
+                     patch.object(engine, "stop_comfy"), patch.object(gateway, "api", side_effect=replies):
+                    result = engine.render("image", "a car")
+                self.assertIn("https://mac.example.ts.net:8443/media/", result)
+                self.assertNotIn("127.0.0.1", result)
+                self.assertEqual(next((root / "media").iterdir()).read_bytes(), b"generated image")
+            finally:
+                engine.executor.shutdown()
+
+    def test_media_listener_exposes_files_but_not_chat_api(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            engine = gateway.Engine({}, root)
+            (root / "media/test.png").write_bytes(b"test image")
+            server = gateway.ThreadingHTTPServer(("127.0.0.1", 0), gateway.MediaHandler)
+            server.engine = engine
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                with urlopen(base + "/media/test.png") as response:
+                    self.assertEqual(response.read(), b"test image")
+                    self.assertEqual(response.headers["Content-Type"], "image/png")
+                for path in ("/health", "/v1/models", "/media/../config.json"):
+                    with self.assertRaises(HTTPError) as error:
+                        urlopen(base + path)
+                    self.assertEqual(error.exception.code, 404)
+                with self.assertRaises(HTTPError) as error:
+                    urlopen(Request(base + "/v1/chat/completions", data=b"{}"))
+                self.assertEqual(error.exception.code, 404)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join()
+                engine.executor.shutdown()
+
     def test_text_presets_forward_model_timeout_and_context(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = gateway.Engine({"text_models": DEFAULT_TEXT_MODELS}, Path(directory))

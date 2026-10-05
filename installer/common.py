@@ -9,7 +9,7 @@ import time
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-PORTS = {"ollama": 11435, "gateway": 8001, "comfy": 8189, "webui": 8081}
+PORTS = {"ollama": 11435, "gateway": 8001, "comfy": 8189, "webui": 8081, "media": 8002}
 
 
 def port_open(port):

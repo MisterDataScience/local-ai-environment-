@@ -1,6 +1,6 @@
 # Local AI project: updated requirements
 
-Recorded 2026-10-05. These are desired behaviours, not claims about the existing installer.
+Recorded 2026-10-05. Optional private Tailscale remote access has since been added; native validation remains pending. These are desired behaviours, not claims about the existing installer.
 
 ## Hardware and purpose
 
@@ -81,3 +81,7 @@ The earlier 0.5–1 GB infrastructure estimate is a target, not a measurement. I
 ## Scope of the next step
 
 First inspect the already-selected orchestrator and compare established tools. Distinguish existing code, native backend capabilities, configuration and new custom code. Do not redesign the whole system or assume these features exist. The existing installer remains a prototype until an updated implementation passes these checks.
+
+## Remote devices
+
+Access the same chat, history, folders and generated outputs from iPad, phone and Windows through private Tailscale HTTPS. This installer option is implemented with one-time sign-in and extension approval. It does not route ordinary internet traffic through Proton or implement background AI startup. See REMOTE-ACCESS.md for scope and pending browser validation.

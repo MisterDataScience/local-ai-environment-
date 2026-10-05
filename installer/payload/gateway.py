@@ -231,7 +231,9 @@ class Engine:
             self.stop_comfy()
         if kind == "video" and destination.suffix == ".webp":
             destination = self.convert_video(destination)
-        url = self.config.get("public_url", "http://127.0.0.1:8000") + "/media/" + destination.name
+        remote = self.config.get("remote_access", {})
+        base = remote["media_url"] if remote.get("enabled") else self.config.get("public_url", "http://127.0.0.1:8000")
+        url = base + "/media/" + destination.name
         if kind == "image":
             return f"![Generated image]({url})\n\n[Download image]({url})"
         return f"[Open or download generated video]({url})"
@@ -390,6 +392,18 @@ class Handler(BaseHTTPRequestHandler):
             LOG.info("Client disconnected; job will finish and release model memory.")
 
 
+class MediaHandler(Handler):
+    """Separate loopback listener exposing generated files only, never the model API."""
+    def do_GET(self):
+        if not urlparse(self.path).path.startswith("/media/"):
+            return self.json_response(404, {"error": "Not found"})
+        return super().do_GET()
+
+    def do_POST(self):
+        self.close_connection = True
+        return self.json_response(404, {"error": "Not found"})
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     lock_file = (ROOT / ".gateway.lock").open("w")
@@ -403,6 +417,17 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", config.get("gateway_port", 8000)), Handler)
     server.daemon_threads = True
     server.engine = Engine(config)
+    media_server = None
+    if config.get("remote_access", {}).get("enabled"):
+        try:
+            media_server = ThreadingHTTPServer(("127.0.0.1", 8002), MediaHandler)
+            media_server.daemon_threads = True
+            media_server.engine = server.engine
+            threading.Thread(target=media_server.serve_forever, daemon=True).start()
+        except BaseException:
+            server.server_close()
+            server.engine.executor.shutdown(wait=True)
+            raise
     def interrupted(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, interrupted)
@@ -416,6 +441,9 @@ def main():
         server.server_close()
         server.engine.executor.shutdown(wait=True)
         server.engine.stop_comfy()
+        if media_server:
+            media_server.shutdown()
+            media_server.server_close()
         lock_file.close()
 
 

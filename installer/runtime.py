@@ -20,6 +20,14 @@ def main():
     except BlockingIOError:
         raise SystemExit("Local AI is already running. Open http://127.0.0.1:8081 in Safari.")
     config = json.loads((root / "control/config.json").read_text())
+    remote = config.get("remote_access", {})
+    if remote.get("enabled"):
+        from remote_access import cli_json, assert_private_ports
+        # Refuse to activate the local service behind an existing public Funnel route.
+        try:
+            assert_private_ports(cli_json("serve", "status", "--json"), remote["hostname"])
+        except subprocess.SubprocessError:
+            logging.warning("Tailscale status is unavailable. Remote access may be offline.")
     processes = []
     def interrupted(signum, frame):
         raise KeyboardInterrupt
@@ -44,8 +52,21 @@ def main():
         models = http("http://127.0.0.1:8001/v1/models", key=config["api_key"])
         if not any(model["id"] == "local-ai" for model in models["data"]):
             raise RuntimeError("The local-ai gateway model is unavailable.")
+        if remote.get("enabled"):
+            from remote_access import verify_remote_access
+            try:
+                verify_remote_access(root, remote)
+                logging.info("Private HTTPS chat and media checks passed. Test another device next.")
+            except Exception as error:
+                logging.warning("Remote checks did not pass: %s. Local chat is still running.", error)
+                from remote_access import atomic_json
+                atomic_json(root / "remote-acceptance-report.json",
+                            {"status": "failed", "error": str(error), "other_device_browser_test": "pending"})
         subprocess.run(["/usr/bin/open", "-a", "Safari", "http://127.0.0.1:8081"], check=True)
         print("\nLocal AI is running at http://127.0.0.1:8081")
+        if remote.get("enabled"):
+            print("Private remote chat:", remote["ui_url"])
+            print("Connect Tailscale on your other devices, then open that address.")
         print("Select Everyday, Small or Large in the chat's model menu. Models load on a request.")
         print("These are text presets, not Gaming Mode. Media remains available with each preset.")
         print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")

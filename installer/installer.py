@@ -178,7 +178,7 @@ def install_environments(root, uv, state):
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
-    for name in ("runtime.py", "common.py"):
+    for name in ("runtime.py", "common.py", "remote_access.py"):
         shutil.copy2(SOURCE / name, control / name)
     python = control / ".venv/bin/python"
     if not python.exists():
@@ -284,6 +284,12 @@ def make_launcher(root):
     command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
                        "\nexec .venv/bin/python runtime.py\n")
     command.chmod(0o755)
+    for label, argument in (("Enable Remote Access", ""), ("Disable Remote Access", " --disable")):
+        remote_command = root / (label + ".command")
+        remote_command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
+                                 "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
+                                 argument + "\n")
+        remote_command.chmod(0o755)
     application = Path.home() / "Applications/Local AI.app"
     if application.exists() and not (application / "Contents/local-ai-owner.txt").exists():
         raise RuntimeError("An unrelated Local AI.app already exists. No application was overwritten.")
@@ -303,6 +309,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--uv", type=Path, required=True)
+    parser.add_argument("--remote-access", action="store_true",
+                        help="Install/connect Tailscale and configure private chat/media HTTPS access.")
     args = parser.parse_args()
     root = args.root.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -348,6 +356,11 @@ def main():
             {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE,
              "text_models": configured_text_models(configuration)}, indent=2))
         checkpoint(state, "installed")
+        if args.remote_access:
+            logging.info("Optional remote-access stage: Tailscale sign-in and private HTTPS proxies")
+            from remote_access import configure
+            configure(root)
+            checkpoint(state, "remote-access-configured")
         logging.info("Stage 8/8: launching Local AI")
         logging.info("Daily launcher: %s", application)
         runtime_python = str(root / "control/.venv/bin/python")

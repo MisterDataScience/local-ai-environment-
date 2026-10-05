@@ -32,6 +32,8 @@ Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trig
 
 The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements.
 
+Remote access is now available as an optional installer stage. See [private access from your other devices](docs/REMOTE-ACCESS.md). Tailscale sign-in and macOS extension approval remain interactive setup steps.
+
 ## Install the current prototype
 
 Read [the installer instructions](installer/README.md) first. Download [Mac-Local-AI-Automated-Installer.zip](downloads/Mac-Local-AI-Automated-Installer.zip) using GitHub's file download control, extract it into Downloads and run:
@@ -50,7 +52,7 @@ python3 -m unittest discover -s installer/payload/tests -v
 bash -n 'installer/Install Local AI.command'
 ```
 
-The two suites contain 10 installer tests and 16 gateway tests. They verify logic with mocks, not GPU execution. Native acceptance checks exercise every configured text model, then text, image, text, video and text with Open WebUI running; they do not automate all browser interactions.
+The two suites contain 20 installer/remote-access tests and 18 gateway tests. They verify logic with mocks, not GPU execution. Native acceptance checks exercise every configured text model, then text, image, text, video and text with Open WebUI running; they do not automate all browser interactions.
 
 See [text model and idle settings](docs/TEXT-MODELS-AND-IDLE.md) for model IDs, configuration and upgrade instructions.
 
