@@ -20,8 +20,8 @@ The selected orchestrator is the custom Python standard-library HTTP gateway at 
 | Global profile state | None | New code |
 | Profile model/tool restrictions | None | New backend policy code |
 | Gaming selector | None | UI integration and state transition code |
-| Search/retrieval | None; tool calls rejected | New integration |
-| Selective VPN | None | Container/network deployment and integration |
+| Search/retrieval | Explicit `/search` and `/read`, bounded sources passed to Ollama | Custom reader/client plus established SearXNG; no autonomous tool calls |
+| Selective VPN | Reader/SearXNG share Gluetun/Proton Free network and DNS | Implemented; live tunnel-drop/DNS tests pending; native UI-loader/plugin egress not fully blocked |
 | Background startup | Foreground Terminal supervisor only | Background service deployment and supervisor changes |
 | Guaranteed memory ceiling | None | Separate resource-control design and validation |
 

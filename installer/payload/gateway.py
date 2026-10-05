@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 import uuid
 from text_models import configured_text_models
+from web_client import retrieve
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("gateway")
@@ -69,9 +70,9 @@ def messages_and_route(body, model_ids=None):
     # Whitespace after a command may also be a newline or a tab.
     parts = stripped.split(maxsplit=1)
     command = parts[0].lower() if parts else ""
-    if command in {"/image", "/video"}:
+    if command in {"/image", "/video", "/search", "/read"}:
         if len(parts) != 2 or not parts[1].strip():
-            raise ValueError("Put a description after /image or /video.")
+            raise ValueError("Put a description/query/URL after the command.")
         return cleaned, command[1:], parts[1].strip()
     return cleaned, "text", latest
 
@@ -267,9 +268,14 @@ class Engine:
             self.stop_comfy()
             if port_open(self.comfy_port):
                 raise RuntimeError("Stop manually started ComfyUI. The gateway must own it.")
-            if route != "text":
+            if route in {"image", "video"}:
                 return self.render(route, prompt)
+            links = ""
             preset = self.text_models[body["model"]]
+            if route in {"search", "read"}:
+                self.state = "retrieving-web"
+                budget = max(500, min(10000, (preset["num_ctx"] - 2600) * 2))
+                messages, links = retrieve(self.config, route, prompt, budget)
             # Switching text models also explicitly releases the old model.
             loaded = api(self.ollama, "/api/ps").get("models", [])
             if any(model["name"] != preset["model"] for model in loaded):
@@ -283,7 +289,7 @@ class Engine:
                 "options": options, "stream": False,
                 "think": preset.get("thinking", False), "keep_alive": preset["keep_alive_seconds"],
             }, timeout=1800)
-            return result["message"]["content"]
+            return result["message"]["content"] + links
         finally:
             self.state = "idle"
             LOG.info("Finished %s request", route)

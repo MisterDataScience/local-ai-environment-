@@ -44,9 +44,9 @@ A strict RAM ceiling is a separate technical requirement. Model size, context ca
 
 ## Search privacy
 
-Only AI search/retrieval should use NordVPN. Safari, Dropbox, games and ordinary Mac traffic keep their normal connection. The objective is to avoid exposing the home public IP to search providers and sites automatically visited by the AI; it is not absolute anonymity.
+Only AI search/retrieval should use a VPN. The free implementation now uses Proton Free, not NordVPN. Safari, Dropbox, games and ordinary Mac traffic keep their normal connection. The objective is to avoid exposing the home public IP to search providers/sites automatically visited by AI; it is not absolute anonymity.
 
-Proposed topology: local AI calls a local search/retrieval endpoint; its network traffic passes through Gluetun and NordVPN. Docker search and retrieval containers share the VPN service's network namespace using `network_mode: service:vpn` when the Compose service is named `vpn`. SearXNG is a candidate search engine.
+Implemented prototype: local AI calls a local retrieval endpoint; traffic passes through Gluetun/Proton Free. Search/reader containers share `network_mode: service:vpn`; SearXNG provides search. See [WEB-ACCESS.md](WEB-ACCESS.md) for safeguards, setup, limitations and pending native validation. Broader native UI-loader/plugin egress restrictions remain unimplemented.
 
 Required properties:
 

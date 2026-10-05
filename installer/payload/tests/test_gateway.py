@@ -20,6 +20,35 @@ def request(text):
 
 
 class GatewayTests(unittest.TestCase):
+    def test_web_routes_retrieve_before_local_text_and_append_citations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = gateway.Engine({}, Path(directory))
+            try:
+                for command in ("/search test", "/read https://example.org Summarise"):
+                    with patch.object(gateway, "port_open", return_value=False), \
+                         patch.object(gateway, "retrieve", return_value=([{"role": "user", "content": "evidence"}], "\nSources")) as retrieve, \
+                         patch.object(gateway, "api", side_effect=[{"models": []}, {"message": {"content": "answer"}}]) as backend:
+                        self.assertEqual(engine.submit(request(command)).result(2), "answer\nSources")
+                        self.assertEqual(backend.call_args.args[1], "/api/chat")
+                        self.assertEqual(backend.call_args.args[2]["messages"][0]["content"], "evidence")
+                        self.assertEqual(retrieve.call_args.args[1], command.split()[0][1:])
+            finally:
+                engine.executor.shutdown()
+
+    def test_web_failure_does_not_hallucinate_answer_or_call_ollama(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = gateway.Engine({}, Path(directory))
+            try:
+                with patch.object(gateway, "port_open", return_value=False), \
+                     patch.object(gateway, "retrieve", side_effect=RuntimeError("VPN unavailable")), \
+                     patch.object(gateway, "api") as backend:
+                    with self.assertRaises(RuntimeError):
+                        engine.submit(request("/search test")).result(2)
+                    backend.assert_not_called()
+                    self.assertEqual(engine.state, "idle")
+            finally:
+                engine.executor.shutdown()
+
     def test_new_generated_media_uses_private_https_when_enabled(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

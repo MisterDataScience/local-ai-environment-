@@ -87,6 +87,8 @@ def webui_environment(root, configuration):
         "ENABLE_TITLE_GENERATION": "False", "ENABLE_TAGS_GENERATION": "False",
         "ENABLE_FOLLOW_UP_GENERATION": "False", "ENABLE_IMAGE_GENERATION": "False",
         "ENABLE_IMAGE_PROMPT_GENERATION": "False", "ENABLE_COMMUNITY_SHARING": "False",
+        "ENABLE_WEB_SEARCH": "False", "ENABLE_LOCAL_WEB_FETCH": "False",
+        "ENABLE_RAG_LOCAL_WEB_FETCH": "False", "ENABLE_USER_WEBHOOKS": "False",
         "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "true",
         "CUDA_VISIBLE_DEVICES": "", "RAG_EMBEDDING_MODEL_DEVICE": "cpu",
         "WHISPER_MODEL_DEVICE": "cpu",

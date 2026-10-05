@@ -4,6 +4,8 @@ __pycache__/
 .DS_Store
 .env
 .env.*
+vpn.env
+reader.env
 !.env.example
 config.json
 config.before-*.json
@@ -18,3 +20,4 @@ install-state.json
 accepted-fingerprint.txt
 remote-acceptance-report.json
 Remote AI Address.txt
+web-acceptance-report.json

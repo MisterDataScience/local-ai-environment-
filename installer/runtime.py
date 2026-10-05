@@ -37,6 +37,12 @@ def main():
         for service, port in PORTS.items():
             if port_open(port):
                 raise RuntimeError(f"{service} port {port} is already occupied. No existing process was stopped.")
+        if config.get("web", {}).get("enabled"):
+            from web_access import start as start_web
+            try:
+                start_web(root)
+            except Exception:
+                logging.warning("VPN web service unavailable. Local AI will continue without web access.")
         ollama = launch([ollama_binary(root), "serve"], root, root / "logs/ollama.log", ollama_environment(root))
         processes.append(("ollama", ollama))
         wait_ready("http://127.0.0.1:11435/api/version", ollama)
@@ -70,6 +76,8 @@ def main():
         print("Select Everyday, Small or Large in the chat's model menu. Models load on a request.")
         print("These are text presets, not Gaming Mode. Media remains available with each preset.")
         print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")
+        if config.get("web", {}).get("enabled"):
+            print("Web: /search QUERY or /read https://example.org QUESTION. VPN required; no fallback.")
         print("Leave this Terminal open. Press Control+C here to shut down.")
         while True:
             for name, process in processes:

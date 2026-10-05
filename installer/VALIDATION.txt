@@ -1,8 +1,11 @@
 Authoring checks completed 2026-10-05.
-20 installer/remote-access tests passed.
-18 gateway tests passed.
+34 installer/remote/web tests passed.
+20 gateway tests passed.
 Python and shell syntax, ZIP integrity passed.
 Remote tests cover private proxy setup, configuration preservation, public/conflicting route rejection, rollback, untrusted package rejection, CLI invocation, timeout, disabling only matching routes and HTTPS self-check logic.
 The media-only HTTP listener was exercised locally and rejects API endpoints/traversal.
 No real Mac package installation, tailnet, TLS certificates, Apple GPU inference or other-device browser was available here.
 Runtime records private HTTPS/media checks on the Mac; another-device browser checks remain pending.
+Web tests cover shared VPN network, loopback publication, private DNS, private/reserved/mixed-address rejection, pinned-IP TLS, redirect revalidation, PDF/compression/size rejection, VPN failure before DNS/fetch, fixed-loopback client routing, bounded evidence/citations and private credentials/config preservation.
+Gateway tests ensure web errors do not call Ollama and retrieved evidence reaches local text inference.
+No real Docker VPN, DNS capture or live search engine was available. VPN readiness is not a verified kill switch. Native search/page, tunnel-drop and DNS-leak tests remain pending.

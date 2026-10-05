@@ -100,7 +100,7 @@ def completed(path, stage):
 
 def acceptance_fingerprint(root):
     hashes = [digest(root / "control" / name) for name in
-              ("gateway.py", "text_models.py", "workflows/image.json", "workflows/video.json", "config.json")]
+              ("gateway.py", "text_models.py", "web_client.py", "workflows/image.json", "workflows/video.json", "config.json")]
     return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
 
 
@@ -172,14 +172,15 @@ def install_comfy(root, uv, state):
 def install_environments(root, uv, state):
     control = root / "control"
     control.mkdir(exist_ok=True)
-    for name in ("gateway.py", "text_models.py", "check-workflows.py", "requirements.txt"):
+    for name in ("gateway.py", "text_models.py", "web_client.py", "check-workflows.py", "requirements.txt"):
         shutil.copy2(SOURCE / "payload" / name, control / name)
     shutil.copytree(SOURCE / "payload/tests", control / "tests", dirs_exist_ok=True)
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
-    for name in ("runtime.py", "common.py", "remote_access.py"):
+    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py"):
         shutil.copy2(SOURCE / name, control / name)
+    shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True)
     python = control / ".venv/bin/python"
     if not python.exists():
         run([uv, "venv", "--python", "3.11", control / ".venv"])
@@ -284,6 +285,11 @@ def make_launcher(root):
     command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
                        "\nexec .venv/bin/python runtime.py\n")
     command.chmod(0o755)
+    for label, argument in (("Enable Web Access", ""), ("Disable Web Access", " --disable")):
+        web_command = root / (label + ".command")
+        web_command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
+                              "\nexec .venv/bin/python web_access.py --root " + shlex.quote(str(root)) + argument + "\n")
+        web_command.chmod(0o755)
     for label, argument in (("Enable Remote Access", ""), ("Disable Remote Access", " --disable")):
         remote_command = root / (label + ".command")
         remote_command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
@@ -311,6 +317,7 @@ def main():
     parser.add_argument("--uv", type=Path, required=True)
     parser.add_argument("--remote-access", action="store_true",
                         help="Install/connect Tailscale and configure private chat/media HTTPS access.")
+    parser.add_argument("--web-access", action="store_true", help="Configure isolated Proton VPN search/page reading.")
     args = parser.parse_args()
     root = args.root.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -356,6 +363,10 @@ def main():
             {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE,
              "text_models": configured_text_models(configuration)}, indent=2))
         checkpoint(state, "installed")
+        if args.web_access:
+            from web_access import configure as configure_web
+            configure_web(root)
+            checkpoint(state, "web-access-configured")
         if args.remote_access:
             logging.info("Optional remote-access stage: Tailscale sign-in and private HTTPS proxies")
             from remote_access import configure

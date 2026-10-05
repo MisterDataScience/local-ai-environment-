@@ -4,6 +4,8 @@ This replaces the manual installation sequence with one installer for an **Apple
 
 ## Run it
 
+Optional web search/page reading is included. Read [WEB-ACCESS.md](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/WEB-ACCESS.md), also included beside this README in the ZIP, for Docker/Proton prerequisites and `Install Local AI with Web Access.command`. Add `--remote-access` for both retrieval and private other-device access in one run. VPN/DNS leak validation remains pending.
+
 1. Download **Mac-Local-AI-Automated-Installer.zip**.
 2. Extract it in Downloads. The resulting folder should be `mac-local-ai-installer`.
 3. Open Terminal using Command + Space, type Terminal, then press Return.
@@ -69,13 +71,15 @@ You interact with the chat UI:
 Explain this Python function.        -> text
 /image A red car beside a loch.      -> image
 /video A red car slowly driving.     -> video
+/search Python official tutorial    -> VPN search, if configured
+/read https://www.python.org/        -> VPN page summary, if configured
 ```
 
 Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large: 60 seconds. No model loads merely from selecting it. A text request for a different model explicitly unloads the old model first. These choices do not enforce Gaming Mode; image/video commands remain available from every preset.
 
 The gateway unloads Ollama and confirms an empty loaded-model list before starting ComfyUI. After each image or video job, it stops ComfyUI's process group and waits for exit before allowing text to reload. Multiple gateway requests are serialised. Do not connect another client directly to this private Ollama server or manually start ComfyUI on its private port during use.
 
-Text responses are buffered until complete. Images appear in chat. Video returns an MP4 link. This starter supports text prompts, not image understanding, image-conditioned video, RAG, voice, tool execution or automatic natural-language media routing.
+Text responses are buffered until complete. Images appear in chat. Video returns an MP4 link. Optional web commands supply bounded evidence and clickable sources to the local model. Image understanding, image-conditioned video, document RAG, voice, tool execution and automatic natural-language media/web routing remain unsupported.
 
 ## Shutdown
 
