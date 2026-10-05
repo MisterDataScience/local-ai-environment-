@@ -21,6 +21,10 @@ Gaming/Normal/Max profiles and automatic background AI startup remain unimplemen
 
 ## Current software choices
 
+A restricted GitHub read/proposal/approved-write adapter is included with account
+activation disabled. Credential storage and the human approval interface are still
+pending. See [GitHub integration and validation limits](docs/GITHUB-INTEGRATION.md).
+
 The gateway has focused modules and a small entry point. It remains one process. A bounded internal tool loop provides calculator/current-time tools and, when VPN web access is configured, web search/page reading. Account connectors remain absent. See [TOOL-LOOP.md](docs/TOOL-LOOP.md).
 
 | Role | Choice |

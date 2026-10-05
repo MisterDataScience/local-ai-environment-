@@ -29,6 +29,8 @@ LOG = logging.getLogger("gateway")
 class Engine:
     def __init__(self, config, root=ROOT):
         self.config, self.root = config, root
+        if config.get("github", {}).get("enabled"):
+            raise ValueError("GitHub activation is not available until credential and approval integration is validated")
         self.text_models = configured_text_models(config)
         self.tool_loop_enabled = config.get("tool_loop_enabled", True)
         if type(self.tool_loop_enabled) is not bool:

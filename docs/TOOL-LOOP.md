@@ -53,7 +53,7 @@ The loop applies remaining-time HTTP timeouts and checks its deadline between op
 - Enabled by default for ordinary text chat. To disable, stop Local AI, set `"tool_loop_enabled": false` in `~/LocalAI-Automated/control/config.json`, then restart. The flag must be a JSON boolean, and requests cannot override it.
 - Explicit `/search` and `/read` retain their existing retrieval-then-answer path without exposing local tools to the retrieved page. Ordinary chat now advertises `search_web` and `read_page` when VPN web access is enabled; those tools use the same isolated endpoint.
 - `/image` and `/video` retain their original explicit routing and memory handoff.
-- No shell, arbitrary filesystem access, GitHub, Dropbox, write actions or user-defined tool registration is available.
+- No shell, arbitrary filesystem access, active GitHub/Dropbox account access or user-defined tool registration is available. A disabled GitHub adapter now supports tested read/proposal/approved-write paths; see [GitHub integration](GITHUB-INTEGRATION.md). The installer does not activate it.
 - No account credentials are placed in schemas or tool messages by this implementation. Never paste credentials in ordinary chat.
 - Custom text presets must support Ollama tools. Unsupported models may return a backend error. Disable the loop globally to retain the previous ordinary-chat path while investigating compatibility.
 - Tool selection, final calculations and descriptions are still model-dependent. Executable arithmetic results are validated; whether the model uses or quotes them correctly requires evaluation.

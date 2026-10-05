@@ -27,7 +27,8 @@ COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
-                 "tool_registry.py", "tool_executor.py", "tool_loop.py")
+                 "tool_registry.py", "tool_executor.py", "tool_loop.py",
+                 "github_adapter.py", "github_mcp.py")
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
