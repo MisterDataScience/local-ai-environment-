@@ -1,0 +1,341 @@
+"""Resumable installer for the chosen single-user Apple Silicon stack."""
+import argparse
+import datetime
+import fcntl
+import hashlib
+import json
+import logging
+import os
+from pathlib import Path
+import platform
+import plistlib
+import secrets
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import zipfile
+
+from common import PORTS, http, launch, ollama_binary, ollama_environment, port_open, stop_process, wait_ready, webui_environment
+
+SOURCE = Path(__file__).resolve().parent
+COMFY_RELEASE = "v0.38.0"
+WEBUI_RELEASE = "0.11.1"
+MODELS = [
+    ("checkpoints/sd_xl_base_1.0.safetensors",
+     "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
+     "31e35c80fc4829d14f90153f4c74cd59c90b779f6afe05a74cd6120b893f7e5b"),
+    ("checkpoints/ltx-video-2b-v0.9.5.safetensors",
+     "https://huggingface.co/Lightricks/LTX-Video/resolve/main/ltx-video-2b-v0.9.5.safetensors",
+     "720d15c9f19f7d0f6b2a92bbbc34410e2cfb2f6856a100b38f734fbf973d4adf"),
+    ("text_encoders/t5xxl_fp16.safetensors",
+     "https://huggingface.co/Comfy-Org/mochi_preview_repackaged/resolve/main/split_files/text_encoders/t5xxl_fp16.safetensors",
+     "6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635"),
+]
+
+
+def run(command, **kwargs):
+    logging.info("Running %s", Path(str(command[0])).name)
+    subprocess.run([str(value) for value in command], check=True, **kwargs)
+
+
+def digest(path):
+    result = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        while block := source.read(8 * 1024 * 1024):
+            result.update(block)
+    return result.hexdigest()
+
+
+def download(url, destination, checksum=None):
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        if checksum is None or digest(destination) == checksum:
+            logging.info("Reusing %s", destination.name)
+            return
+        invalid = destination.with_name(destination.name + ".invalid-" + str(time.time_ns()))
+        destination.rename(invalid)
+        logging.warning("Preserved invalid download as %s", invalid.name)
+    partial = destination.with_name(destination.name + ".part")
+    logging.info("Downloading %s; interrupted downloads can resume", destination.name)
+    run(["/usr/bin/curl", "-fL", "--retry", "3", "--retry-delay", "3",
+         "--connect-timeout", "30", "-C", "-", "-o", partial, url])
+    if checksum and digest(partial) != checksum:
+        invalid = partial.with_name(partial.name + ".invalid-" + str(time.time_ns()))
+        partial.rename(invalid)
+        raise RuntimeError(f"Checksum failed for {destination.name}; invalid data preserved, not installed.")
+    partial.replace(destination)
+
+
+def extract_zip(archive, destination):
+    destination = Path(destination).resolve()
+    with zipfile.ZipFile(archive) as zipped:
+        for item in zipped.infolist():
+            target = (destination / item.filename).resolve()
+            if not target.is_relative_to(destination):
+                raise ValueError("Archive contains a path outside its extraction directory.")
+            if (item.external_attr >> 16) & 0o170000 == 0o120000:
+                raise ValueError("Source archive contains an unexpected symbolic link.")
+        zipped.extractall(destination)
+
+
+def checkpoint(path, stage):
+    state = json.loads(path.read_text()) if path.exists() else {"completed": []}
+    if stage not in state["completed"]:
+        state["completed"].append(stage)
+    state["updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(state, indent=2) + "\n")
+    temporary.replace(path)
+
+
+def completed(path, stage):
+    return path.exists() and stage in json.loads(path.read_text()).get("completed", [])
+
+
+def acceptance_fingerprint(root):
+    hashes = [digest(root / "control" / name) for name in
+              ("gateway.py", "workflows/image.json", "workflows/video.json", "config.json")]
+    return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
+
+
+def preflight(root):
+    if platform.system() != "Darwin" or platform.machine() != "arm64":
+        raise RuntimeError("Requires Apple Silicon running native arm64 macOS, not Intel/Rosetta.")
+    version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2])
+    if version < (15, 0):
+        raise RuntimeError("This installer targets macOS 15 or newer. Update macOS first.")
+    memory = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True))
+    if memory < 32 * 1024**3:
+        raise RuntimeError("This model selection requires at least 32GB unified memory.")
+    first_install = not (root / "install-state.json").exists()
+    minimum_free = (100 if first_install else 20) * 1024**3
+    if shutil.disk_usage(root).free < minimum_free:
+        raise RuntimeError(f"Need at least {minimum_free // 1024**3}GB free SSD space for this installation stage.")
+    for service, port in PORTS.items():
+        if port_open(port):
+            raise RuntimeError(f"{service} port {port} is already in use. Close that Local AI instance first.")
+    logging.info("Hardware checks passed: %.0fGB unified memory", memory / 1024**3)
+
+
+def install_ollama(root):
+    binary = ollama_binary(root)
+    if binary.exists():
+        return
+    archive = root / "cache/Ollama-darwin.zip"
+    download("https://ollama.com/download/Ollama-darwin.zip", archive)
+    with tempfile.TemporaryDirectory(dir=root / "cache") as directory:
+        # ditto preserves framework links and code-signing metadata in the official app archive.
+        with zipfile.ZipFile(archive) as zipped:
+            for name in zipped.namelist():
+                if not (Path(directory) / name).resolve().is_relative_to(Path(directory).resolve()):
+                    raise RuntimeError("Ollama archive contains an invalid path.")
+        run(["/usr/bin/ditto", "-xk", archive, directory])
+        candidates = list(Path(directory).glob("**/Ollama.app"))
+        if len(candidates) != 1:
+            raise RuntimeError("Official Ollama download has changed layout; installation stopped.")
+        app = candidates[0]
+        run(["/usr/bin/codesign", "--verify", "--deep", "--strict", app])
+        if not (app / "Contents/Resources/ollama").is_file():
+            raise RuntimeError("Official Ollama archive no longer contains the expected CLI binary.")
+        shutil.move(str(app), root / "tools/Ollama.app")
+
+
+def install_comfy(root, uv, state):
+    directory = root / "ComfyUI"
+    if not (directory / "main.py").exists():
+        archive = root / "cache/ComfyUI.zip"
+        download(f"https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/{COMFY_RELEASE}.zip", archive)
+        with tempfile.TemporaryDirectory(dir=root / "cache") as temporary:
+            extract_zip(archive, temporary)
+            sources = [p for p in Path(temporary).iterdir() if p.is_dir() and (p / "main.py").is_file()]
+            if len(sources) != 1:
+                raise RuntimeError("ComfyUI source archive layout has changed.")
+            shutil.move(str(sources[0]), directory)
+    python = directory / ".venv/bin/python"
+    environment_missing = not python.exists()
+    if environment_missing:
+        run([uv, "venv", "--python", "3.12", directory / ".venv"])
+    if environment_missing or not completed(state, "comfy-dependencies"):
+        run([uv, "pip", "install", "--python", python, "torch", "torchvision", "torchaudio"])
+        run([uv, "pip", "install", "--python", python, "-r", directory / "requirements.txt"])
+        checkpoint(state, "comfy-dependencies")
+    run([python, "-c", "import platform, torch; assert platform.machine() == 'arm64'; assert torch.backends.mps.is_available(), 'Apple GPU MPS is unavailable'; print('Apple GPU MPS: available')"])
+    return directory
+
+
+def install_environments(root, uv, state):
+    control = root / "control"
+    control.mkdir(exist_ok=True)
+    for name in ("gateway.py", "check-workflows.py", "requirements.txt"):
+        shutil.copy2(SOURCE / "payload" / name, control / name)
+    shutil.copytree(SOURCE / "payload/tests", control / "tests", dirs_exist_ok=True)
+    # Preserve workflow edits on subsequent installer runs.
+    if not (control / "workflows").exists():
+        shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
+    for name in ("runtime.py", "common.py"):
+        shutil.copy2(SOURCE / name, control / name)
+    python = control / ".venv/bin/python"
+    if not python.exists():
+        run([uv, "venv", "--python", "3.11", control / ".venv"])
+    run([uv, "pip", "install", "--python", python, "Pillow>=11,<13", "imageio-ffmpeg==0.6.0"])
+    run([python, "-c", "import imageio_ffmpeg, subprocess; subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True)"])
+    run([python, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=control)
+    webui = root / "webui"
+    (webui / "data").mkdir(parents=True, exist_ok=True)
+    webui_missing = not (webui / ".venv/bin/python").exists()
+    if webui_missing:
+        run([uv, "venv", "--python", "3.11", webui / ".venv"])
+    if webui_missing or not completed(state, "webui-dependencies"):
+        run([uv, "pip", "install", "--python", webui / ".venv/bin/python", f"open-webui=={WEBUI_RELEASE}"])
+        checkpoint(state, "webui-dependencies")
+    config_path = control / "config.json"
+    if not config_path.exists():
+        config = {"comfy_dir": str(root / "ComfyUI"), "text_model": "qwen3:14b",
+                  "thinking": False, "render_timeout_seconds": 3600,
+                  "api_key": secrets.token_urlsafe(32), "webui_secret": secrets.token_urlsafe(48),
+                  "ollama_url": "http://127.0.0.1:11435", "comfy_url": "http://127.0.0.1:8189",
+                  "gateway_port": 8001, "public_url": "http://127.0.0.1:8001"}
+        config_path.write_text(json.dumps(config, indent=2) + "\n")
+        config_path.chmod(0o600)
+    return json.loads(config_path.read_text())
+
+
+def verify_generation(root, configuration):
+    processes = []
+    control = root / "control"
+    try:
+        ollama = launch([ollama_binary(root), "serve"], root, root / "logs/ollama.log", ollama_environment(root))
+        processes.append(ollama)
+        wait_ready("http://127.0.0.1:11435/api/version", ollama)
+        run([ollama_binary(root), "pull", "qwen3:14b"], env=ollama_environment(root))
+        run([control / ".venv/bin/python", control / "check-workflows.py"], cwd=control)
+        gateway = launch([control / ".venv/bin/python", control / "gateway.py"], control,
+                         root / "logs/gateway.log", os.environ.copy())
+        processes.append(gateway)
+        wait_ready("http://127.0.0.1:8001/health", gateway)
+        webui = launch([root / "webui/.venv/bin/open-webui", "serve", "--host", "127.0.0.1", "--port", "8081"],
+                       root / "webui", root / "logs/webui.log", webui_environment(root, configuration))
+        processes.append(webui)
+        wait_ready("http://127.0.0.1:8081/health", webui, timeout=600)
+        checks = [
+            ("text", "Reply with one sentence about Python."),
+            ("image", "/image A red toy racing car on a white table, studio photograph, no text."),
+            ("text-after-image", "Reply with one sentence about statistics."),
+            ("video", "/video A fixed camera watches a red toy racing car move slowly from left to right on a white table. The wheels rotate naturally. Soft studio light and a plain background. Stable camera, no text or logos."),
+            ("text-after-video", "Reply with one sentence about reproducibility."),
+        ]
+        report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": []}
+        for kind, prompt in checks:
+            logging.info("Hardware acceptance test: %s. Video may take a long time.", kind)
+            started = time.monotonic()
+            response = http("http://127.0.0.1:8001/v1/chat/completions",
+                            {"model": "local-ai", "stream": False,
+                             "messages": [{"role": "user", "content": prompt}]},
+                            key=configuration["api_key"], timeout=4000)
+            content = response["choices"][0]["message"]["content"]
+            if not content.strip():
+                raise RuntimeError(f"{kind} returned an empty answer.")
+            if kind in {"image", "video"}:
+                extension = ".png" if kind == "image" else ".mp4"
+                if extension not in content:
+                    raise RuntimeError(f"{kind} did not return the expected saved output.")
+                if http("http://127.0.0.1:11435/api/ps").get("models"):
+                    raise RuntimeError("Text model remained loaded after a visual job.")
+                if port_open(PORTS["comfy"]):
+                    raise RuntimeError("ComfyUI remained running after its visual job.")
+            report["checks"].append({"name": kind, "seconds": round(time.monotonic() - started, 1),
+                                     "status": "passed", "result": content})
+            (root / "acceptance-report.json").write_text(json.dumps(report, indent=2) + "\n")
+    finally:
+        for process in reversed(processes):
+            stop_process(process, timeout=4200)
+
+
+def make_launcher(root):
+    command = root / "Start Local AI.command"
+    command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
+                       "\nexec .venv/bin/python runtime.py\n")
+    command.chmod(0o755)
+    application = Path.home() / "Applications/Local AI.app"
+    if application.exists() and not (application / "Contents/local-ai-owner.txt").exists():
+        raise RuntimeError("An unrelated Local AI.app already exists. No application was overwritten.")
+    (application / "Contents/MacOS").mkdir(parents=True, exist_ok=True)
+    (application / "Contents/local-ai-owner.txt").write_text(str(root))
+    executable = application / "Contents/MacOS/LocalAI"
+    executable.write_text("#!/bin/bash\nexec /usr/bin/open -a Terminal " + shlex.quote(str(command)) + "\n")
+    executable.chmod(0o755)
+    with (application / "Contents/Info.plist").open("wb") as output:
+        plistlib.dump({"CFBundleName": "Local AI", "CFBundleDisplayName": "Local AI",
+                      "CFBundleExecutable": "LocalAI", "CFBundleIdentifier": "local.mac.ai.personal",
+                      "CFBundleVersion": "1", "CFBundlePackageType": "APPL"}, output)
+    return application
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--uv", type=Path, required=True)
+    args = parser.parse_args()
+    root = args.root.expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    for name in ("logs", "cache", "tools", "models/ollama"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
+                        handlers=[logging.StreamHandler(), logging.FileHandler(root / "logs/install.log")])
+    lock = (root / ".installer.lock").open("w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise SystemExit("Another copy of the installer is running.")
+    state = root / "install-state.json"
+    try:
+        logging.info("Stage 1/8: hardware and port checks")
+        preflight(root)
+        logging.info("Stage 2/8: native Ollama installation")
+        install_ollama(root)
+        checkpoint(state, "ollama-installed")
+        logging.info("Stage 3/8: ComfyUI and Apple GPU support")
+        install_comfy(root, args.uv, state)
+        logging.info("Stage 4/8: verified image/video model downloads")
+        for relative, url, checksum in MODELS:
+            download(url, root / "ComfyUI/models" / relative, checksum)
+        logging.info("Stage 5/8: gateway and automatically configured chat UI")
+        configuration = install_environments(root, args.uv, state)
+        logging.info("Stage 6/8: hardware generation and memory handoff tests")
+        fingerprint = acceptance_fingerprint(root)
+        accepted_file = root / "accepted-fingerprint.txt"
+        if (not completed(state, "hardware-acceptance") or not accepted_file.exists()
+                or accepted_file.read_text() != fingerprint):
+            verify_generation(root, configuration)
+            accepted_file.write_text(fingerprint)
+            checkpoint(state, "hardware-acceptance")
+        else:
+            logging.info("Reusing the successful hardware acceptance report.")
+        logging.info("Stage 7/8: create daily launcher and record versions")
+        application = make_launcher(root)
+        for directory in (root / "ComfyUI", root / "control", root / "webui"):
+            with (directory / "installed-versions.txt").open("w") as output:
+                run([args.uv, "pip", "freeze", "--python", directory / ".venv/bin/python"], stdout=output)
+        (root / "software-versions.json").write_text(json.dumps(
+            {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "text_model": "qwen3:14b"}, indent=2))
+        checkpoint(state, "installed")
+        logging.info("Stage 8/8: launching Local AI")
+        logging.info("Daily launcher: %s", application)
+        runtime_python = str(root / "control/.venv/bin/python")
+        os.execv(runtime_python, [runtime_python, str(root / "control/runtime.py")])
+    except (Exception, KeyboardInterrupt) as error:
+        logging.exception("INSTALLATION STOPPED: %s", error)
+        print("\nInstallation stopped. Completed files/stages are preserved.")
+        print("Run the same installer again to resume. Details:", root / "logs/install.log")
+        return 1
+    finally:
+        lock.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

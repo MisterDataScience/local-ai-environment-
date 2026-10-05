@@ -1,0 +1,6 @@
+Authoring checks completed 2026-10-05.
+9 installer tests passed.
+10 gateway tests passed.
+Python syntax and bootstrap shell syntax passed.
+No native Mac runtime, model downloads or Apple GPU inference was available here.
+The installer performs MPS, workflow-schema and generation acceptance checks on the target Mac.

@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store
+.env
+.env.*
+!.env.example
+config.json
+logs/
+media/
+models/
+*.part
+*.db
+*.sqlite*
+acceptance-report.json
+install-state.json
+accepted-fingerprint.txt

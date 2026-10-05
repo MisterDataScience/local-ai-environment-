@@ -1,0 +1,7 @@
+Authoring validation: 2026-10-05
+10 standard-library tests passed.
+Python files parsed successfully.
+Launcher shell syntax checked.
+Image/video workflow link targets checked by tests.
+No model weights or Apple GPU available here.
+Run check-workflows.py and the five hardware acceptance tests before relying on the installation.
