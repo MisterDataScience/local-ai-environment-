@@ -25,6 +25,8 @@ sys.path.insert(0, str(SOURCE / "payload"))
 from text_models import configured_text_models, upgrade_text_configuration
 COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
+GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
+                 "model_engine.py", "http_api.py", "text_models.py", "web_client.py")
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -100,7 +102,7 @@ def completed(path, stage):
 
 def acceptance_fingerprint(root):
     hashes = [digest(root / "control" / name) for name in
-              ("gateway.py", "text_models.py", "web_client.py", "workflows/image.json", "workflows/video.json", "config.json")]
+              GATEWAY_FILES + ("workflows/image.json", "workflows/video.json", "config.json")]
     return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
 
 
@@ -172,7 +174,7 @@ def install_comfy(root, uv, state):
 def install_environments(root, uv, state):
     control = root / "control"
     control.mkdir(exist_ok=True)
-    for name in ("gateway.py", "text_models.py", "web_client.py", "check-workflows.py", "requirements.txt"):
+    for name in GATEWAY_FILES + ("check-workflows.py", "requirements.txt"):
         shutil.copy2(SOURCE / "payload" / name, control / name)
     shutil.copytree(SOURCE / "payload/tests", control / "tests", dirs_exist_ok=True)
     # Preserve workflow edits on subsequent installer runs.
@@ -180,7 +182,8 @@ def install_environments(root, uv, state):
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
     for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py"):
         shutil.copy2(SOURCE / name, control / name)
-    shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True)
+    shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     python = control / ".venv/bin/python"
     if not python.exists():
         run([uv, "venv", "--python", "3.11", control / ".venv"])

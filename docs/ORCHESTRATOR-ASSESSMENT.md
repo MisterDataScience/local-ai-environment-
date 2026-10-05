@@ -8,6 +8,8 @@ The selected orchestrator is the custom Python standard-library HTTP gateway at 
 
 ## Actual implementation
 
+The gateway is now modular: `gateway.py` starts it, `http_api.py` handles HTTP, `model_engine.py` owns the serial queue/model lifecycle, and helper modules handle backend requests, routing, workflows, presets and retrieval. See [GATEWAY-STRUCTURE.md](GATEWAY-STRUCTURE.md). The refactor adds no capabilities.
+
 | Requirement | Existing implementation | Classification / remaining work |
 | --- | --- | --- |
 | Text/media routing | Normal messages vs explicit `/image` and `/video` | Existing custom code; no natural-language selection |

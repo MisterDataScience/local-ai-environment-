@@ -1,6 +1,9 @@
 Authoring checks completed 2026-10-05.
-34 installer/remote/web tests passed.
-20 gateway tests passed.
+36 installer/remote/web tests passed.
+21 gateway tests passed.
+Behaviour-preserving gateway split verified: original function/class bodies retained in their owning modules.
+Installer manifest covers all runtime modules; changes to any module invalidate native acceptance.
+Entrypoint private listener wiring and cleanup tested with mocked services.
 Python and shell syntax, ZIP integrity passed.
 Remote tests cover private proxy setup, configuration preservation, public/conflicting route rejection, rollback, untrusted package rejection, CLI invocation, timeout, disabling only matching routes and HTTPS self-check logic.
 The media-only HTTP listener was exercised locally and rejects API endpoints/traversal.

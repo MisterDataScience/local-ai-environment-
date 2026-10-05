@@ -13,6 +13,27 @@ import installer
 
 
 class InstallerTests(unittest.TestCase):
+    def test_gateway_manifest_contains_every_runtime_module(self):
+        payload = installer.SOURCE / "payload"
+        expected = {p.name for p in payload.glob("*.py") if p.name != "check-workflows.py"}
+        self.assertEqual(set(installer.GATEWAY_FILES), expected)
+
+    def test_any_gateway_module_change_invalidates_native_acceptance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            control = root / "control"
+            for name in installer.GATEWAY_FILES + ("workflows/image.json", "workflows/video.json", "config.json"):
+                path = control / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("initial")
+            baseline = installer.acceptance_fingerprint(root)
+            for name in installer.GATEWAY_FILES:
+                path = control / name
+                path.write_text("changed")
+                self.assertNotEqual(baseline, installer.acceptance_fingerprint(root), name)
+                path.write_text("initial")
+                self.assertEqual(baseline, installer.acceptance_fingerprint(root))
+
     def test_existing_text_configuration_is_migrated_without_losing_settings(self):
         config = {"text_model": "custom:7b", "thinking": True,
                   "api_key": "existing-secret", "render_timeout_seconds": 900}

@@ -22,6 +22,8 @@ No Homebrew commands, manual model placement, environment activation, API-key co
 
 ## What it installs
 
+The gateway has separate modules for HTTP, serial model coordination, routing and workflows. Installation copies them together. See [gateway structure](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/GATEWAY-STRUCTURE.md). Commands and behaviour are unchanged; tool loops and account connectors are not included.
+
 | Component | Choice |
 | --- | --- |
 | Text backend/model | Native Ollama with Qwen3 4B, 14B and 30B-A3B (Q4_K_M) |

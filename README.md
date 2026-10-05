@@ -12,6 +12,7 @@ Gaming/Normal/Max profiles and automatic background AI startup remain unimplemen
 | --- | --- |
 | [installer/](installer/) | Automated installer, runtime supervisor, gateway, workflows and tests |
 | [installer/README.md](installer/README.md) | Installation instructions and current limitations |
+| [docs/GATEWAY-STRUCTURE.md](docs/GATEWAY-STRUCTURE.md) | Gateway modules and behaviour-preserving split |
 | [manual-setup/](manual-setup/) | Earlier manual setup source, retained for reference |
 | [docs/Mac-Local-AI-Setup-Guide.md](docs/Mac-Local-AI-Setup-Guide.md) | Original detailed manual guide |
 | [docs/PROJECT-REQUIREMENTS.md](docs/PROJECT-REQUIREMENTS.md) | Updated operating, privacy and resource requirements |
@@ -19,6 +20,8 @@ Gaming/Normal/Max profiles and automatic background AI startup remain unimplemen
 | [downloads/](downloads/) | Existing installer and manual setup ZIP bundles |
 
 ## Current software choices
+
+The gateway now has focused modules and a small `gateway.py` entry point. It remains one process. This split does not add tool calling or account connectors.
 
 | Role | Choice |
 | --- | --- |
