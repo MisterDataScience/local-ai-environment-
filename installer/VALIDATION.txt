@@ -1,18 +1,19 @@
-Authoring checks completed 2026-10-05.
-36 installer/remote/web tests passed.
-76 gateway/tool/account-adapter tests passed.
-Original gateway split was behaviour-preserving. A subsequent bounded internal tool loop is now implemented separately.
-Installer manifest covers all runtime modules; changes to any module invalidate native acceptance.
-Entrypoint private listener wiring and cleanup tested with mocked services.
-Python and shell syntax, ZIP integrity passed.
-Remote tests cover private proxy setup, configuration preservation, public/conflicting route rejection, rollback, untrusted package rejection, CLI invocation, timeout, disabling only matching routes and HTTPS self-check logic.
-The media-only HTTP listener was exercised locally and rejects API endpoints/traversal.
-No real Mac package installation, tailnet, TLS certificates, Apple GPU inference or other-device browser was available here.
-Runtime records private HTTPS/media checks on the Mac; another-device browser checks remain pending.
-Web tests cover shared VPN network, loopback publication, private DNS, private/reserved/mixed-address rejection, pinned-IP TLS, redirect revalidation, PDF/compression/size rejection, VPN failure before DNS/fetch, fixed-loopback client routing, bounded evidence/citations and private credentials/config preservation.
-Gateway tests ensure web errors do not call Ollama and retrieved evidence reaches local text inference.
-No real Docker VPN, DNS capture or live search engine was available. VPN readiness is not a verified kill switch. Native search/page, tunnel-drop and DNS-leak tests remain pending.
-Natural web tool tests cover strict schemas, disabled/wrong endpoint denial, private worker credentials, bounded web timeout, cross-call source numbering, failure results, redirect refusal and a real worker calling a fake loopback service.
-Tool tests exercise real calculator/time workers, real timeout killing/reaping, strict arguments/arithmetic, malformed calls/results, worker-start failure, loop rounds/calls/deadline/context/evidence and serial-engine integration. No real Ollama tool selection was tested.
-GitHub tests use simulated official MCP responses. They cover disabled access, explicit repository/branch policy, resource/path validation, bounded text reads, proposals without commits, exact/single-use/expiring approval, SHA conflicts, policy rechecks, generic remote errors, no application retry after uncertain writes and tool-loop account/web separation.
-Official MCP SDK transport is implemented but not installed or live-tested. Mac Keychain provider, human approval UI and account activation remain unavailable. No real GitHub credential was used by the local AI adapter.
+Authoring checks completed 2026-10-05 UTC.
+37 installer/remote/web tests and 38 gateway/protocol/bridge tests passed.
+The private tool loop, registry/workers and disabled GitHub adapter were retired.
+Current suites verify the native-tool protocol bridge and retained lifecycle behavior.
+Native Mac installation, actual Open WebUI frontend, Ollama inference, Apple GPU memory,
+Tailscale other-device browser and live Proton VPN/DNS tests remain pending.
+Protocol checks cover schemas, call IDs, JSON arguments, out-of-order results,
+missing/duplicate result rejection, text-only parts, no hidden tool execution,
+preset/keep_alive preservation, original system prompt and continuation routing.
+A real loopback HTTP server exercises normal and buffered-SSE tool-call responses.
+VPN OpenAPI bridge checks cover strict arguments, authentication, fixed reader path,
+disabled access and no direct fallback. Native WebUI wiring is not live-tested.
+Installer checks cover manifest, fingerprint, downloads, migrations, configuration,
+private routing, shutdown, remote setup and VPN structural/privacy logic.
+The installer registers the VPN tool connection but chat/model attachment requires
+selection in Open WebUI. No GitHub/Dropbox credential is supplied or connected.
+Open WebUI approval mode is experimental and requires saved chats. Defaults are
+not a privileged-write authorization boundary. Check a supported patched version
+and denial/reload/multiple-call behavior before enabling account writes.

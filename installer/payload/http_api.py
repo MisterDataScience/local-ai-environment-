@@ -9,8 +9,21 @@ import shutil
 import time
 from urllib.parse import urlparse
 import uuid
+from web_tools_api import specification, execute as retrieve_tool
 
 LOG = logging.getLogger("gateway")
+
+
+def completion_message(result):
+    message = {"role": "assistant", "content": result} if isinstance(result, str) else result
+    return message, "tool_calls" if message.get("tool_calls") else "stop"
+
+
+def completion_delta(message):
+    delta = dict(message)
+    if message.get("tool_calls"):
+        delta["tool_calls"] = [dict(call, index=i) for i, call in enumerate(message["tool_calls"])]
+    return delta
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -60,12 +73,24 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(200, {"object": "list", "data": [
                 {"id": identifier, "name": preset["name"], "object": "model", "created": 0,
                  "owned_by": "local"} for identifier, preset in self.server.engine.text_models.items()]})
+        if path == "/tools/openapi.json":
+            return self.json_response(200, specification())
         self.json_response(404, {"error": "Not found"})
 
     def do_POST(self):
         if not self.authorised():
             return
-        if urlparse(self.path).path != "/v1/chat/completions":
+        path = urlparse(self.path).path
+        if path in {"/tools/vpn_search_web", "/tools/vpn_read_page"}:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 8192:
+                    raise ValueError("Invalid retrieval request size")
+                body = json.loads(self.rfile.read(length))
+                return self.json_response(200, retrieve_tool(self.server.engine.config, path.rsplit("/", 1)[1], body))
+            except (ValueError, RuntimeError) as error:
+                return self.json_response(400, {"error": str(error)})
+        if path != "/v1/chat/completions":
             return self.json_response(404, {"error": "Not found"})
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -79,9 +104,10 @@ class Handler(BaseHTTPRequestHandler):
         if not body.get("stream"):
             try:
                 content = future.result()
+                message, finish = completion_message(content)
                 return self.json_response(200, {"id": identifier, "object": "chat.completion",
                     "created": created, "model": body["model"], "choices": [
-                        {"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}]})
+                        {"index": 0, "message": message, "finish_reason": finish}]})
             except Exception as error:
                 LOG.exception("Request failed")
                 return self.json_response(502, {"error": {"message": str(error)}})
@@ -105,7 +131,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as error:
                 LOG.exception("Request failed")
                 content = "Local generation failed: " + str(error)
-            for delta, finish in [({"role": "assistant", "content": content}, None), ({}, "stop")]:
+            message, reason = completion_message(content)
+            for delta, finish in [(completion_delta(message), None), ({}, reason)]:
                 chunk = {"id": identifier, "object": "chat.completion.chunk", "created": created,
                          "model": body["model"], "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
                 self.wfile.write(("data: " + json.dumps(chunk) + "\n\n").encode())

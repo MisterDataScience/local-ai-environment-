@@ -19,7 +19,7 @@ from backend_http import api, port_open
 from routing import messages_and_route
 from text_models import configured_text_models
 from web_client import retrieve
-from tool_loop import run_chat
+from tool_protocol import tools_for_ollama, assistant_for_openai
 from workflows import fill_workflow, output_files
 
 ROOT = Path(__file__).resolve().parent
@@ -32,9 +32,6 @@ class Engine:
         if config.get("github", {}).get("enabled"):
             raise ValueError("GitHub activation is not available until credential and approval integration is validated")
         self.text_models = configured_text_models(config)
-        self.tool_loop_enabled = config.get("tool_loop_enabled", True)
-        if type(self.tool_loop_enabled) is not bool:
-            raise ValueError("tool_loop_enabled must be true or false")
         self.ollama = config.get("ollama_url", "http://127.0.0.1:11434")
         self.comfy = config.get("comfy_url", "http://127.0.0.1:8188")
         self.comfy_port = urlparse(self.comfy).port
@@ -213,12 +210,19 @@ class Engine:
             options = {"num_ctx": preset["num_ctx"], "num_predict": 2048}
             if isinstance(body.get("temperature"), (int, float)):
                 options["temperature"] = body["temperature"]
-            content = run_chat(api, self.ollama, {
+            payload = {
                 "model": preset["model"], "messages": messages,
                 "options": options, "stream": False,
                 "think": preset.get("thinking", False), "keep_alive": preset["keep_alive_seconds"],
-            }, enabled=self.tool_loop_enabled and route == "text", web=self.config.get("web"))
-            return content + links
+            }
+            tools = tools_for_ollama(body) if route == "text" else []
+            if tools:
+                payload["tools"] = tools
+            # Exactly one inference call. Open WebUI executes/approves tools and
+            # submits the next inference turn with their results.
+            message = api(self.ollama, "/api/chat", payload, timeout=1800)["message"]
+            answer = assistant_for_openai(message, tools)
+            return answer + links if isinstance(answer, str) else answer
         finally:
             self.state = "idle"
             LOG.info("Finished %s request", route)

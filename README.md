@@ -21,11 +21,9 @@ Gaming/Normal/Max profiles and automatic background AI startup remain unimplemen
 
 ## Current software choices
 
-A restricted GitHub read/proposal/approved-write adapter is included with account
-activation disabled. Credential storage and the human approval interface are still
-pending. See [GitHub integration and validation limits](docs/GITHUB-INTEGRATION.md).
+The disabled bespoke GitHub adapter and approval lifecycle have been removed. Account connections remain unconfigured; the intended route is supported MCP integration and Open WebUI's approval UI. See [GitHub integration](docs/GITHUB-INTEGRATION.md).
 
-The gateway has focused modules and a small entry point. It remains one process. A bounded internal tool loop provides calculator/current-time tools and, when VPN web access is configured, web search/page reading. Account connectors remain absent. See [TOOL-LOOP.md](docs/TOOL-LOOP.md).
+The gateway remains one process and owns model lifecycle work. Open WebUI owns the tool loop and approval interface. The gateway translates structured tool messages to/from Ollama without executing them. See [native tools and current limits](docs/NATIVE-TOOLS.md).
 
 | Role | Choice |
 | --- | --- |
@@ -36,9 +34,9 @@ The gateway has focused modules and a small entry point. It remains one process.
 | Orchestrator | Custom Python standard-library gateway, `installer/payload/gateway.py` |
 | Web access | SearXNG + bounded reader, sharing Gluetun/Proton Free's network namespace |
 
-Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. These are text presets, not global Gaming profiles. The gateway rejects client-supplied tools and non-text attachments; its internal local-tool loop is described below.
+Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. These are text presets, not global Gaming profiles. The gateway accepts function definitions and matching text tool results; it does not execute supplied functions. Image/audio inputs remain unsupported.
 
-The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements. Ordinary text chat can now use a bounded internal calculator/time loop; web can use natural-language tool requests or explicit commands; media still uses explicit commands. Client-supplied tools remain forbidden.
+The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements. Native tool calls now pass through the gateway. VPN retrieval is available through a small authenticated OpenAPI bridge; enable that connection in the chat or attach it to a model. Media still uses explicit commands. End-to-end native WebUI tool selection and approval remain unverified on the Mac.
 
 Remote access is now available as an optional installer stage. See [private access from your other devices](docs/REMOTE-ACCESS.md). Tailscale sign-in and macOS extension approval remain interactive setup steps.
 

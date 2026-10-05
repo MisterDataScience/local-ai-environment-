@@ -22,8 +22,8 @@ The gateway is now modular: `gateway.py` starts it, `http_api.py` handles HTTP, 
 | Global profile state | None | New code |
 | Profile model/tool restrictions | None | New backend policy code |
 | Gaming selector | None | UI integration and state transition code |
-| Search/retrieval | Explicit commands or internal `search_web`/`read_page` tool calls | Shared VPN service; natural tool selection unverified on Mac |
-| Internal tool loop | Calculator/current-time and configured VPN web calls over bounded rounds | Implemented; native model tool selection remains unverified; no account connectors |
+| Search/retrieval | Explicit commands or server-side OpenAPI VPN bridge | Shared VPN service; native WebUI tool integration unverified on Mac |
+| Tool loop / approval UI | Open WebUI's native functionality; gateway passes calls/results | Former bespoke loop and disabled account adapter removed; end-to-end tests pending |
 | Selective VPN | Reader/SearXNG share Gluetun/Proton Free network and DNS | Implemented; live tunnel-drop/DNS tests pending; native UI-loader/plugin egress not fully blocked |
 | Background startup | Foreground Terminal supervisor only | Background service deployment and supervisor changes |
 | Guaranteed memory ceiling | None | Separate resource-control design and validation |

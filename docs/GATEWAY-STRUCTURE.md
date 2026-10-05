@@ -1,44 +1,33 @@
 # Gateway structure
 
-Refactored 2026-10-05. A behaviour-preserving split, not a new orchestrator or tool-calling implementation. The launcher still runs `gateway.py` as one process. No new service, dependency, port or credential is required.
+The gateway remains one Python process. Open WebUI now owns the tool loop and
+approval interface; the former private loop and disabled GitHub adapter are removed.
 
 | Module | Responsibility |
 | --- | --- |
-| `gateway.py` | Entry point: configuration, process lock, loopback listeners, signals and shutdown |
-| `http_api.py` | Authentication, OpenAI-compatible responses, SSE keepalives and media-only listener |
-| `model_engine.py` | Single serial queue, Ollama inference/unloading, ComfyUI lifecycle/rendering and memory handoffs |
-| `backend_http.py` | Backend JSON requests and loopback port checks |
-| `routing.py` | Message validation and explicit command routing, without network calls |
-| `workflows.py` | Workflow prompt/seed substitution and saved-output discovery |
-| `text_models.py` | Text-preset configuration, validation and migration |
-| `web_client.py` | Fixed-loopback retrieval, bounded evidence and source links |
-| `tool_registry.py` | Fixed local tool schemas, strict arguments and trusted implementations |
-| `tool_executor.py` | Short-lived, timeout-killed local tool workers |
-| `tool_loop.py` | Bounded model/tool/model conversation progression |
+| gateway.py | Configuration, process lock, loopback listeners and shutdown |
+| http_api.py | Authentication, OpenAI responses, tool-call SSE and media-only listener |
+| model_engine.py | Serial model queue, Ollama inference/unload, ComfyUI lifecycle |
+| backend_http.py | Backend JSON requests and loopback checks |
+| routing.py | Text validation and explicit command routing |
+| tool_protocol.py | OpenAI/Ollama tool schema/message conversion; no execution |
+| workflows.py | Workflow substitution and saved-output discovery |
+| text_models.py | Text preset validation and migration |
+| web_client.py | Fixed-loopback VPN retrieval, evidence and citations |
+| web_tools_api.py | Authenticated OpenAPI VPN bridge called by Open WebUI |
 
-`model_engine.py` deliberately retains ownership of both text and media lifecycle operations. They share one serial executor and state, preserving the handoff invariant. Python modules are not separate running services.
+Model lifecycle operations still share one serial executor. Each inference call
+is a job; a whole Open WebUI tool session no longer occupies the executor while
+awaiting approval. Direct backend clients can still bypass coordination.
 
-## Other components
+runtime.py supervises Ollama, gateway and WebUI. ComfyUI starts only for a render.
+remote_access.py handles private Tailscale access. web_access.py configures the
+VPN/search containers and web/service.py performs isolated retrieval.
 
-`runtime.py` supervises Ollama, the gateway and Open WebUI. ComfyUI is started by the engine only when needed. `remote_access.py` handles Tailscale setup. `web_access.py` configures VPN/search containers; their reader stays in `web/service.py`.
+The installer manifest includes every current runtime module and fingerprints
+them for native acceptance. Upgrades remove only explicitly named retired modules
+and tests; models, chats, secrets and workflows are preserved. Rerun the full
+installer with Local AI stopped, rather than replacing only gateway.py.
 
-## Behaviour unchanged
-
-- Ordinary messages use the selected preset. `/image`, `/video`, `/search` and `/read` remain explicit commands.
-- One model job runs at a time, with four admitted active/queued requests at most.
-- Ollama unloading is confirmed before rendering; ComfyUI teardown completes before subsequent model work.
-- Authentication, IDs, ports, response shapes, media URLs and idle timeouts are unchanged.
-- Client-supplied tools and non-text attachments remain rejected. A bounded internal loop with calculator/time tools has since been added; GitHub/Dropbox, Gaming policy and write approvals remain absent. See [TOOL-LOOP.md](TOOL-LOOP.md).
-- VPN retrieval boundaries and pending native checks remain unchanged.
-
-## Installation and upgrade
-
-The installer uses an explicit `GATEWAY_FILES` manifest and copies all modules into `~/LocalAI-Automated/control`. Every module contributes to the acceptance fingerprint. Tests verify manifest completeness and that changing any module invalidates native acceptance.
-
-Run the updated installer with Local AI stopped. Chats, credentials, models, presets and edited workflows are preserved. Downloads are reused; native generation acceptance may rerun because code changed. Do not replace only `gateway.py`: neighbouring modules are required.
-
-## Verification
-
-Existing tests target their new owning modules. Additional checks cover manifest completeness, fingerprint invalidation and entry-point wiring/cleanup. The extracted ZIP is independently checked for imports and tests. Native Apple GPU and live VPN execution remain unverified here.
-
-Tool execution now uses dedicated modules. Account connectors and write-approval policy remain future work. The original split itself was behaviour-preserving; the subsequent loop is a separate feature addition.
+See [NATIVE-TOOLS.md](NATIVE-TOOLS.md) for protocol support, configuration and
+remaining native/browser checks. The manual-setup directory is historical.

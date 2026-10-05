@@ -22,7 +22,7 @@ No Homebrew commands, manual model placement, environment activation, API-key co
 
 ## What it installs
 
-The gateway has separate HTTP, model, routing, workflow and tool modules. Installation copies them together. A bounded internal loop supplies calculator/current-time tools for ordinary chat. See [tool loop](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/TOOL-LOOP.md). Configured web search/page reading can now be requested through ordinary chat. Media remains explicit commands; account connectors are not included.
+The gateway keeps model loading/unloading and serial media handoffs. Open WebUI owns tools and approvals; the gateway passes function definitions, calls and results between it and Ollama. The former private tool loop, calculator/time workers and disabled GitHub adapter are removed. See [native tools](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/NATIVE-TOOLS.md), also included in the ZIP. VPN setup registers a server-side OpenAPI connection named Local AI VPN retrieval; enable it in the chat's Integrations menu or attach it to a model. Account connections remain unconfigured.
 
 | Component | Choice |
 | --- | --- |
@@ -81,7 +81,7 @@ Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large
 
 The gateway unloads Ollama and confirms an empty loaded-model list before starting ComfyUI. After each image or video job, it stops ComfyUI's process group and waits for exit before allowing text to reload. Multiple gateway requests are serialised. Do not connect another client directly to this private Ollama server or manually start ComfyUI on its private port during use.
 
-Text responses are buffered until complete. Images appear in chat. Video returns an MP4 link. Optional web commands supply bounded evidence and clickable sources to the local model. Image understanding, image-conditioned video, document RAG, voice, arbitrary tool execution and automatic natural-language media routing remain unsupported. Configured web search/page reading are available through the bounded tool loop.
+Each inference response is buffered until complete; structured tool calls are preserved in both normal and SSE responses. Open WebUI handles execution and continuation. Images appear in chat and video returns an MP4 link. Optional web commands still supply bounded evidence and sources. Native document/memory/notes/code tools belong to Open WebUI and need their own configuration and validation. Image understanding, image-conditioned video, voice and automatic media routing are not implemented by the gateway.
 
 ## Shutdown
 
@@ -135,7 +135,7 @@ Edit `~/LocalAI-Automated/control/config.json` while services are stopped. The `
 
 The new installer adds Small and Large presets to older configurations once, preserving the existing default model and secrets, with a private `config.before-text-presets.json` backup. Later reruns preserve edited presets. Downloads and native acceptance checks follow the configured models. The three default text downloads total roughly 31 GB; this is download size, not peak runtime memory. Large-model memory and performance still require validation on your Mac.
 
-To upgrade an earlier installation, stop Local AI, extract this updated bundle and rerun the same installation command. Changed code/configuration invalidates the previous acceptance fingerprint. The installer runs generation checks again and stops if any configured model fails.
+To upgrade an earlier installation, stop Local AI, extract this updated bundle and rerun the same installation command. The installer removes only the named retired project modules and their tests from control; chats, models, workflows and credentials are preserved. The obsolete tool_loop_enabled config flag is ignored. Changed code/configuration invalidates the previous acceptance fingerprint. The installer runs generation checks again and stops if any configured model fails.
 
 ## Optional private remote access
 

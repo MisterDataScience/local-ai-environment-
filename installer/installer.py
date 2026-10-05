@@ -27,8 +27,7 @@ COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
-                 "tool_registry.py", "tool_executor.py", "tool_loop.py",
-                 "github_adapter.py", "github_mcp.py")
+                 "tool_protocol.py", "web_tools_api.py")
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -176,9 +175,14 @@ def install_comfy(root, uv, state):
 def install_environments(root, uv, state):
     control = root / "control"
     control.mkdir(exist_ok=True)
+    # Remove only explicitly retired project files, never user data/workflows.
+    for name in ("tool_registry.py", "tool_executor.py", "tool_loop.py", "github_adapter.py", "github_mcp.py",
+                 "tests/test_tools.py", "tests/test_web_tools.py", "tests/test_github.py"):
+        (control / name).unlink(missing_ok=True)
     for name in GATEWAY_FILES + ("check-workflows.py", "requirements.txt"):
         shutil.copy2(SOURCE / "payload" / name, control / name)
-    shutil.copytree(SOURCE / "payload/tests", control / "tests", dirs_exist_ok=True)
+    shutil.copytree(SOURCE / "payload/tests", control / "tests", dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")

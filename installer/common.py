@@ -88,11 +88,20 @@ def webui_environment(root, configuration):
         "ENABLE_FOLLOW_UP_GENERATION": "False", "ENABLE_IMAGE_GENERATION": "False",
         "ENABLE_IMAGE_PROMPT_GENERATION": "False", "ENABLE_COMMUNITY_SHARING": "False",
         "ENABLE_WEB_SEARCH": "False", "ENABLE_LOCAL_WEB_FETCH": "False",
+        "ENABLE_TOOL_PERMISSIONS": "True",
+        "DEFAULT_MODEL_PARAMS": json.dumps({"function_calling": "native", "tool_approval_mode": "ask"}),
         "ENABLE_RAG_LOCAL_WEB_FETCH": "False", "ENABLE_USER_WEBHOOKS": "False",
         "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "true",
         "CUDA_VISIBLE_DEVICES": "", "RAG_EMBEDDING_MODEL_DEVICE": "cpu",
         "WHISPER_MODEL_DEVICE": "cpu",
     })
+    # Server-side OpenAPI connection: the browser never calls Mac loopback itself.
+    if configuration.get("web", {}).get("enabled"):
+        env["TOOL_SERVER_CONNECTIONS"] = json.dumps([{
+            "type": "openapi", "url": "http://127.0.0.1:8001", "spec_type": "url",
+            "spec": "", "path": "tools/openapi.json", "auth_type": "bearer",
+            "key": configuration["api_key"], "config": {"enable": True},
+            "info": {"id": "local-ai-vpn", "name": "Local AI VPN retrieval", "description": "VPN search and page reading"}}])
     return env
 
 

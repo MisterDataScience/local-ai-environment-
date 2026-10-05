@@ -115,6 +115,19 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(env["OLLAMA_NUM_PARALLEL"], "1")
         self.assertEqual(env["OLLAMA_HOST"], "127.0.0.1:11435")
 
+    def test_native_tool_configuration_uses_server_side_vpn_connection(self):
+        config = {"api_key": "gateway-key", "webui_secret": "secret", "web": {"enabled": True, "api_key": "reader-key"}}
+        env = common.webui_environment(Path("/test"), config)
+        self.assertEqual(env["ENABLE_TOOL_PERMISSIONS"], "True")
+        self.assertEqual(json.loads(env["DEFAULT_MODEL_PARAMS"])["tool_approval_mode"], "ask")
+        server = json.loads(env["TOOL_SERVER_CONNECTIONS"])[0]
+        self.assertEqual(server["url"], "http://127.0.0.1:8001")
+        self.assertEqual(server["auth_type"], "bearer")
+        self.assertEqual(server["key"], "gateway-key")
+        self.assertNotIn("reader-key", env["TOOL_SERVER_CONNECTIONS"])
+        self.assertEqual(env["ENABLE_WEB_SEARCH"], "False")
+        self.assertEqual(env["ENABLE_IMAGE_GENERATION"], "False")
+
     def test_shutdown_waits_for_owned_process(self):
         process = Mock(pid=123)
         with patch.object(common.os, "killpg") as kill:
