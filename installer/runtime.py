@@ -46,6 +46,8 @@ def main():
             raise RuntimeError("The local-ai gateway model is unavailable.")
         subprocess.run(["/usr/bin/open", "-a", "Safari", "http://127.0.0.1:8081"], check=True)
         print("\nLocal AI is running at http://127.0.0.1:8081")
+        print("Select Everyday, Small or Large in the chat's model menu. Models load on a request.")
+        print("These are text presets, not Gaming Mode. Media remains available with each preset.")
         print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")
         print("Leave this Terminal open. Press Control+C here to shut down.")
         while True:

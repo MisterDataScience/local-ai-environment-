@@ -21,6 +21,8 @@ import zipfile
 from common import PORTS, http, launch, ollama_binary, ollama_environment, port_open, stop_process, wait_ready, webui_environment
 
 SOURCE = Path(__file__).resolve().parent
+sys.path.insert(0, str(SOURCE / "payload"))
+from text_models import configured_text_models, upgrade_text_configuration
 COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
 MODELS = [
@@ -98,7 +100,7 @@ def completed(path, stage):
 
 def acceptance_fingerprint(root):
     hashes = [digest(root / "control" / name) for name in
-              ("gateway.py", "workflows/image.json", "workflows/video.json", "config.json")]
+              ("gateway.py", "text_models.py", "workflows/image.json", "workflows/video.json", "config.json")]
     return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
 
 
@@ -170,7 +172,7 @@ def install_comfy(root, uv, state):
 def install_environments(root, uv, state):
     control = root / "control"
     control.mkdir(exist_ok=True)
-    for name in ("gateway.py", "check-workflows.py", "requirements.txt"):
+    for name in ("gateway.py", "text_models.py", "check-workflows.py", "requirements.txt"):
         shutil.copy2(SOURCE / "payload" / name, control / name)
     shutil.copytree(SOURCE / "payload/tests", control / "tests", dirs_exist_ok=True)
     # Preserve workflow edits on subsequent installer runs.
@@ -201,7 +203,19 @@ def install_environments(root, uv, state):
                   "gateway_port": 8001, "public_url": "http://127.0.0.1:8001"}
         config_path.write_text(json.dumps(config, indent=2) + "\n")
         config_path.chmod(0o600)
-    return json.loads(config_path.read_text())
+    config = json.loads(config_path.read_text())
+    upgraded = upgrade_text_configuration(config)
+    if upgraded != config:
+        # Keep the old settings and secrets recoverable before migrating.
+        backup = config_path.with_name("config.before-text-presets.json")
+        if not backup.exists():
+            backup.write_text(json.dumps(config, indent=2) + "\n")
+            backup.chmod(0o600)
+        temporary = config_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(upgraded, indent=2) + "\n")
+        temporary.chmod(0o600)
+        temporary.replace(config_path)
+    return upgraded
 
 
 def verify_generation(root, configuration):
@@ -211,7 +225,9 @@ def verify_generation(root, configuration):
         ollama = launch([ollama_binary(root), "serve"], root, root / "logs/ollama.log", ollama_environment(root))
         processes.append(ollama)
         wait_ready("http://127.0.0.1:11435/api/version", ollama)
-        run([ollama_binary(root), "pull", "qwen3:14b"], env=ollama_environment(root))
+        presets = configured_text_models(configuration)
+        for model in dict.fromkeys(preset["model"] for preset in presets.values()):
+            run([ollama_binary(root), "pull", model], env=ollama_environment(root))
         run([control / ".venv/bin/python", control / "check-workflows.py"], cwd=control)
         gateway = launch([control / ".venv/bin/python", control / "gateway.py"], control,
                          root / "logs/gateway.log", os.environ.copy())
@@ -221,24 +237,31 @@ def verify_generation(root, configuration):
                        root / "webui", root / "logs/webui.log", webui_environment(root, configuration))
         processes.append(webui)
         wait_ready("http://127.0.0.1:8081/health", webui, timeout=600)
-        checks = [
+        checks = [("text-" + identifier, "Reply with one sentence about Python.", identifier)
+                  for identifier in presets]
+        checks += [(kind, prompt, "local-ai") for kind, prompt in [
             ("text", "Reply with one sentence about Python."),
             ("image", "/image A red toy racing car on a white table, studio photograph, no text."),
             ("text-after-image", "Reply with one sentence about statistics."),
             ("video", "/video A fixed camera watches a red toy racing car move slowly from left to right on a white table. The wheels rotate naturally. Soft studio light and a plain background. Stable camera, no text or logos."),
             ("text-after-video", "Reply with one sentence about reproducibility."),
-        ]
+        ]]
         report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": []}
-        for kind, prompt in checks:
+        for kind, prompt, identifier in checks:
             logging.info("Hardware acceptance test: %s. Video may take a long time.", kind)
             started = time.monotonic()
             response = http("http://127.0.0.1:8001/v1/chat/completions",
-                            {"model": "local-ai", "stream": False,
+                            {"model": identifier, "stream": False,
                              "messages": [{"role": "user", "content": prompt}]},
                             key=configuration["api_key"], timeout=4000)
             content = response["choices"][0]["message"]["content"]
             if not content.strip():
                 raise RuntimeError(f"{kind} returned an empty answer.")
+            if kind.startswith("text"):
+                loaded = http("http://127.0.0.1:11435/api/ps").get("models", [])
+                expected = presets[identifier]["model"]
+                if any(model["name"] != expected for model in loaded):
+                    raise RuntimeError("A different text model remained loaded after model switching.")
             if kind in {"image", "video"}:
                 extension = ".png" if kind == "image" else ".mp4"
                 if extension not in content:
@@ -247,7 +270,8 @@ def verify_generation(root, configuration):
                     raise RuntimeError("Text model remained loaded after a visual job.")
                 if port_open(PORTS["comfy"]):
                     raise RuntimeError("ComfyUI remained running after its visual job.")
-            report["checks"].append({"name": kind, "seconds": round(time.monotonic() - started, 1),
+            report["checks"].append({"name": kind, "model_id": identifier,
+                                     "seconds": round(time.monotonic() - started, 1),
                                      "status": "passed", "result": content})
             (root / "acceptance-report.json").write_text(json.dumps(report, indent=2) + "\n")
     finally:
@@ -321,7 +345,8 @@ def main():
             with (directory / "installed-versions.txt").open("w") as output:
                 run([args.uv, "pip", "freeze", "--python", directory / ".venv/bin/python"], stdout=output)
         (root / "software-versions.json").write_text(json.dumps(
-            {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "text_model": "qwen3:14b"}, indent=2))
+            {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE,
+             "text_models": configured_text_models(configuration)}, indent=2))
         checkpoint(state, "installed")
         logging.info("Stage 8/8: launching Local AI")
         logging.info("Daily launcher: %s", application)

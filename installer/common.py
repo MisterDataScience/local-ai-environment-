@@ -69,7 +69,8 @@ def ollama_environment(root):
     env.update({"OLLAMA_HOST": f"127.0.0.1:{PORTS['ollama']}",
                 "OLLAMA_MODELS": str(root / "models/ollama"),
                 "OLLAMA_MAX_LOADED_MODELS": "1", "OLLAMA_NUM_PARALLEL": "1",
-                "OLLAMA_CONTEXT_LENGTH": "8192", "OLLAMA_KEEP_ALIVE": "5m"})
+                "OLLAMA_CONTEXT_LENGTH": "8192", "OLLAMA_KEEP_ALIVE": "5m",
+                "OLLAMA_NO_CLOUD": "1"})
     return env
 
 

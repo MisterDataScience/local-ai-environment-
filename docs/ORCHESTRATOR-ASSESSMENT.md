@@ -1,19 +1,19 @@
 # Orchestrator assessment
 
-Assessment date: 2026-10-05. Based on the included source and primary project documentation. No Mac hardware execution was performed.
+Assessment date: 2026-10-05. Updated after implementing steps 1 and 2 (text presets and idle timeouts). Based on the included source and primary project documentation. No Mac hardware execution was performed.
 
 ## What was selected
 
-The selected orchestrator is the custom Python standard-library HTTP gateway at `installer/payload/gateway.py`. It is not SmarterRouter, llama-swap or FastAPI. Open WebUI connects to its OpenAI-compatible endpoint using the single exposed model ID `local-ai`.
+The selected orchestrator is the custom Python standard-library HTTP gateway at `installer/payload/gateway.py`. It is not SmarterRouter, llama-swap or FastAPI. Open WebUI connects to its OpenAI-compatible endpoint using selectable IDs `local-ai` (Everyday), `local-ai-small` and `local-ai-large`.
 
 ## Actual implementation
 
 | Requirement | Existing implementation | Classification / remaining work |
 | --- | --- | --- |
 | Text/media routing | Normal messages vs explicit `/image` and `/video` | Existing custom code; no natural-language selection |
-| Multiple text models | One `text_model` setting | Static configuration possible; dynamic selection requires code |
+| Multiple text models | Three configured/selectable text presets | Implemented; UI exposes model IDs through the gateway |
 | On-demand text loading | Ollama loads the requested model | Native backend behaviour |
-| Text idle unloading | `/api/chat` sets `keep_alive: "5m"` | Native Ollama facility used by existing code |
+| Text idle unloading | Configurable integer seconds per text preset | Implemented; uses native Ollama keep_alive |
 | Explicit unloading | Enumerates `/api/ps`, sends `/api/generate` with `keep_alive: 0`, polls empty list | Existing custom coordination using native Ollama API |
 | Sequential use | Single executor, unload before render, teardown before text | Existing custom code |
 | ComfyUI release | Starts per render and terminates process group afterward | Existing custom process management |
@@ -25,7 +25,7 @@ The selected orchestrator is the custom Python standard-library HTTP gateway at 
 | Background startup | Foreground Terminal supervisor only | Background service deployment and supervisor changes |
 | Guaranteed memory ceiling | None | Separate resource-control design and validation |
 
-The five-minute keep-alive is hardcoded in requests. Changing `OLLAMA_KEEP_ALIVE` alone does not override it. Ollama documents that request-level keep_alive takes precedence. The gateway does not measure actual available unified memory. External clients calling the backend directly can bypass its coordination.
+Per-preset keep-alive seconds are configured in `text_models`. Changing `OLLAMA_KEEP_ALIVE` alone does not override request settings. Ollama documents that request-level keep_alive takes precedence. The gateway does not measure actual available unified memory. External clients calling the backend directly can bypass its coordination.
 
 ## Existing tools worth using
 

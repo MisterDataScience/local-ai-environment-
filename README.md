@@ -23,12 +23,12 @@ The updated Gaming/Normal/Max profiles, isolated VPN search and automatic backgr
 | Role | Choice |
 | --- | --- |
 | Chat interface | Open WebUI 0.11.1 in Safari |
-| Text inference | Native Ollama, Qwen3 14B |
+| Text inference | Native Ollama, selectable Qwen3 4B / 14B / 30B-A3B |
 | Image generation | Native ComfyUI v0.38.0 with SDXL Base 1.0 |
 | Video generation | LTX-Video 2B v0.9.5 with T5 FP16, through ComfyUI |
 | Orchestrator | Custom Python standard-library gateway, `installer/payload/gateway.py` |
 
-Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses a five-minute keep-alive. The current gateway rejects tool-calling and non-text attachments.
+Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. These are text presets, not global Gaming profiles. The current gateway rejects tool-calling and non-text attachments.
 
 The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements.
 
@@ -50,7 +50,9 @@ python3 -m unittest discover -s installer/payload/tests -v
 bash -n 'installer/Install Local AI.command'
 ```
 
-The two suites contain 9 installer tests and 10 gateway tests. They verify logic with mocks, not GPU execution. Native acceptance checks exercise text, image, text, video and text with Open WebUI running; they do not automate all browser interactions.
+The two suites contain 10 installer tests and 16 gateway tests. They verify logic with mocks, not GPU execution. Native acceptance checks exercise every configured text model, then text, image, text, video and text with Open WebUI running; they do not automate all browser interactions.
+
+See [text model and idle settings](docs/TEXT-MODELS-AND-IDLE.md) for model IDs, configuration and upgrade instructions.
 
 ## Next design decision
 

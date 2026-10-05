@@ -27,7 +27,7 @@ Infrastructure running does not mean model weights must remain resident. A persi
 | Normal | Better everyday model | Enabled through VPN | Images available; video eligibility to define | On-demand loading and sequential handoff |
 | Max / Heavy | Largest sensible model validated on this Mac | Enabled through VPN | Both available | Full reasoning/coding access, sequential handoff |
 
-Prefer explicit selection initially; automatic game detection is not required. Specific small/normal/max models and measured budgets remain unselected. World of Warcraft is an example gaming workload, not a verified performance test.
+Prefer explicit selection initially; automatic game detection is not required. Initial text presets now use Qwen3 4B, 14B and 30B-A3B, with 120/300/60-second idle timeouts. They are selectable text options, not enforced global profiles; budgets and native compatibility remain unmeasured. World of Warcraft is an example gaming workload, not a verified performance test.
 
 Gaming Mode must enforce restrictions in backend code, not just a prompt or hidden menu option. Old chats, queued requests and tools must obey the active global profile.
 

@@ -13,6 +13,19 @@ import installer
 
 
 class InstallerTests(unittest.TestCase):
+    def test_existing_text_configuration_is_migrated_without_losing_settings(self):
+        config = {"text_model": "custom:7b", "thinking": True,
+                  "api_key": "existing-secret", "render_timeout_seconds": 900}
+        upgraded = installer.upgrade_text_configuration(config)
+        self.assertNotIn("text_models", config)
+        self.assertEqual(upgraded["api_key"], "existing-secret")
+        self.assertEqual(upgraded["render_timeout_seconds"], 900)
+        self.assertEqual(upgraded["text_models"]["local-ai"]["model"], "custom:7b")
+        self.assertTrue(upgraded["text_models"]["local-ai"]["thinking"])
+        self.assertEqual(len(upgraded["text_models"]), 3)
+        upgraded["text_models"]["local-ai-small"]["keep_alive_seconds"] = 45
+        self.assertEqual(installer.upgrade_text_configuration(upgraded), upgraded)
+
     def test_download_verifies_and_reuses_completed_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "model"

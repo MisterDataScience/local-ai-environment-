@@ -1,6 +1,8 @@
 Authoring checks completed 2026-10-05.
-9 installer tests passed.
-10 gateway tests passed.
+10 installer tests passed.
+16 gateway tests passed.
 Python syntax and bootstrap shell syntax passed.
+Verified: text preset routing, per-model timeout/context enforcement, no preload on listing, explicit text-model handoff and migration preservation.
 No native Mac runtime, model downloads or Apple GPU inference was available here.
-The installer performs MPS, workflow-schema and generation acceptance checks on the target Mac.
+The installer tests every configured text model plus image/video handoffs on the target Mac.
+Native idle-expiry timing and browser model-selection behaviour remain to be checked on the Mac.

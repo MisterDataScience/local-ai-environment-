@@ -14,7 +14,7 @@ This replaces the manual installation sequence with one installer for an **Apple
 ```
 
 5. Leave Terminal open while it works. Model downloads are large, and the video acceptance test may take a long time. The installer prints its current stage. macOS may request approval to run downloaded software.
-6. When installation and acceptance tests succeed, it starts the system and opens Safari at **http://127.0.0.1:8081**. Choose `local-ai` if the model selector does not already show it.
+6. When installation and acceptance tests succeed, it starts the system and opens Safari at **http://127.0.0.1:8081**. Choose Everyday (`local-ai`), Small (`local-ai-small`) or Large (`local-ai-large`) in the model selector. Everyday remains the default.
 
 No Homebrew commands, manual model placement, environment activation, API-key copying, WebUI provider setup or account creation are required. The installer uses a local single-user WebUI with login disabled, bound exclusively to loopback. Keep it local: do not change the host to `0.0.0.0` or expose the port on a network with this configuration.
 
@@ -22,7 +22,7 @@ No Homebrew commands, manual model placement, environment activation, API-key co
 
 | Component | Choice |
 | --- | --- |
-| Text backend/model | Native Ollama with Qwen3 14B Q4_K_M |
+| Text backend/model | Native Ollama with Qwen3 4B, 14B and 30B-A3B (Q4_K_M) |
 | Image backend/model | Native ComfyUI MPS with SDXL Base 1.0 |
 | Video model | LTX-Video 2B v0.9.5 and FP16 T5 encoder |
 | Chat UI | Open WebUI 0.11.1, configured automatically |
@@ -45,7 +45,7 @@ The eight stages are:
 3. Install ComfyUI, its separate Python environment and Apple GPU dependencies; check MPS availability.
 4. Download all three image/video model files, resuming partial downloads and verifying publisher SHA-256 checksums.
 5. Install the gateway and Open WebUI, generate local secrets and configure the provider/default model/background-task settings.
-6. Start the services, download Qwen3, check workflow schemas and run **text, image, text, video, text** generation tests with WebUI running.
+6. Start the services, download all configured Qwen3 models, check workflow schemas, test each text model and run **text, image, text, video, text** generation tests with WebUI running.
 7. Create the daily launcher and save installed-version records.
 8. Start Local AI and open Safari.
 
@@ -70,6 +70,8 @@ Explain this Python function.        -> text
 /image A red car beside a loch.      -> image
 /video A red car slowly driving.     -> video
 ```
+
+Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large: 60 seconds. No model loads merely from selecting it. A text request for a different model explicitly unloads the old model first. These choices do not enforce Gaming Mode; image/video commands remain available from every preset.
 
 The gateway unloads Ollama and confirms an empty loaded-model list before starting ComfyUI. After each image or video job, it stops ComfyUI's process group and waits for exit before allowing text to reload. Multiple gateway requests are serialised. Do not connect another client directly to this private Ollama server or manually start ComfyUI on its private port during use.
 
@@ -120,3 +122,11 @@ Primary references:
 - https://pypi.org/project/imageio-ffmpeg/
 
 Initial installation needs internet. Inference is configured to use local services. This is not a notarised commercial Mac application or an air-gapped package; macOS and third-party software may still present first-run approvals or perform their own update checks.
+
+## Text presets and timeout configuration
+
+Edit `~/LocalAI-Automated/control/config.json` while services are stopped. The `text_models` entries set `model`, `name`, `keep_alive_seconds`, `num_ctx` and `thinking`. Timeouts are integers from 0 to 3600 seconds; 0 releases the model after each reply. Context values are 512 to 8192. Restart to apply changes. Client messages cannot override timeout or context settings. Keep `local-ai` as the default ID.
+
+The new installer adds Small and Large presets to older configurations once, preserving the existing default model and secrets, with a private `config.before-text-presets.json` backup. Later reruns preserve edited presets. Downloads and native acceptance checks follow the configured models. The three default text downloads total roughly 31 GB; this is download size, not peak runtime memory. Large-model memory and performance still require validation on your Mac.
+
+To upgrade an earlier installation, stop Local AI, extract this updated bundle and rerun the same installation command. Changed code/configuration invalidates the previous acceptance fingerprint. The installer runs generation checks again and stops if any configured model fails.

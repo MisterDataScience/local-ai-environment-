@@ -20,6 +20,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 import uuid
+from text_models import configured_text_models
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("gateway")
@@ -43,11 +44,11 @@ def port_open(port):
         return connection.connect_ex(("127.0.0.1", port)) == 0
 
 
-def messages_and_route(body):
+def messages_and_route(body, model_ids=None):
     if not isinstance(body, dict):
         raise ValueError("The request body must be a JSON object.")
-    if body.get("model") != MODEL_ID:
-        raise ValueError("Choose the local-ai model in Open WebUI.")
+    if body.get("model") not in (model_ids if model_ids is not None else {MODEL_ID}):
+        raise ValueError("Choose one of the configured local-ai text presets in Open WebUI.")
     if body.get("tools"):
         raise ValueError("This starter gateway does not implement tool calling.")
     messages = body.get("messages")
@@ -103,6 +104,7 @@ def output_files(history):
 class Engine:
     def __init__(self, config, root=ROOT):
         self.config, self.root = config, root
+        self.text_models = configured_text_models(config)
         self.ollama = config.get("ollama_url", "http://127.0.0.1:11434")
         self.comfy = config.get("comfy_url", "http://127.0.0.1:8188")
         self.comfy_port = urlparse(self.comfy).port
@@ -116,7 +118,7 @@ class Engine:
         self.pending = threading.BoundedSemaphore(4)
 
     def submit(self, body):
-        messages, route, prompt = messages_and_route(body)
+        messages, route, prompt = messages_and_route(body, self.text_models)
         if not self.pending.acquire(blocking=False):
             raise RuntimeError("Four requests are already queued. Wait for them to finish.")
         future = self.executor.submit(self.run, messages, route, prompt, body)
@@ -265,14 +267,19 @@ class Engine:
                 raise RuntimeError("Stop manually started ComfyUI. The gateway must own it.")
             if route != "text":
                 return self.render(route, prompt)
+            preset = self.text_models[body["model"]]
+            # Switching text models also explicitly releases the old model.
+            loaded = api(self.ollama, "/api/ps").get("models", [])
+            if any(model["name"] != preset["model"] for model in loaded):
+                self.unload_ollama()
             self.state = "generating-text"
-            options = {"num_ctx": 8192, "num_predict": 2048}
+            options = {"num_ctx": preset["num_ctx"], "num_predict": 2048}
             if isinstance(body.get("temperature"), (int, float)):
                 options["temperature"] = body["temperature"]
             result = api(self.ollama, "/api/chat", {
-                "model": self.config["text_model"], "messages": messages,
+                "model": preset["model"], "messages": messages,
                 "options": options, "stream": False,
-                "think": bool(self.config.get("thinking", False)), "keep_alive": "5m",
+                "think": preset.get("thinking", False), "keep_alive": preset["keep_alive_seconds"],
             }, timeout=1800)
             return result["message"]["content"]
         finally:
@@ -325,7 +332,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/v1/models":
             return self.json_response(200, {"object": "list", "data": [
-                {"id": MODEL_ID, "object": "model", "created": 0, "owned_by": "local"}]})
+                {"id": identifier, "name": preset["name"], "object": "model", "created": 0,
+                 "owned_by": "local"} for identifier, preset in self.server.engine.text_models.items()]})
         self.json_response(404, {"error": "Not found"})
 
     def do_POST(self):
@@ -346,7 +354,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 content = future.result()
                 return self.json_response(200, {"id": identifier, "object": "chat.completion",
-                    "created": created, "model": MODEL_ID, "choices": [
+                    "created": created, "model": body["model"], "choices": [
                         {"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}]})
             except Exception as error:
                 LOG.exception("Request failed")
@@ -373,7 +381,7 @@ class Handler(BaseHTTPRequestHandler):
                 content = "Local generation failed: " + str(error)
             for delta, finish in [({"role": "assistant", "content": content}, None), ({}, "stop")]:
                 chunk = {"id": identifier, "object": "chat.completion.chunk", "created": created,
-                         "model": MODEL_ID, "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+                         "model": body["model"], "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
                 self.wfile.write(("data: " + json.dumps(chunk) + "\n\n").encode())
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
