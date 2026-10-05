@@ -22,7 +22,7 @@ No Homebrew commands, manual model placement, environment activation, API-key co
 
 ## What it installs
 
-The gateway has separate HTTP, model, routing, workflow and tool modules. Installation copies them together. A bounded internal loop supplies calculator/current-time tools for ordinary chat. See [tool loop](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/TOOL-LOOP.md). Search/media remain explicit commands; account connectors are not included.
+The gateway has separate HTTP, model, routing, workflow and tool modules. Installation copies them together. A bounded internal loop supplies calculator/current-time tools for ordinary chat. See [tool loop](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/TOOL-LOOP.md). Configured web search/page reading can now be requested through ordinary chat. Media remains explicit commands; account connectors are not included.
 
 | Component | Choice |
 | --- | --- |
@@ -81,7 +81,7 @@ Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large
 
 The gateway unloads Ollama and confirms an empty loaded-model list before starting ComfyUI. After each image or video job, it stops ComfyUI's process group and waits for exit before allowing text to reload. Multiple gateway requests are serialised. Do not connect another client directly to this private Ollama server or manually start ComfyUI on its private port during use.
 
-Text responses are buffered until complete. Images appear in chat. Video returns an MP4 link. Optional web commands supply bounded evidence and clickable sources to the local model. Image understanding, image-conditioned video, document RAG, voice, arbitrary tool execution and automatic natural-language media/web routing remain unsupported.
+Text responses are buffered until complete. Images appear in chat. Video returns an MP4 link. Optional web commands supply bounded evidence and clickable sources to the local model. Image understanding, image-conditioned video, document RAG, voice, arbitrary tool execution and automatic natural-language media routing remain unsupported. Configured web search/page reading are available through the bounded tool loop.
 
 ## Shutdown
 

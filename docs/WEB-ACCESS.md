@@ -8,7 +8,7 @@ Open WebUI sends your message to the existing gateway. `/search QUERY` calls Sea
 
 SearXNG and the reader share **Gluetun's network namespace**, with no second network attachment. Gluetun uses **Proton Free WireGuard**, its firewall and encrypted upstream DNS. Both clients use a mounted resolver configuration pointing to `127.0.0.1`, Gluetun's DNS server. No host-side page downloader or direct-internet retry exists in these gateway paths. Retrieval errors return visibly without asking Ollama to invent a web answer. Ordinary offline chat remains available.
 
-This is explicit retrieval, not an autonomous browser or automatic freshness detector. Web commands use the current question and evidence, not the entire prior conversation. Normal chat, including a bare URL, does not trigger gateway retrieval. Use `/read`.
+Ordinary chat now exposes `search_web` and `read_page` through the bounded tool loop when web access is configured. The model can search, inspect evidence, request another page and answer with source links. Actual tool selection depends on the model and remains unverified on the Mac. It is not a full browser or a guaranteed freshness detector. Explicit `/search` and `/read` remain available and use the current question rather than prior conversation.
 
 ## First installation: exact order
 
@@ -60,7 +60,7 @@ This removes only this installation's Compose containers/network, preserving con
 | `/search What changed in Python 3.14?` | Search, attempt two result pages, answer locally with sources |
 | `/read https://docs.python.org/3/whatsnew/3.14.html Summarise the changes.` | Read that HTML page and answer the question |
 | `/read https://www.python.org/` | Summarise the page |
-| Ordinary question | Local model only |
+| Ordinary research/page-reading request | Model can use VPN web tools when enabled; selection is not guaranteed |
 
 PDFs, authenticated sites, paywalls, JavaScript-only pages, transcripts, recursive crawling and clicking buttons are unsupported. Sites can refuse VPN IPs or this reader. Engines can rate-limit SearXNG. Failed page reads are labelled; snippets are not labelled full pages. Citation correctness is model-dependent.
 
@@ -71,7 +71,7 @@ PDFs, authenticated sites, paywalls, JavaScript-only pages, transcripts, recursi
 - Only the authenticated reader endpoint is published, on **127.0.0.1:8090**. SearXNG and VPN health are not separately published. The reader is unprivileged/read-only, with no Docker socket or chat/model files mounted. Do not expose 8090 through LAN/Tailscale/Funnel.
 - The gateway contacts only the fixed loopback endpoint. Remote-device retrieval happens on the Mac. Clicking a source yourself uses normal browser/device traffic, not AI retrieval.
 - Proton sees your VPN connection; sites see its exit IP. Upstream search engines receive the search query. The reader sends the requested URL, not chat history. Your local model receives fetched text. This is not absolute anonymity.
-- Open WebUI built-in search is disabled. `ENABLE_LOCAL_WEB_FETCH=False` blocks private-network destinations for its loader, **not all public URL loading**. Do not use separate website/URL ingestion, tools/plugins/previews instead of `/search` and `/read`. This version does not impose OS-level outbound blocking on native processes. Isolation claims cover the implemented gateway paths, not every possible WebUI extension or feature.
+- Open WebUI built-in search is disabled. `ENABLE_LOCAL_WEB_FETCH=False` blocks private-network destinations for its loader, **not all public URL loading**. Do not use separate website/URL ingestion or third-party tools/plugins/previews as substitutes for the gateway's VPN web tools or explicit commands. This version does not impose OS-level outbound blocking on native processes. Isolation claims cover the implemented gateway paths, not every possible WebUI extension or feature.
 - Software/model/container downloads use ordinary internet. Gluetun contacts Proton to establish the tunnel. Neither is an AI-search fallback. No whole-Mac VPN, exit node, router forwarding or subnet route is configured.
 - Credentials stay in `~/LocalAI-Automated/web/vpn.env` and `reader.env` (0600, parent 0700). A Mac administrator or someone controlling Docker can inspect container environment values. Config backups contain secrets too. Never publish the installed runtime directory.
 

@@ -21,7 +21,7 @@ Gaming/Normal/Max profiles and automatic background AI startup remain unimplemen
 
 ## Current software choices
 
-The gateway has focused modules and a small entry point. It remains one process. A bounded internal tool loop now provides calculator and current-time tools; account connectors remain absent. See [TOOL-LOOP.md](docs/TOOL-LOOP.md).
+The gateway has focused modules and a small entry point. It remains one process. A bounded internal tool loop provides calculator/current-time tools and, when VPN web access is configured, web search/page reading. Account connectors remain absent. See [TOOL-LOOP.md](docs/TOOL-LOOP.md).
 
 | Role | Choice |
 | --- | --- |
@@ -34,7 +34,7 @@ The gateway has focused modules and a small entry point. It remains one process.
 
 Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. These are text presets, not global Gaming profiles. The gateway rejects client-supplied tools and non-text attachments; its internal local-tool loop is described below.
 
-The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements. Ordinary text chat can now use a bounded internal calculator/time loop; web/media still use explicit commands. Client-supplied tools remain forbidden.
+The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements. Ordinary text chat can now use a bounded internal calculator/time loop; web can use natural-language tool requests or explicit commands; media still uses explicit commands. Client-supplied tools remain forbidden.
 
 Remote access is now available as an optional installer stage. See [private access from your other devices](docs/REMOTE-ACCESS.md). Tailscale sign-in and macOS extension approval remain interactive setup steps.
 

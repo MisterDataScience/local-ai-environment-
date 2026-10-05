@@ -5,6 +5,9 @@ from datetime import datetime
 import math
 import operator
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from urllib.parse import urlsplit
+
+WEB_NAMES = {"search_web", "read_page"}
 
 TOOLS = [
     {"type": "function", "function": {"name": "get_current_time",
@@ -18,15 +21,38 @@ TOOLS = [
 ]
 
 
-def definitions():
-    return copy.deepcopy(TOOLS)
+WEB_TOOLS = [
+    {"type": "function", "function": {"name": "search_web",
+     "description": "Search the web through the isolated VPN service. Returns numbered sources and bounded evidence.",
+     "parameters": {"type": "object", "properties": {"query": {"type": "string"}},
+                    "required": ["query"], "additionalProperties": False}}},
+    {"type": "function", "function": {"name": "read_page",
+     "description": "Read one public HTML/plain-text URL through the VPN. No login, PDF or JavaScript support.",
+     "parameters": {"type": "object", "properties": {"url": {"type": "string"}},
+                    "required": ["url"], "additionalProperties": False}}},
+]
+
+
+def definitions(web_enabled=False):
+    return copy.deepcopy(TOOLS + (WEB_TOOLS if web_enabled else []))
 
 
 def validate(name, arguments):
-    if name not in {"calculate", "get_current_time"}:
+    if name not in {"calculate", "get_current_time"} | WEB_NAMES:
         raise ValueError("Unknown or forbidden tool")
     if not isinstance(arguments, dict):
         raise ValueError("Tool arguments must be an object")
+    if name in WEB_NAMES:
+        field = "query" if name == "search_web" else "url"
+        value = arguments.get(field)
+        limit = 500 if field == "query" else 4096
+        if set(arguments) != {field} or not isinstance(value, str) or not value.strip() or len(value) > limit:
+            raise ValueError("Invalid web tool arguments")
+        if field == "url":
+            parsed = urlsplit(value)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or any(ord(c) < 33 for c in value):
+                raise ValueError("Only HTTP/HTTPS URLs without credentials are allowed")
+        return copy.deepcopy(arguments)
     allowed = {"expression"} if name == "calculate" else {"timezone"}
     if set(arguments) - allowed:
         raise ValueError("Unexpected tool arguments")
@@ -75,6 +101,8 @@ def calculate(expression):
 
 def invoke(name, arguments):
     arguments = validate(name, arguments)
+    if name in WEB_NAMES:
+        raise ValueError("Web tools require the authorised VPN executor")
     if name == "calculate":
         return calculate(arguments["expression"])
     zone = arguments.get("timezone", "Europe/London")

@@ -215,7 +215,7 @@ class Engine:
                 "model": preset["model"], "messages": messages,
                 "options": options, "stream": False,
                 "think": preset.get("thinking", False), "keep_alive": preset["keep_alive_seconds"],
-            }, enabled=self.tool_loop_enabled and route == "text")
+            }, enabled=self.tool_loop_enabled and route == "text", web=self.config.get("web"))
             return content + links
         finally:
             self.state = "idle"
