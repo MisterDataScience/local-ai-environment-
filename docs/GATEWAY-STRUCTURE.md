@@ -12,6 +12,9 @@ Refactored 2026-10-05. A behaviour-preserving split, not a new orchestrator or t
 | `workflows.py` | Workflow prompt/seed substitution and saved-output discovery |
 | `text_models.py` | Text-preset configuration, validation and migration |
 | `web_client.py` | Fixed-loopback retrieval, bounded evidence and source links |
+| `tool_registry.py` | Fixed local tool schemas, strict arguments and trusted implementations |
+| `tool_executor.py` | Short-lived, timeout-killed local tool workers |
+| `tool_loop.py` | Bounded model/tool/model conversation progression |
 
 `model_engine.py` deliberately retains ownership of both text and media lifecycle operations. They share one serial executor and state, preserving the handoff invariant. Python modules are not separate running services.
 
@@ -25,7 +28,7 @@ Refactored 2026-10-05. A behaviour-preserving split, not a new orchestrator or t
 - One model job runs at a time, with four admitted active/queued requests at most.
 - Ollama unloading is confirmed before rendering; ComfyUI teardown completes before subsequent model work.
 - Authentication, IDs, ports, response shapes, media URLs and idle timeouts are unchanged.
-- Tool calls and non-text attachments remain rejected. GitHub/Dropbox connectors, repeated tool loops, Gaming policy and write approvals are not added.
+- Client-supplied tools and non-text attachments remain rejected. A bounded internal loop with calculator/time tools has since been added; GitHub/Dropbox, Gaming policy and write approvals remain absent. See [TOOL-LOOP.md](TOOL-LOOP.md).
 - VPN retrieval boundaries and pending native checks remain unchanged.
 
 ## Installation and upgrade
@@ -38,4 +41,4 @@ Run the updated installer with Local AI stopped. Chats, credentials, models, pre
 
 Existing tests target their new owning modules. Additional checks cover manifest completeness, fingerprint invalidation and entry-point wiring/cleanup. The extracted ZIP is independently checked for imports and tests. Native Apple GPU and live VPN execution remain unverified here.
 
-Future tool execution, account connectors and permission policy should use dedicated modules. No placeholder implementation is presented as working functionality.
+Tool execution now uses dedicated modules. Account connectors and write-approval policy remain future work. The original split itself was behaviour-preserving; the subsequent loop is a separate feature addition.

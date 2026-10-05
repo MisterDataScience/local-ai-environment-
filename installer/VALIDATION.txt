@@ -1,7 +1,7 @@
 Authoring checks completed 2026-10-05.
 36 installer/remote/web tests passed.
-21 gateway tests passed.
-Behaviour-preserving gateway split verified: original function/class bodies retained in their owning modules.
+47 gateway/tool tests passed.
+Original gateway split was behaviour-preserving. A subsequent bounded internal tool loop is now implemented separately.
 Installer manifest covers all runtime modules; changes to any module invalidate native acceptance.
 Entrypoint private listener wiring and cleanup tested with mocked services.
 Python and shell syntax, ZIP integrity passed.
@@ -12,3 +12,4 @@ Runtime records private HTTPS/media checks on the Mac; another-device browser ch
 Web tests cover shared VPN network, loopback publication, private DNS, private/reserved/mixed-address rejection, pinned-IP TLS, redirect revalidation, PDF/compression/size rejection, VPN failure before DNS/fetch, fixed-loopback client routing, bounded evidence/citations and private credentials/config preservation.
 Gateway tests ensure web errors do not call Ollama and retrieved evidence reaches local text inference.
 No real Docker VPN, DNS capture or live search engine was available. VPN readiness is not a verified kill switch. Native search/page, tunnel-drop and DNS-leak tests remain pending.
+Tool tests exercise real calculator/time workers, real timeout killing/reaping, strict arguments/arithmetic, malformed calls/results, worker-start failure, loop rounds/calls/deadline/context/evidence and serial-engine integration. No real Ollama tool selection was tested.

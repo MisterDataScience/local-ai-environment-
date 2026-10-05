@@ -23,6 +23,7 @@ The gateway is now modular: `gateway.py` starts it, `http_api.py` handles HTTP, 
 | Profile model/tool restrictions | None | New backend policy code |
 | Gaming selector | None | UI integration and state transition code |
 | Search/retrieval | Explicit `/search` and `/read`, bounded sources passed to Ollama | Custom reader/client plus established SearXNG; no autonomous tool calls |
+| Internal tool loop | Calculator/current-time calls over bounded model/tool/model rounds | Implemented; native model tool selection remains unverified; no account connectors |
 | Selective VPN | Reader/SearXNG share Gluetun/Proton Free network and DNS | Implemented; live tunnel-drop/DNS tests pending; native UI-loader/plugin egress not fully blocked |
 | Background startup | Foreground Terminal supervisor only | Background service deployment and supervisor changes |
 | Guaranteed memory ceiling | None | Separate resource-control design and validation |
@@ -42,7 +43,7 @@ No evaluated project was verified to provide the complete requested appliance as
 
 Keep the existing gateway as a prototype. Prefer established Open WebUI features for chat, search and image interaction. Keep any remaining custom layer narrow: global profile enforcement and backend memory handoff. Do not add llama-swap or another router simply to increase the component count. No replacement orchestrator is selected yet.
 
-Natural-language media requests are possible using tools/routing, but the current gateway rejects tool calls and requires slash commands. Enabling Open WebUI's image integration directly without policy coordination could bypass the gateway's handoff and future Gaming restrictions.
+Natural-language media requests are possible using tools/routing, but the gateway does not expose media tools and still requires slash commands for generation. Enabling Open WebUI's image integration directly without policy coordination could bypass the gateway's handoff and future Gaming restrictions.
 
 Search isolation requires special care: Open WebUI distinguishes search from web loading. External loaders are supported, but version-specific behaviour must be tested. Configuration alone is not proof that all network traffic is isolated. Docker's VM overhead also means the earlier infrastructure-memory estimate cannot be accepted without measurement.
 

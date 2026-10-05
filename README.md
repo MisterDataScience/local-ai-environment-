@@ -21,7 +21,7 @@ Gaming/Normal/Max profiles and automatic background AI startup remain unimplemen
 
 ## Current software choices
 
-The gateway now has focused modules and a small `gateway.py` entry point. It remains one process. This split does not add tool calling or account connectors.
+The gateway has focused modules and a small entry point. It remains one process. A bounded internal tool loop now provides calculator and current-time tools; account connectors remain absent. See [TOOL-LOOP.md](docs/TOOL-LOOP.md).
 
 | Role | Choice |
 | --- | --- |
@@ -32,9 +32,9 @@ The gateway now has focused modules and a small `gateway.py` entry point. It rem
 | Orchestrator | Custom Python standard-library gateway, `installer/payload/gateway.py` |
 | Web access | SearXNG + bounded reader, sharing Gluetun/Proton Free's network namespace |
 
-Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. These are text presets, not global Gaming profiles. The current gateway rejects tool-calling and non-text attachments.
+Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. These are text presets, not global Gaming profiles. The gateway rejects client-supplied tools and non-text attachments; its internal local-tool loop is described below.
 
-The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements.
+The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements. Ordinary text chat can now use a bounded internal calculator/time loop; web/media still use explicit commands. Client-supplied tools remain forbidden.
 
 Remote access is now available as an optional installer stage. See [private access from your other devices](docs/REMOTE-ACCESS.md). Tailscale sign-in and macOS extension approval remain interactive setup steps.
 

@@ -19,6 +19,7 @@ from backend_http import api, port_open
 from routing import messages_and_route
 from text_models import configured_text_models
 from web_client import retrieve
+from tool_loop import run_chat
 from workflows import fill_workflow, output_files
 
 ROOT = Path(__file__).resolve().parent
@@ -29,6 +30,9 @@ class Engine:
     def __init__(self, config, root=ROOT):
         self.config, self.root = config, root
         self.text_models = configured_text_models(config)
+        self.tool_loop_enabled = config.get("tool_loop_enabled", True)
+        if type(self.tool_loop_enabled) is not bool:
+            raise ValueError("tool_loop_enabled must be true or false")
         self.ollama = config.get("ollama_url", "http://127.0.0.1:11434")
         self.comfy = config.get("comfy_url", "http://127.0.0.1:8188")
         self.comfy_port = urlparse(self.comfy).port
@@ -207,12 +211,12 @@ class Engine:
             options = {"num_ctx": preset["num_ctx"], "num_predict": 2048}
             if isinstance(body.get("temperature"), (int, float)):
                 options["temperature"] = body["temperature"]
-            result = api(self.ollama, "/api/chat", {
+            content = run_chat(api, self.ollama, {
                 "model": preset["model"], "messages": messages,
                 "options": options, "stream": False,
                 "think": preset.get("thinking", False), "keep_alive": preset["keep_alive_seconds"],
-            }, timeout=1800)
-            return result["message"]["content"] + links
+            }, enabled=self.tool_loop_enabled and route == "text")
+            return content + links
         finally:
             self.state = "idle"
             LOG.info("Finished %s request", route)

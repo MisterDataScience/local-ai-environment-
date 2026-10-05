@@ -24,6 +24,43 @@ def request(text):
 
 
 class GatewayTests(unittest.TestCase):
+    def test_tool_loop_runs_inside_engine_and_preserves_selected_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = model_engine.Engine({"text_models": DEFAULT_TEXT_MODELS}, Path(directory))
+            try:
+                call = {"function": {"name": "calculate", "arguments": {"expression": "2+3"}}}
+                replies = [{"models": []}, {"message": {"role": "assistant", "content": "", "tool_calls": [call]}},
+                           {"message": {"role": "assistant", "content": "5"}}]
+                with patch.object(model_engine, "port_open", return_value=False), \
+                     patch.object(model_engine, "api", side_effect=replies) as backend:
+                    body = request("What is 2+3?")
+                    body["model"] = "local-ai-small"
+                    self.assertEqual(engine.submit(body).result(5), "5")
+                calls = [c for c in backend.call_args_list if c.args[1] == "/api/chat"]
+                self.assertEqual(len(calls), 2)
+                self.assertTrue(all(c.args[2]["model"] == "qwen3:4b" for c in calls))
+                self.assertEqual(json.loads(calls[1].args[2]["messages"][-1]["content"])["result"]["value"], 5)
+                self.assertEqual(engine.state, "idle")
+            finally:
+                engine.executor.shutdown()
+
+    def test_tool_loop_config_and_client_tools_cannot_expand_permissions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError):
+                model_engine.Engine({"tool_loop_enabled": "yes"}, Path(directory))
+            engine = model_engine.Engine({"tool_loop_enabled": False}, Path(directory))
+            try:
+                body = request("hello")
+                body["tools"] = [{"function": {"name": "shell"}}]
+                with self.assertRaises(ValueError):
+                    engine.submit(body)
+                with patch.object(model_engine, "port_open", return_value=False), \
+                     patch.object(model_engine, "api", side_effect=[{"models": []}, {"message": {"content": "hello"}}]) as backend:
+                    self.assertEqual(engine.submit(request("hello")).result(2), "hello")
+                    self.assertNotIn("tools", backend.call_args.args[2])
+            finally:
+                engine.executor.shutdown()
+
     def test_entrypoint_wires_private_listeners_and_cleans_up(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

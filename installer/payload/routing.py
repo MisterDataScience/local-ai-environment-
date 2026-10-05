@@ -9,7 +9,7 @@ def messages_and_route(body, model_ids=None):
     if body.get("model") not in (model_ids if model_ids is not None else {MODEL_ID}):
         raise ValueError("Choose one of the configured local-ai text presets in Open WebUI.")
     if body.get("tools"):
-        raise ValueError("This starter gateway does not implement tool calling.")
+        raise ValueError("Client-supplied tools are not permitted. The gateway owns its tool registry.")
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
         raise ValueError("messages must be a non-empty list.")
