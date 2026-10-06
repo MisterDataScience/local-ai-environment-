@@ -171,3 +171,10 @@ The updated installer also creates Enable Remote Access.command and Disable Remo
 Runtime checks HTTPS chat health and a temporary media file, recording `remote-acceptance-report.json`. A failure is reported while local chat continues. A real iPad/phone/Windows browser check is still required. Existing localhost links in old chats are not migrated. New media links use the private address.
 
 This remains a Terminal-supervised application; remote access does not add automatic background startup or wake-on-demand. The installer may require a restart if macOS/Tailscale requests one. Resume setup after that restart.
+
+## OpenCode work harness
+
+`Start Work Agent.command` launches the installed upstream OpenCode in a copied
+project, using the local gateway and its own web UI. Normal/Max only. Read
+WORK-AGENT.md in this ZIP before approving shell commands. Work-agent files are
+local, not automatically in the vault or its WebUI backups.

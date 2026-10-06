@@ -82,3 +82,12 @@ See [text model and idle settings](docs/TEXT-MODELS-AND-IDLE.md) for model IDs, 
 Keep remaining policy/handoff code narrow. No replacement orchestrator has been selected. Gluetun and SearXNG provide VPN/search; the custom reader and gateway connect them without host-side page fetching.
 
 Model weights, generated outputs, chat databases and runtime credentials do not belong in this repository. The automated ZIP tracks the updated installer; the manual ZIP is historical. Neither implies all requirements are fulfilled or hardware-verified.
+
+## Dedicated work harness
+
+The installer includes upstream OpenCode. Use `Start Work Agent.command` in Normal
+or Max for its native Plan/Build web interface, approval prompts and a separate
+project copy. It uses the existing local gateway. Read [WORK-AGENT.md](docs/WORK-AGENT.md)
+for local storage, permission boundaries and native acceptance checks. Open WebUI
+Pyodide execution settings are now explicit; the pinned version already enabled
+them by default.

@@ -100,6 +100,7 @@ class Engine:
                 self.state = 'idle'
 
     def submit(self, body):
+        body.pop("_usage", None)
         messages, route, prompt = messages_and_route(body, self.text_models)
         with self.mode_lock:
             self.check_policy(body, route)
@@ -329,7 +330,12 @@ class Engine:
                 payload["tools"] = tools
             # Exactly one inference call. Open WebUI executes/approves tools and
             # submits the next inference turn with their results.
-            message = api(self.ollama, "/api/chat", payload, timeout=1800)["message"]
+            response = api(self.ollama, '/api/chat', payload, timeout=1800)
+            message = response['message']
+            counts = [response.get('prompt_eval_count'), response.get('eval_count')]
+            if all(type(n) is int and n >= 0 for n in counts):
+                body['_usage'] = {'prompt_tokens': counts[0], 'completion_tokens': counts[1],
+                                  'total_tokens': sum(counts)}
             answer = assistant_for_openai(message, tools)
             return answer + links if isinstance(answer, str) else answer
         finally:

@@ -130,6 +130,14 @@ class ModeTests(unittest.TestCase):
             self.assertGreaterEqual(stop.call_count, 2)
             self.assertFalse(self.engine.mode_status()['transitioning'])
 
+    def test_actual_token_counts_return_to_request_owner(self):
+        self.api.side_effect = lambda url, path, *args, **kw: {'models': []} if path == '/api/ps' else {
+            'message': {'content': 'answer'}, 'prompt_eval_count': 120, 'eval_count': 8}
+        body = self.body('local-ai')
+        body['_usage'] = {'total_tokens': 999999}
+        self.assertEqual(self.engine.submit(body).result(2), 'answer')
+        self.assertEqual(body['_usage'], {'prompt_tokens': 120, 'completion_tokens': 8, 'total_tokens': 128})
+
     def test_http_auth_and_model_filtering_and_media_isolation(self):
         self.switch('gaming')
         for handler in (Handler, MediaHandler):

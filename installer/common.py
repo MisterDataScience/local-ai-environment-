@@ -89,6 +89,8 @@ def webui_environment(root, configuration):
         "ENABLE_IMAGE_PROMPT_GENERATION": "False", "ENABLE_COMMUNITY_SHARING": "False",
         "ENABLE_WEB_SEARCH": "False", "ENABLE_LOCAL_WEB_FETCH": "False",
         "ENABLE_TOOL_PERMISSIONS": "True",
+        "ENABLE_CODE_EXECUTION": "True", "CODE_EXECUTION_ENGINE": "pyodide",
+        "ENABLE_CODE_INTERPRETER": "True", "CODE_INTERPRETER_ENGINE": "pyodide",
         "DEFAULT_MODEL_PARAMS": json.dumps({"function_calling": "native", "tool_approval_mode": "ask"}),
         "ENABLE_RAG_LOCAL_WEB_FETCH": "False", "ENABLE_USER_WEBHOOKS": "False",
         "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "true",

@@ -1,5 +1,5 @@
 Authoring checks completed 2026-10-06 UTC.
-50 installer/remote/web/workspace/backup tests and 64 gateway/protocol/vault/mode tests passed.
+58 installer/remote/web/workspace/backup/harness tests and 65 gateway/protocol/vault/mode tests passed.
 Python syntax and installer shell syntax passed. ZIP rebuilt from current source.
 New coverage: direct vault PNG output, actual Linux FFmpeg pipe-to-MP4 encoding,
 partial cleanup on mount loss, output symlink rejection, workflow allowlist,
@@ -26,3 +26,11 @@ See docs/ENCRYPTED-WORKSPACE.md for native acceptance and storage boundaries.
 Resource modes: eligibility, HTTP auth, filtered model list, queue invalidation,
 active-render cancellation, persistence, unload-failure blocking and gaming
 inference limits tested. Mode selector/native Mac and game performance unverified.
+
+OpenCode 1.18.34 integration: official macOS arm64 asset digest pinned, native
+provider/permission configuration and upstream flags inspected. Tests cover
+project copying, secret/config omission, checksum refusal, local provider setup,
+launch refusal in Gaming, native web launch and stop on mode change, and actual
+Ollama usage accounting. OpenCode binary execution/UI and local-model agent
+performance were NOT tested here. Mac acceptance is documented in WORK-AGENT.md.
+Open WebUI Pyodide defaults verified against pinned v0.11.1 source and made explicit.

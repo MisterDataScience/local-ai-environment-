@@ -186,7 +186,7 @@ def install_environments(root, uv, state):
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
-    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "workspace_setup.py", "account_tools.py", "vault_backup.py", "mode_selector.py"):
+    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "workspace_setup.py", "account_tools.py", "vault_backup.py", "mode_selector.py", "work_agent.py"):
         shutil.copy2(SOURCE / name, control / name)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -314,7 +314,7 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
-    for label, module in (("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
+    for label, module in (("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
                          ("Restore AI Workspace", "vault_backup.py --restore"), ("Archive Existing AI Files", "vault_backup.py --migrate-legacy")):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
@@ -370,6 +370,8 @@ def main():
         configuration = install_environments(root, args.uv, state)
         from workspace_setup import install_cryptomator, save_config
         app = install_cryptomator(root, download, run)
+        from work_agent import install as install_work_agent
+        install_work_agent(root, download, run)
         configuration['cryptomator_app'] = str(app)
         save_config(root, configuration)
         logging.info("Stage 6/8: hardware generation and memory handoff tests")
@@ -388,7 +390,7 @@ def main():
             with (directory / "installed-versions.txt").open("w") as output:
                 run([args.uv, "pip", "freeze", "--python", directory / ".venv/bin/python"], stdout=output)
         (root / "software-versions.json").write_text(json.dumps(
-            {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE,
+            {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "opencode": "1.18.34",
              "text_models": configured_text_models(configuration)}, indent=2))
         checkpoint(state, "installed")
         if args.web_access:

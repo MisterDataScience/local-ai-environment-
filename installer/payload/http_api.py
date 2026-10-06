@@ -197,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
                 content = future.result()
                 message, finish = completion_message(content)
                 return self.json_response(200, {"id": identifier, "object": "chat.completion",
-                    "created": created, "model": body["model"], "choices": [
+                    "created": created, "model": body["model"], "usage": body.get("_usage", {}), "choices": [
                         {"index": 0, "message": message, "finish_reason": finish}]})
             except Exception as error:
                 LOG.exception("Request failed")
@@ -226,6 +226,8 @@ class Handler(BaseHTTPRequestHandler):
             for delta, finish in [(completion_delta(message), None), ({}, reason)]:
                 chunk = {"id": identifier, "object": "chat.completion.chunk", "created": created,
                          "model": body["model"], "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+                if finish and body.get("_usage"):
+                    chunk["usage"] = body["_usage"]
                 self.wfile.write(("data: " + json.dumps(chunk) + "\n\n").encode())
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
