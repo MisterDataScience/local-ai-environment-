@@ -89,6 +89,13 @@ def webui_environment(root, configuration):
         "ENABLE_IMAGE_PROMPT_GENERATION": "False", "ENABLE_COMMUNITY_SHARING": "False",
         "ENABLE_WEB_SEARCH": "False", "ENABLE_LOCAL_WEB_FETCH": "False",
         "ENABLE_TOOL_PERMISSIONS": "True",
+        # Shared ceiling accommodates the 4096-token presets. Summary requests
+        # use the active model, so Gaming cannot accidentally load a large one.
+        "ENABLE_CONTEXT_COMPACTION": "True",
+        "CONTEXT_COMPACTION_TOKEN_THRESHOLD": "1536",
+        "CONTEXT_COMPACTION_TOKEN_CAP": "1536",
+        "CONTEXT_COMPACTION_RETENTION_PERCENTAGE": "20",
+        "CONTEXT_COMPACTION_MODEL": "",
         "ENABLE_CODE_EXECUTION": "True", "CODE_EXECUTION_ENGINE": "pyodide",
         "ENABLE_CODE_INTERPRETER": "True", "CODE_INTERPRETER_ENGINE": "pyodide",
         "DEFAULT_MODEL_PARAMS": json.dumps({"function_calling": "native", "tool_approval_mode": "ask"}),

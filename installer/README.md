@@ -178,3 +178,11 @@ This remains a Terminal-supervised application; remote access does not add autom
 project, using the local gateway and its own web UI. Normal/Max only. Read
 WORK-AGENT.md in this ZIP before approving shell commands. Work-agent files are
 local, not automatically in the vault or its WebUI backups.
+
+### Context management
+
+The installer enables Open WebUI's existing conversation compaction at a conservative
+1,536-token threshold suitable for the smallest presets. OpenCode retains its native
+compaction and pruning. Gateway reply limits and structured failures support these
+clients; no duplicate summariser is installed. Large individual inputs still need
+care: see [context management and Mac acceptance](../docs/CONTEXT-MANAGEMENT.md).

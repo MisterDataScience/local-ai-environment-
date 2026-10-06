@@ -13,6 +13,13 @@ import installer
 
 
 class InstallerTests(unittest.TestCase):
+    def test_compaction_uses_small_context_ceiling_and_active_model(self):
+        env = common.webui_environment(Path('/test'), {'webui_secret': 'secret', 'api_key': 'key'})
+        self.assertEqual(env['ENABLE_CONTEXT_COMPACTION'], 'True')
+        self.assertLess(int(env['CONTEXT_COMPACTION_TOKEN_CAP']) + 2048, 4096)
+        self.assertEqual(env['CONTEXT_COMPACTION_TOKEN_THRESHOLD'], env['CONTEXT_COMPACTION_TOKEN_CAP'])
+        self.assertEqual(env['CONTEXT_COMPACTION_MODEL'], '')
+
     def test_gateway_manifest_contains_every_runtime_module(self):
         payload = installer.SOURCE / "payload"
         expected = {p.name for p in payload.glob("*.py") if p.name != "check-workflows.py"}

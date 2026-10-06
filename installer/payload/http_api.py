@@ -13,6 +13,7 @@ from web_tools_api import specification, execute as retrieve_tool
 import vault_tools
 import vault_media
 import resource_modes
+from backend_http import completion_error
 
 LOG = logging.getLogger("gateway")
 
@@ -201,7 +202,8 @@ class Handler(BaseHTTPRequestHandler):
                         {"index": 0, "message": message, "finish_reason": finish}]})
             except Exception as error:
                 LOG.exception("Request failed")
-                return self.json_response(502, {"error": {"message": str(error)}})
+                status, payload = completion_error(error)
+                return self.json_response(status, payload)
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
@@ -221,7 +223,12 @@ class Handler(BaseHTTPRequestHandler):
                 content = future.result()
             except Exception as error:
                 LOG.exception("Request failed")
-                content = "Local generation failed: " + str(error)
+                # Headers have already been sent. Emit an error event, never a
+                # successful assistant turn containing the error text.
+                _, payload = completion_error(error)
+                self.wfile.write(("data: " + json.dumps(payload) + "\n\ndata: [DONE]\n\n").encode())
+                self.wfile.flush()
+                return
             message, reason = completion_message(content)
             for delta, finish in [(completion_delta(message), None), ({}, reason)]:
                 chunk = {"id": identifier, "object": "chat.completion.chunk", "created": created,

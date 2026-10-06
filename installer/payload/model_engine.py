@@ -29,6 +29,18 @@ ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("gateway")
 
 
+def output_limit(body, gaming=False):
+    ceiling = 1024 if gaming else 2048
+    requested = []
+    for key in ("max_tokens", "max_completion_tokens"):
+        if key in body:
+            value = body[key]
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{key} must be a positive integer")
+            requested.append(value)
+    return min([ceiling, *requested])
+
+
 class Engine:
     def __init__(self, config, root=ROOT):
         self.config, self.root = config, root
@@ -101,6 +113,7 @@ class Engine:
 
     def submit(self, body):
         body.pop("_usage", None)
+        output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
         with self.mode_lock:
             self.check_policy(body, route)
@@ -317,7 +330,7 @@ class Engine:
                 self.unload_ollama()
             self.check_policy(body, route)
             self.state = "generating-text"
-            options = {"num_ctx": preset["num_ctx"], "num_predict": 1024 if self.mode == "gaming" else 2048}
+            options = {"num_ctx": preset["num_ctx"], "num_predict": output_limit(body, self.mode == "gaming")}
             if isinstance(body.get("temperature"), (int, float)):
                 options["temperature"] = body["temperature"]
             payload = {
