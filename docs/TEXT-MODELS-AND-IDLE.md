@@ -1,3 +1,5 @@
+> Update: global Gaming/Normal/Max controls are now implemented separately. See [RESOURCE-MODES.md](RESOURCE-MODES.md). The original preset design below is retained for context.
+
 # Text model selection and idle unloading
 
 Implemented 2026-10-05, covering steps 1 and 2 of the easiest-first feature list. This is not Gaming Mode or the global profile selector.

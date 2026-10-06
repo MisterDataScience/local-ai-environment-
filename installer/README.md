@@ -92,7 +92,7 @@ Explain this Python function.        -> text
 /read https://www.python.org/        -> VPN page summary, if configured
 ```
 
-Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large: 60 seconds. No model loads merely from selecting it. A text request for a different model explicitly unloads the old model first. These choices do not enforce Gaming Mode; image/video commands remain available from every preset.
+Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large: 60 seconds. No model loads merely from selecting it. A text request for a different model explicitly unloads the old model first. Use `AI Modes.command` for enforced Gaming/Normal/Max restrictions. Gaming permits only Qwen3 4B and blocks media. Normal permits small/everyday text and images. Max permits all configured models and media. Wait for Ready after switching. See RESOURCE-MODES.md in the ZIP.
 
 The gateway unloads Ollama and confirms an empty loaded-model list before starting ComfyUI. After each image or video job, it stops ComfyUI's process group and waits for exit before allowing text to reload. Multiple gateway requests are serialised. Do not connect another client directly to this private Ollama server or manually start ComfyUI on its private port during use.
 

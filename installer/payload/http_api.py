@@ -12,6 +12,7 @@ import uuid
 from web_tools_api import specification, execute as retrieve_tool
 import vault_tools
 import vault_media
+import resource_modes
 
 LOG = logging.getLogger("gateway")
 
@@ -98,8 +99,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/modes':
+            content = resource_modes.PAGE.encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(content)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Referrer-Policy', 'no-referrer')
+            self.send_header('X-Frame-Options', 'DENY')
+            self.end_headers()
+            self.wfile.write(content)
+            return
         if path == "/health":
-            return self.json_response(200, {"status": "ok", "state": self.server.engine.state})
+            return self.json_response(503 if self.server.engine.mode_transitioning or self.server.engine.mode_error else 200, {"status": "switching" if self.server.engine.mode_transitioning else "blocked" if self.server.engine.mode_error else "ok", "state": self.server.engine.state})
         if path.startswith("/media/"):
             if self.server.engine.config.get('vault', {}).get('enabled'):
                 return self.vault_media_response(path.removeprefix('/media/'))
@@ -121,10 +133,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self.authorised():
             return
+        if path == "/control/mode":
+            return self.json_response(200, self.server.engine.mode_status())
         if path == "/v1/models":
             return self.json_response(200, {"object": "list", "data": [
                 {"id": identifier, "name": preset["name"], "object": "model", "created": 0,
-                 "owned_by": "local"} for identifier, preset in self.server.engine.text_models.items()]})
+                 "owned_by": "local"} for identifier, preset in self.server.engine.visible_models().items()]})
         if path == "/workspace/openapi.json":
             return self.json_response(200, vault_tools.specification())
         if path == "/tools/openapi.json":
@@ -135,6 +149,18 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorised():
             return
         path = urlparse(self.path).path
+        if path == '/control/mode':
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 256:
+                    self.close_connection = True
+                    raise ValueError('Invalid mode request size')
+                body = json.loads(self.rfile.read(length))
+                if not isinstance(body, dict) or set(body) != {'mode'} or not isinstance(body['mode'], str):
+                    raise ValueError('Expected a mode name only')
+                return self.json_response(202, self.server.engine.change_mode(body['mode']))
+            except (ValueError, RuntimeError, OSError) as error:
+                return self.json_response(409, {'error': str(error)})
         if path.startswith('/workspace/'):
             try:
                 length = int(self.headers.get('Content-Length', '0'))

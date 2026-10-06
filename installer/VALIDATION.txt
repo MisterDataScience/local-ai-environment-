@@ -1,5 +1,5 @@
 Authoring checks completed 2026-10-06 UTC.
-50 installer/remote/web/workspace/backup tests and 56 gateway/protocol/vault tests passed.
+50 installer/remote/web/workspace/backup tests and 64 gateway/protocol/vault/mode tests passed.
 Python syntax and installer shell syntax passed. ZIP rebuilt from current source.
 New coverage: direct vault PNG output, actual Linux FFmpeg pipe-to-MP4 encoding,
 partial cleanup on mount loss, output symlink rejection, workflow allowlist,
@@ -22,3 +22,7 @@ GitHub uses the official remote MCP server, not the removed bespoke adapter.
 Open WebUI 0.11.1 approval defaults are experimental and can be overridden.
 Test denial, approval, reload and account permissions before real account writes.
 See docs/ENCRYPTED-WORKSPACE.md for native acceptance and storage boundaries.
+
+Resource modes: eligibility, HTTP auth, filtered model list, queue invalidation,
+active-render cancellation, persistence, unload-failure blocking and gaming
+inference limits tested. Mode selector/native Mac and game performance unverified.

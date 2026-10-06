@@ -30,6 +30,7 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", config.get("gateway_port", 8000)), Handler)
     server.daemon_threads = True
     server.engine = Engine(config)
+    server.engine.change_mode(server.engine.mode)  # Release any leftover weights before admitting work.
     media_server = None
     if config.get("remote_access", {}).get("enabled"):
         try:

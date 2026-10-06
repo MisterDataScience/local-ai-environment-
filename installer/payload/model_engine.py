@@ -21,6 +21,7 @@ from text_models import configured_text_models
 from web_client import retrieve
 from tool_protocol import tools_for_ollama, assistant_for_openai
 from workflows import fill_workflow, output_files
+import resource_modes
 import vault_media
 from vault_tools import mounted_root, enabled as vault_enabled
 
@@ -45,14 +46,80 @@ class Engine:
         # A single executor owns every model operation, including waiting for unloads.
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self.pending = threading.BoundedSemaphore(4)
+        self.mode_lock = threading.RLock()
+        self.mode = resource_modes.load(root)
+        self.mode_epoch = 0
+        self.mode_transitioning = False
+        self.mode_error = None
+
+    def mode_status(self):
+        with self.mode_lock:
+            return {'mode': self.mode, 'transitioning': self.mode_transitioning,
+                    'error': self.mode_error, 'description': resource_modes.MODES[self.mode]}
+
+    def visible_models(self):
+        with self.mode_lock:
+            return {key: preset for key, preset in self.text_models.items()
+                    if resource_modes.allowed(self.mode, key, preset)}
+
+    def check_policy(self, body, route):
+        with self.mode_lock:
+            if self.mode_transitioning or self.mode_error:
+                raise RuntimeError('Mode switch is not ready. Check AI Modes before submitting another request.')
+            if not resource_modes.allowed(self.mode, body['model'], self.text_models[body['model']], route):
+                raise ValueError('Blocked by ' + self.mode + ' mode. Select an eligible model or change AI Modes on the Mac.')
+
+    def change_mode(self, mode):
+        if mode not in resource_modes.MODES:
+            raise ValueError('Choose gaming, normal or max.')
+        with self.mode_lock:
+            if self.mode_transitioning:
+                raise RuntimeError('A mode switch is already in progress.')
+            if not any(resource_modes.allowed(mode, key, preset) for key, preset in self.text_models.items()):
+                raise ValueError('This mode needs its supported local text preset installed. Rerun the installer.')
+            resource_modes.save(self.root, mode)
+            self.mode, self.mode_transitioning, self.mode_error = mode, True, None
+            self.mode_epoch += 1
+            # The serial barrier runs after the active job. Queued old jobs are
+            # invalidated immediately and never begin another model operation.
+            self.executor.submit(self.finish_mode_change)
+        return self.mode_status()
+
+    def finish_mode_change(self):
+        try:
+            self.stop_comfy()
+            if port_open(self.comfy_port):
+                raise RuntimeError('Unmanaged ComfyUI is still running.')
+            self.unload_ollama()
+        except Exception:
+            with self.mode_lock:
+                self.mode_error = 'Model release failed. Stop Local AI and check the backend before retrying.'
+        finally:
+            with self.mode_lock:
+                self.mode_transitioning = False
+                self.state = 'idle'
 
     def submit(self, body):
         messages, route, prompt = messages_and_route(body, self.text_models)
-        if not self.pending.acquire(blocking=False):
-            raise RuntimeError("Four requests are already queued. Wait for them to finish.")
-        future = self.executor.submit(self.run, messages, route, prompt, body)
-        future.add_done_callback(lambda _: self.pending.release())
-        return future
+        with self.mode_lock:
+            self.check_policy(body, route)
+            epoch = self.mode_epoch
+            if not self.pending.acquire(blocking=False):
+                raise RuntimeError('Four requests are already queued. Wait for them to finish.')
+            try:
+                future = self.executor.submit(self.run_admitted, epoch, messages, route, prompt, body)
+            except Exception:
+                self.pending.release()
+                raise
+            future.add_done_callback(lambda _: self.pending.release())
+            return future
+
+    def run_admitted(self, epoch, messages, route, prompt, body):
+        with self.mode_lock:
+            if epoch != self.mode_epoch:
+                raise RuntimeError('Request cancelled because the resource mode changed. Submit it again.')
+            self.check_policy(body, route)
+        return self.run(messages, route, prompt, body)
 
     def unload_ollama(self):
         self.state = "unloading-text"
@@ -131,6 +198,10 @@ class Engine:
                     self.log_file = None
 
     def render(self, kind, prompt):
+        with self.mode_lock:
+            if self.mode_transitioning or self.mode_error or self.mode == 'gaming' or (self.mode == 'normal' and kind == 'video'):
+                raise RuntimeError('Media generation blocked by resource mode.')
+            render_epoch = self.mode_epoch
         encrypted = vault_enabled(self.config)
         if encrypted:
             with mounted_root(self.config):
@@ -147,6 +218,8 @@ class Engine:
             self.state = f"rendering-{kind}"
             deadline = time.monotonic() + self.config.get("render_timeout_seconds", 3600)
             while time.monotonic() < deadline:
+                if render_epoch != self.mode_epoch:
+                    raise RuntimeError('Render cancelled because the resource mode changed.')
                 if encrypted:
                     with mounted_root(self.config):
                         pass
@@ -222,13 +295,17 @@ class Engine:
     def run(self, messages, route, prompt, body):
         LOG.info("Starting %s request", route)
         try:
+            self.check_policy(body, route)
             self.stop_comfy()
             if port_open(self.comfy_port):
                 raise RuntimeError("Stop manually started ComfyUI. The gateway must own it.")
             if route in {"image", "video"}:
                 return self.render(route, prompt)
             links = ""
-            preset = self.text_models[body["model"]]
+            preset = dict(self.text_models[body['model']])
+            if self.mode == 'gaming':
+                preset.update(num_ctx=min(preset['num_ctx'], 4096),
+                              keep_alive_seconds=min(preset['keep_alive_seconds'], 120), thinking=False)
             if route in {"search", "read"}:
                 self.state = "retrieving-web"
                 budget = max(500, min(10000, (preset["num_ctx"] - 2600) * 2))
@@ -237,8 +314,9 @@ class Engine:
             loaded = api(self.ollama, "/api/ps").get("models", [])
             if any(model["name"] != preset["model"] for model in loaded):
                 self.unload_ollama()
+            self.check_policy(body, route)
             self.state = "generating-text"
-            options = {"num_ctx": preset["num_ctx"], "num_predict": 2048}
+            options = {"num_ctx": preset["num_ctx"], "num_predict": 1024 if self.mode == "gaming" else 2048}
             if isinstance(body.get("temperature"), (int, float)):
                 options["temperature"] = body["temperature"]
             payload = {

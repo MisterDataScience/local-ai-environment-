@@ -64,7 +64,7 @@ def main():
         wait_ready("http://127.0.0.1:8081/health", webui, timeout=600)
         # Verify the gateway model list is available before presenting the chat UI.
         models = http("http://127.0.0.1:8001/v1/models", key=config["api_key"])
-        if not any(model["id"] == "local-ai" for model in models["data"]):
+        if not models["data"]:
             raise RuntimeError("The local-ai gateway model is unavailable.")
         if remote.get("enabled"):
             from remote_access import verify_remote_access
@@ -82,7 +82,7 @@ def main():
             print("Private remote chat:", remote["ui_url"])
             print("Connect Tailscale on your other devices, then open that address.")
         print("Select Everyday, Small or Large in the chat's model menu. Models load on a request.")
-        print("These are text presets, not Gaming Mode. Media remains available with each preset.")
+        print("Open AI Modes.command to choose Gaming, Normal or Max. This applies to all devices.")
         if config.get('vault', {}).get('enabled'):
             from vault_tools import mounted_root
             try:

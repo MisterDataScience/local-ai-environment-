@@ -27,7 +27,7 @@ COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
-                 "tool_protocol.py", "web_tools_api.py", "vault_tools.py", "vault_media.py")
+                 "tool_protocol.py", "web_tools_api.py", "vault_tools.py", "vault_media.py", "resource_modes.py")
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -186,7 +186,7 @@ def install_environments(root, uv, state):
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
-    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "workspace_setup.py", "account_tools.py", "vault_backup.py"):
+    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "workspace_setup.py", "account_tools.py", "vault_backup.py", "mode_selector.py"):
         shutil.copy2(SOURCE / name, control / name)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -235,6 +235,9 @@ def install_environments(root, uv, state):
 
 
 def verify_generation(root, configuration):
+    import resource_modes
+    if resource_modes.load(root / "control") != "max":
+        raise RuntimeError("Full hardware acceptance requires Max mode. Select Max in AI Modes, stop Local AI, then rerun the installer.")
     processes = []
     control = root / "control"
     try:
@@ -311,7 +314,7 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
-    for label, module in (("Configure AI Workspace", "workspace_setup.py"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
+    for label, module in (("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
                          ("Restore AI Workspace", "vault_backup.py --restore"), ("Archive Existing AI Files", "vault_backup.py --migrate-legacy")):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +

@@ -4,7 +4,7 @@ Personal local AI project for a **32 GB unified-memory Apple Silicon Mac mini**.
 
 **Status: prototype.** The included installer implements text, image and short video generation through a custom Python gateway. Unit/mock tests passed in the authoring environment. Native Mac installation, Apple GPU inference and memory use have not been verified here. The installer performs acceptance checks on the target Mac.
 
-Gaming/Normal/Max profiles and automatic background AI startup remain unimplemented. Optional Proton VPN search and HTML page reading are implemented; native tunnel-drop/DNS validation remains pending.
+Gaming/Normal/Max profiles are enforced through the gateway; use `AI Modes.command`. Automatic background AI startup remains unimplemented. Optional Proton VPN search and HTML page reading are implemented; native tunnel-drop/DNS validation remains pending.
 
 ## Files
 
@@ -47,7 +47,7 @@ The gateway remains one process and owns model lifecycle work. Open WebUI owns t
 | Orchestrator | Custom Python standard-library gateway, `installer/payload/gateway.py` |
 | Web access | SearXNG + bounded reader, sharing Gluetun/Proton Free's network namespace |
 
-Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. These are text presets, not global Gaming profiles. The gateway accepts function definitions and matching text tool results; it does not execute supplied functions. Image/audio inputs remain unsupported.
+Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. Global resource modes restrict which presets and media jobs are eligible. See [Resource modes](docs/RESOURCE-MODES.md). The gateway accepts function definitions and matching text tool results; it does not execute supplied functions. Image/audio inputs remain unsupported.
 
 The current daily launcher starts services in Terminal and opens Safari. Terminal must remain open. This is not yet the background appliance described in the requirements. Native tool calls now pass through the gateway. VPN retrieval is available through a small authenticated OpenAPI bridge; enable that connection in the chat or attach it to a model. Media still uses explicit commands. End-to-end native WebUI tool selection and approval remain unverified on the Mac.
 
@@ -63,7 +63,7 @@ Read [the installer instructions](installer/README.md) first. Download [Mac-Loca
 /bin/bash "$HOME/Downloads/mac-local-ai-installer/Install Local AI.command"
 ```
 
-This installs under `~/LocalAI-Automated`. Requirements: Apple Silicon, macOS 15+, at least 32 GB unified memory and 100 GB free disk for an initial installation. Large downloads and native acceptance tests are involved. Use `Install Local AI with Web Access.command` for VPN search after completing its prerequisites. Gaming Mode is not included.
+This installs under `~/LocalAI-Automated`. Requirements: Apple Silicon, macOS 15+, at least 32 GB unified memory and 100 GB free disk for an initial installation. Large downloads and native acceptance tests are involved. Use `Install Local AI with Web Access.command` for VPN search after completing its prerequisites. Gaming Mode is included through `AI Modes.command`; wait for Ready before starting a game.
 
 ## Authoring verification
 
