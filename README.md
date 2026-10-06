@@ -27,9 +27,10 @@ workspace tools in Open WebUI. No vault password or recovery key is requested,
 saved to Keychain, or passed to the model. GitHub has a separate connection helper.
 See [the setup and exact limitations](docs/ENCRYPTED-WORKSPACE.md).
 
-**Vault mode currently blocks media generation and legacy media downloads.**
-Chat history/uploads remain in local Open WebUI storage. This is a tested storage
-integration foundation, not completion of every encrypted-storage requirement.
+**Vault mode saves images and videos directly into the unlocked vault.**
+Chat history/uploads run locally, with offline encrypted-vault backups before
+startup and after clean shutdown. Backup, restore and legacy archive/media-copy
+helpers are included. Native Mac verification remains required.
 
 ## Current software choices
 

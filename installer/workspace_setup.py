@@ -72,7 +72,7 @@ def register(root, mount):
                     raise ValueError('Invalid vault marker.')
                 identifier = str(uuid.UUID(f.read(256)))
         candidate = dict(config, vault={'enabled': True, 'mount_path': str(raw), 'id': identifier,
-            'manual_unlock': True, 'save_password': False, 'media_policy': 'blocked'})
+            'manual_unlock': True, 'save_password': False, 'media_policy': 'vault-direct'})
         with mounted_root(candidate) as checked:
             for folder in FOLDERS:
                 try:
@@ -110,7 +110,7 @@ def main():
         return
     register(root, mount)
     print('Registered. Restart Local AI, enable Encrypted AI Workspace in chat Integrations, and use Ask for approval.')
-    print('Media generation is blocked in vault mode until its temporary/output storage is migrated and verified.')
+    print('Images and videos save directly into Outputs/Media while this vault is unlocked.')
     print('Chat history and uploads remain in local Open WebUI storage, outside the vault.')
 
 

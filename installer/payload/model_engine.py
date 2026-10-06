@@ -21,6 +21,8 @@ from text_models import configured_text_models
 from web_client import retrieve
 from tool_protocol import tools_for_ollama, assistant_for_openai
 from workflows import fill_workflow, output_files
+import vault_media
+from vault_tools import mounted_root, enabled as vault_enabled
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("gateway")
@@ -71,13 +73,24 @@ class Engine:
         python = directory / ".venv/bin/python"
         if not python.is_file() or not (directory / "main.py").is_file():
             raise RuntimeError(f"ComfyUI installation is incomplete: {directory}")
-        self.log_file = (self.root / "logs/comfy.log").open("ab")
+        # Vault-mode ComfyUI diagnostics can contain the submitted prompt. Keep
+        # them out of plaintext logs; the gateway reports bounded generic errors.
+        self.log_file = open(os.devnull, 'ab') if vault_enabled(self.config) else (self.root / "logs/comfy.log").open("ab")
         self.state = "starting-comfy"
         env = os.environ.copy()
         env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        command = [str(python), "main.py", "--listen", "127.0.0.1", "--port", str(self.comfy_port),
+                   "--disable-auto-launch", "--disable-api-nodes", "--disable-all-custom-nodes"]
+        if vault_enabled(self.config):
+            with mounted_root(self.config):
+                pass
+            import imageio_ffmpeg
+            env.update(LOCAL_AI_CONTROL=str(self.root), LOCAL_AI_VAULT=json.dumps(self.config['vault']),
+                       LOCAL_AI_FFMPEG=imageio_ffmpeg.get_ffmpeg_exe())
+            command += ['--whitelist-custom-nodes', 'local_ai_vault',
+                        '--disable-metadata', '--preview-method', 'none']
         self.process = subprocess.Popen(
-            [str(python), "main.py", "--listen", "127.0.0.1", "--port", str(self.comfy_port),
-             "--disable-auto-launch", "--disable-api-nodes"],
+            command,
             cwd=directory, stdout=self.log_file, stderr=subprocess.STDOUT,
             env=env, start_new_session=True,
         )
@@ -118,10 +131,14 @@ class Engine:
                     self.log_file = None
 
     def render(self, kind, prompt):
-        if self.config.get('vault', {}).get('enabled'):
-            raise RuntimeError('Media generation is blocked in vault mode until ComfyUI outputs and temporary files are migrated and verified. Text and workspace tools remain available.')
+        encrypted = vault_enabled(self.config)
+        if encrypted:
+            with mounted_root(self.config):
+                pass
         template = json.loads((self.root / "workflows" / f"{kind}.json").read_text())
         workflow = fill_workflow(template, prompt)
+        if encrypted:
+            workflow = vault_media.encrypted_workflow(workflow, kind)
         self.unload_ollama()
         try:
             self.start_comfy()
@@ -130,13 +147,17 @@ class Engine:
             self.state = f"rendering-{kind}"
             deadline = time.monotonic() + self.config.get("render_timeout_seconds", 3600)
             while time.monotonic() < deadline:
+                if encrypted:
+                    with mounted_root(self.config):
+                        pass
                 if self.process.poll() is not None:
                     raise RuntimeError("ComfyUI exited during rendering. Read logs/comfy.log.")
                 history = api(self.comfy, f"/history/{prompt_id}").get(prompt_id)
                 if history:
                     status = history.get("status", {})
                     if status.get("status_str") == "error":
-                        raise RuntimeError("ComfyUI render failed: " + json.dumps(status.get("messages", []))[:4000])
+                        detail = 'Encrypted render failed; check the vault is unlocked.' if encrypted else json.dumps(status.get('messages', []))[:4000]
+                        raise RuntimeError("ComfyUI render failed: " + detail)
                     if status.get("completed"):
                         files = list(output_files(history))
                         if not files:
@@ -145,6 +166,14 @@ class Engine:
                         suffix = Path(item["filename"]).suffix.lower()
                         if suffix not in {".png", ".webp", ".mp4", ".webm"}:
                             raise RuntimeError("Unsupported generated file extension.")
+                        if encrypted:
+                            if suffix != ('.png' if kind == 'image' else '.mp4') or item.get('subfolder') != 'Media':
+                                raise RuntimeError('Unexpected encrypted media result.')
+                            with vault_media.open_media(self.config, item['filename']) as (saved, size, root_fd):
+                                if size <= 0:
+                                    raise RuntimeError('Generated media is empty.')
+                            destination = Path(item['filename'])
+                            break
                         output_dir = (Path(self.config["comfy_dir"]).expanduser() / "output").resolve()
                         source = (output_dir / item.get("subfolder", "") / item["filename"]).resolve()
                         if not source.is_relative_to(output_dir):

@@ -8,8 +8,9 @@ or [the current guide](../docs/ENCRYPTED-WORKSPACE.md).
 No vault password is saved or sent to the AI. You create and unlock the vault in
 Cryptomator, then select the unlocked volume in the helper. GitHub credentials
 are handled separately with hidden input and local private file storage.
-Vault mode blocks media generation/downloads until media storage is migrated.
-Chat history/uploads remain in local Open WebUI storage. Account connections
+Vault mode saves image/video output directly into the unlocked vault.
+Chat history/uploads stay local, with offline vault backups and restore helpers.
+Archive Existing AI Files preserves old generated media URLs and local originals. Account connections
 must be enabled in chat Integrations and live-tested; approval is experimental.
 
 # Automated Local AI Installer for Your Mac

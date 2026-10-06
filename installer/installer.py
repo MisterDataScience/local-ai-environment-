@@ -27,7 +27,7 @@ COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
-                 "tool_protocol.py", "web_tools_api.py", "vault_tools.py")
+                 "tool_protocol.py", "web_tools_api.py", "vault_tools.py", "vault_media.py")
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -103,7 +103,7 @@ def completed(path, stage):
 
 def acceptance_fingerprint(root):
     hashes = [digest(root / "control" / name) for name in
-              GATEWAY_FILES + ("workflows/image.json", "workflows/video.json", "config.json")]
+              GATEWAY_FILES + ("workflows/image.json", "workflows/video.json", "config.json", "comfy_vault/__init__.py")]
     return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
 
 
@@ -186,10 +186,16 @@ def install_environments(root, uv, state):
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
-    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "workspace_setup.py", "account_tools.py"):
+    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "workspace_setup.py", "account_tools.py", "vault_backup.py"):
         shutil.copy2(SOURCE / name, control / name)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    # Install only our descriptor-based save nodes; vault-mode CLI disables every
+    # other external node. Keep the bundled copy in control for repair/checks.
+    shutil.copytree(SOURCE / 'comfy_vault', root / 'ComfyUI/custom_nodes/local_ai_vault',
+                    dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    shutil.copytree(SOURCE / 'comfy_vault', control / 'comfy_vault',
+                    dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     python = control / ".venv/bin/python"
     if not python.exists():
         run([uv, "venv", "--python", "3.11", control / ".venv"])
@@ -249,15 +255,14 @@ def verify_generation(root, configuration):
         wait_ready("http://127.0.0.1:8081/health", webui, timeout=600)
         checks = [("text-" + identifier, "Reply with one sentence about Python.", identifier)
                   for identifier in presets]
-        if not configuration.get("vault", {}).get("enabled"):
-            checks += [(kind, prompt, "local-ai") for kind, prompt in [
+        checks += [(kind, prompt, "local-ai") for kind, prompt in [
             ("text", "Reply with one sentence about Python."),
             ("image", "/image A red toy racing car on a white table, studio photograph, no text."),
             ("text-after-image", "Reply with one sentence about statistics."),
             ("video", "/video A fixed camera watches a red toy racing car move slowly from left to right on a white table. The wheels rotate naturally. Soft studio light and a plain background. Stable camera, no text or logos."),
             ("text-after-video", "Reply with one sentence about reproducibility."),
         ]]
-        report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": [], "media": "blocked-by-vault-policy" if configuration.get("vault", {}).get("enabled") else "included"}
+        report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": [], "media": "vault-direct" if configuration.get("vault", {}).get("enabled") else "local"}
         for kind, prompt, identifier in checks:
             logging.info("Hardware acceptance test: %s. Video may take a long time.", kind)
             started = time.monotonic()
@@ -306,7 +311,8 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
-    for label, module in (("Configure AI Workspace", "workspace_setup.py"), ("Connect GitHub", "account_tools.py")):
+    for label, module in (("Configure AI Workspace", "workspace_setup.py"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
+                         ("Restore AI Workspace", "vault_backup.py --restore"), ("Archive Existing AI Files", "vault_backup.py --migrate-legacy")):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
                           '\nexec .venv/bin/python ' + module + ' --root ' + shlex.quote(str(root)) + '\n')

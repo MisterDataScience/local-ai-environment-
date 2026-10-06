@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import uuid
 from web_tools_api import specification, execute as retrieve_tool
 import vault_tools
+import vault_media
 
 LOG = logging.getLogger("gateway")
 
@@ -47,13 +48,61 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def vault_media_response(self, name):
+        from pathlib import Path
+        headers_sent = False
+        try:
+            with vault_media.open_media(self.server.engine.config, name) as (source, size, root_fd):
+                types = {'.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm'}
+                # Range requests are needed by mobile video players.
+                start, end, code = 0, size - 1, 200
+                requested = self.headers.get('Range')
+                if requested:
+                    import re
+                    match = re.fullmatch(r'bytes=(\d*)-(\d*)', requested)
+                    if not match or not any(match.groups()):
+                        return self.json_response(416, {'error': 'Unsupported byte range'})
+                    left, right = match.groups()
+                    if left:
+                        start = int(left)
+                        end = min(int(right), end) if right else end
+                    else:
+                        start = max(0, size - int(right))
+                    if start > end or start >= size:
+                        return self.json_response(416, {'error': 'Range outside file'})
+                    code = 206
+                vault_media.same_mount(self.server.engine.config, root_fd)
+                self.send_response(code)
+                self.send_header('Content-Type', types[Path(name).suffix])
+                self.send_header('Content-Length', str(end - start + 1))
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Accept-Ranges', 'bytes')
+                if code == 206:
+                    self.send_header('Content-Range', f'bytes {start}-{end}/{size}')
+                self.end_headers()
+                headers_sent = True
+                source.seek(start)
+                remaining = end - start + 1
+                while remaining:
+                    vault_media.same_mount(self.server.engine.config, root_fd)
+                    block = source.read(min(1024 * 1024, remaining))
+                    if not block:
+                        raise OSError('Media ended unexpectedly')
+                    self.wfile.write(block)
+                    remaining -= len(block)
+        except (ValueError, RuntimeError, OSError):
+            if headers_sent:
+                self.close_connection = True
+            else:
+                return self.json_response(409, {'error': 'Unlock the configured vault on the Mac; media is unavailable.'})
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/health":
             return self.json_response(200, {"status": "ok", "state": self.server.engine.state})
         if path.startswith("/media/"):
             if self.server.engine.config.get('vault', {}).get('enabled'):
-                return self.json_response(403, {'error': 'Media access is blocked in vault mode; legacy files remain outside the vault.'})
+                return self.vault_media_response(path.removeprefix('/media/'))
             # Files have unguessable generated names; service is bound only to loopback.
             name = path.removeprefix("/media/")
             if "/" in name or "\\" in name or ".." in name:

@@ -85,41 +85,97 @@ reload the chat and verify the resulting commit. Stop if denial still executes.
 Open WebUI 0.11.1 approvals are experimental, not a separate backend security
 boundary. No claim is made here that their reported edge cases are resolved.
 
-## Explicit storage boundaries and remaining work
+## Media, backups and existing files
 
-**This release does not claim that all AI data is stored in the vault.**
+With the vault registered and unlocked, use `/image DESCRIPTION` or `/video
+DESCRIPTION` in Open WebUI. The bundled ComfyUI output nodes save PNGs and MP4s
+straight into `Outputs/Media` through checked file descriptors. Video frames
+stream through FFmpeg in memory; no plaintext conversion-frame directory is
+created. Vault mode accepts only the bundled node types, disables other custom
+nodes, previews and image metadata, and suppresses ComfyUI's plaintext log.
+The gateway still unloads Ollama before rendering and stops ComfyUI afterwards.
 
-- Open WebUI chat history, attachments, extracted text/indexes, logs and its live
-  database remain in `~/LocalAI-Automated/webui/data` and other local runtime
-  folders. File tools may return private content into chat history. Do not use
-  sensitive content until you accept this separate boundary. Enable FileVault
-  separately on the Mac; the installer does not configure or verify it.
-- Image/video generation AND legacy media downloads are blocked while vault mode
-  is enabled. ComfyUI outputs, conversion frames and temporary files still need
-  dedicated migration and native verification. The old media is preserved on
-  disk; it is neither moved nor erased. Vault-disabled legacy installations keep
-  their existing media behavior. Do not disable vault mode for sensitive media.
-- A consistent database-backup command into the vault is still pending. Never
-  relocate the live Open WebUI SQLite database into an actively synced folder.
-- There is no automatic vault unlock, login launch agent, password prompt in the
-  chat, binary file download link, or migration/deletion of existing data.
-- GitHub is separate storage: committing a vault file creates a plaintext copy
-  in that repository according to GitHub's access permissions. Account traffic
-  uses the ordinary connection, as requested; web retrieval keeps its VPN route.
-- Restricting these file tools does not sandbox arbitrary Python plugins, code
-  interpreters, direct OS access or other integrations. Do not add those and
-  assume the same vault-only boundary applies to them.
-- Models and application dependencies remain on the local SSD, not inside iCloud.
+The media listener reads from the mounted vault, supports video byte ranges, and
+sends `Cache-Control: no-store`. The configured private Tailscale media address
+works from other devices while the Mac and vault are available. Locking the
+vault prevents subsequent access; an in-flight chunk or a file already downloaded
+to another device cannot be recalled. Generated UUID links use the existing
+loopback/private-tailnet access boundary, not an additional login per file.
 
-## Verification
+Open WebUI's **live database, uploads, indexes and application logs stay local**.
+Do not put the active SQLite database in iCloud. Enable macOS FileVault separately;
+the installer does not configure or verify it. Tool results can enter chat history,
+and chat uploads are not redirected into the vault. This is encrypted working
+files and backup storage, not a claim that all AI data exists only in the vault.
+Models and dependencies also remain on the local SSD.
 
-Authoring tests exercise real temporary files and loopback HTTP, with mount state
-simulated where necessary. They cover authentication, locked/missing/wrong volume,
-path traversal, symlinks, special files, revision checks, text limits, token file
-permissions, multi-connection configuration and media blocking. These are not
-native Cryptomator, iCloud, Apple GPU or live-account acceptance results.
-The Mac must verify mounting/unmounting, file operations with its chosen backend,
-sync to Windows/iPad, Open WebUI approval denial/reload, and GitHub calls.
+While the vault is unlocked, the launcher takes an offline WebUI-data backup before
+startup and after clean shutdown. It includes SQLite WAL files, uploads and
+indexes, and the stable WebUI secret needed to restore OAuth records. Rebuildable
+`webui/data/cache` is excluded, so model/cache files may download again on restore.
+Backups therefore contain sensitive account/chat data and stay inside the vault.
+The separately stored GitHub PAT and vault password are not included.
+If the vault is locked, chat can still start; a warning reports the missed backup.
+A crash/power loss cannot produce a shutdown backup. The next unlocked startup
+backs up the surviving local data before opening WebUI.
+
+Three helpers are installed beside `Start Local AI.command`:
+
+- **Back Up AI Workspace.command:** stop Local AI, unlock the vault, then run it.
+  Archives go into `Archive/Backups`. Only the newest three generated UUID-named
+  backups are retained. This directory is reserved for these rotating backups.
+- **Restore AI Workspace.command:** stop Local AI, unlock the vault, then paste
+  the relative archive path, e.g. `Archive/Backups/UUID.zip`. The helper validates
+  paths and checksums, restores to a new local directory, restores the WebUI
+  encryption secret, and preserves previous data as `webui/data.before-restore-*`.
+  GitHub tokens and account connections still require their normal credentials.
+- **Archive Existing AI Files.command:** stop Local AI and unlock first. It writes
+  an archive under `Archive/Migration` containing WebUI data, old gateway media,
+  ComfyUI output/temp files and logs. It also copies recognized generated UUID
+  media into `Outputs/Media`, preserving existing media URLs. Existing vault files
+  are never overwritten. Other legacy filenames remain available in the archive.
+  Original local files are preserved; this does not erase plaintext copies or
+  promise secure deletion on an SSD. Migration archives are not rotated.
+
+Do not edit the local data directories with another program during backup or
+restore. Helpers refuse known active services and cooperative runtime locks.
+Archives are ordinary ZIPs *inside the encrypted mounted vault*. Exporting one
+outside it exports plaintext, including any contained account records.
+
+## Boundaries
+
+There is no automatic vault unlock, login launch agent or password prompt in chat.
+You unlock once in Cryptomator after login as needed. GitHub is separate storage:
+committing a vault file creates a plaintext repository copy under GitHub's access
+permissions. Account traffic uses the ordinary connection; web retrieval keeps
+its VPN route. File-tool restrictions do not sandbox arbitrary Python plugins,
+code interpreters, direct OS access or other integrations.
+
+The installer can install software and register an unlocked vault, but you must
+create/unlock it in Cryptomator and select its mounted root. It never asks for,
+remembers or retrieves your password or recovery key.
+
+## Verification on the Mac
+
+Authoring tests cover descriptor-based writes, lock failure cleanup, output
+symlinks, real FFmpeg pipe encoding, loopback media range requests, engine handoff,
+backup/restore of SQLite with WAL, archive checksums, backup retention and migration.
+Mount state is simulated in these tests. This is not native Cryptomator, iCloud,
+Apple GPU, live Open WebUI or account acceptance evidence.
+
+1. Unlock the configured vault and start Local AI. Generate an image and short
+   video. Confirm files appear in `Outputs/Media`, not local ComfyUI output/temp
+   or gateway media folders. Check playback and download on the Mac and phone.
+2. Lock the vault. Try new file operations, generation and an existing media URL;
+   all must fail without creating an ordinary fallback directory. If open files
+   prevent locking, allow the operation to finish; avoid forced unmount for testing.
+3. Unlock, make a sample chat/upload and shut down cleanly. Check the backup path
+   printed in Terminal. Run the restore helper with that archive; restart and
+   verify the sample chat/upload. Previous data remains available for recovery.
+4. Verify iCloud finishes syncing; open the synced vault on another device and
+   check a sample output. Avoid simultaneous edits across devices.
+5. Verify Open WebUI approval denial/reload and GitHub calls using a disposable
+   repository before granting access to important repositories.
 
 ## Upstream references
 

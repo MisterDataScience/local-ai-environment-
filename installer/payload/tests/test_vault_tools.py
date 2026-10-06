@@ -116,11 +116,11 @@ class VaultTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.call('workspace_read', path='Outputs/x', password='not-accepted')
 
-    def test_media_is_blocked_before_loading_or_writing(self):
+    def test_locked_media_is_blocked_before_loading_or_writing(self):
         engine = Engine(self.config, root=self.root)
         try:
             with patch.object(engine, 'unload_ollama') as unload:
-                with self.assertRaisesRegex(RuntimeError, 'blocked in vault mode'):
+                with self.assertRaisesRegex(RuntimeError, 'Unlock AI Workspace'):
                     engine.render('image', 'private prompt')
                 unload.assert_not_called()
         finally:
@@ -156,7 +156,7 @@ class VaultHTTPTests(unittest.TestCase):
                 self.assertEqual(error.exception.code, 409 if handler is Handler else 404)
                 with self.assertRaises(HTTPError) as error:
                     urlopen(base + '/media/legacy.png', timeout=2)
-                self.assertEqual(error.exception.code, 403)
+                self.assertEqual(error.exception.code, 409)
             finally:
                 server.shutdown()
                 server.server_close()

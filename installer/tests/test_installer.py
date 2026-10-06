@@ -22,7 +22,7 @@ class InstallerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             control = root / "control"
-            for name in installer.GATEWAY_FILES + ("workflows/image.json", "workflows/video.json", "config.json"):
+            for name in installer.GATEWAY_FILES + ("workflows/image.json", "workflows/video.json", "config.json", "comfy_vault/__init__.py"):
                 path = control / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("initial")

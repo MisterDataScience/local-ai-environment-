@@ -43,6 +43,14 @@ def main():
                 start_web(root)
             except Exception:
                 logging.warning("VPN web service unavailable. Local AI will continue without web access.")
+        if config.get('vault', {}).get('enabled'):
+            from vault_backup import snapshot
+            try:
+                saved = snapshot(root, config)
+                if saved:
+                    logging.info('Pre-start encrypted backup saved: %s', saved)
+            except Exception:
+                logging.warning('Encrypted backup unavailable. Unlock the vault and use Back Up AI Workspace after stopping Local AI.')
         ollama = launch([ollama_binary(root), "serve"], root, root / "logs/ollama.log", ollama_environment(root))
         processes.append(("ollama", ollama))
         wait_ready("http://127.0.0.1:11435/api/version", ollama)
@@ -82,7 +90,7 @@ def main():
                     print('Encrypted AI Workspace is unlocked.')
             except (OSError, RuntimeError, ValueError):
                 print('Unlock AI Workspace in Cryptomator on the Mac to use file tools.')
-            print('Vault mode: media generation blocked; chat history/uploads remain in local Open WebUI storage.')
+            print('Vault media saves to Outputs/Media. Local chat data is backed up to the vault on clean shutdown.')
         else:
             print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")
         if config.get("web", {}).get("enabled"):
@@ -105,6 +113,14 @@ def main():
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
         for name, process in reversed(processes):
             stop_process(process, timeout=4200 if name == "gateway" else 90)
+        if config.get('vault', {}).get('enabled'):
+            from vault_backup import snapshot
+            try:
+                saved = snapshot(root, config)
+                if saved:
+                    logging.info('Encrypted shutdown backup saved: %s', saved)
+            except Exception:
+                logging.warning('Backup not completed. Unlock the vault and run Back Up AI Workspace.command while Local AI is stopped.')
         lock.close()
     return 0
 
