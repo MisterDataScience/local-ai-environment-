@@ -75,7 +75,16 @@ def main():
             print("Connect Tailscale on your other devices, then open that address.")
         print("Select Everyday, Small or Large in the chat's model menu. Models load on a request.")
         print("These are text presets, not Gaming Mode. Media remains available with each preset.")
-        print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")
+        if config.get('vault', {}).get('enabled'):
+            from vault_tools import mounted_root
+            try:
+                with mounted_root(config):
+                    print('Encrypted AI Workspace is unlocked.')
+            except (OSError, RuntimeError, ValueError):
+                print('Unlock AI Workspace in Cryptomator on the Mac to use file tools.')
+            print('Vault mode: media generation blocked; chat history/uploads remain in local Open WebUI storage.')
+        else:
+            print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")
         if config.get("web", {}).get("enabled"):
             print("Web: /search QUERY or /read https://example.org QUESTION. VPN required; no fallback.")
         print("Leave this Terminal open. Press Control+C here to shut down.")

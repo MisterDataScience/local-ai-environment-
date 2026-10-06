@@ -1,3 +1,9 @@
+> 2026-10-06 update: GitHub now has an official-MCP configuration helper, and
+> the encrypted workspace exposes four mount-checked OpenAPI operations. See
+> [ENCRYPTED-WORKSPACE.md](ENCRYPTED-WORKSPACE.md). No vault password is saved.
+> Vault mode blocks media; live account/UI tests remain pending. Earlier text
+> below describes the previous cleanup baseline where account setup was absent.
+
 # Open WebUI owns tools; the gateway owns model memory
 
 Updated 2026-10-05 UTC (2026-10-06 in London). Open WebUI remains pinned to 0.11.1.

@@ -1,19 +1,19 @@
-Authoring checks completed 2026-10-05 UTC.
-37 installer/remote/web tests and 38 gateway/protocol/bridge tests passed.
-The private tool loop, registry/workers and disabled GitHub adapter were retired.
-Current suites verify the native-tool protocol bridge and retained lifecycle behavior.
-Native Mac installation, actual Open WebUI frontend, Ollama inference, Apple GPU memory,
-Tailscale other-device browser and live Proton VPN/DNS tests remain pending.
-Protocol checks cover schemas, call IDs, JSON arguments, out-of-order results,
-missing/duplicate result rejection, text-only parts, no hidden tool execution,
-preset/keep_alive preservation, original system prompt and continuation routing.
-A real loopback HTTP server exercises normal and buffered-SSE tool-call responses.
-VPN OpenAPI bridge checks cover strict arguments, authentication, fixed reader path,
-disabled access and no direct fallback. Native WebUI wiring is not live-tested.
-Installer checks cover manifest, fingerprint, downloads, migrations, configuration,
-private routing, shutdown, remote setup and VPN structural/privacy logic.
-The installer registers the VPN tool connection but chat/model attachment requires
-selection in Open WebUI. No GitHub/Dropbox credential is supplied or connected.
-Open WebUI approval mode is experimental and requires saved chats. Defaults are
-not a privileged-write authorization boundary. Check a supported patched version
-and denial/reload/multiple-call behavior before enabling account writes.
+Authoring checks completed 2026-10-06 UTC.
+42 installer/remote/web/workspace setup tests and 49 gateway/protocol/vault tests passed.
+Python syntax and installer shell syntax passed. ZIP rebuilt from current source.
+New coverage: mount absence, wrong vault marker, plain-directory rejection,
+relative paths, symlinks, FIFO/hard-link rejection, revision hashes, text limits,
+real HTTP authentication and media-listener isolation, vault media policy,
+GitHub private credential files and all three connection types coexisting.
+Mount state is simulated in filesystem success tests. Actual Cryptomator volume
+semantics, iCloud sync, macOS DMG installation/signatures, Open WebUI approvals,
+live GitHub calls, Apple GPU inference and VPN/DNS leak tests remain unverified.
+No vault password, recovery key or live account credential is included.
+Cryptomator 1.19.3 arm64 release asset SHA-256 obtained from official GitHub
+release metadata; macOS performs DMG hash/signature/Gatekeeper validation.
+Vault mode blocks image/video generation and legacy media downloads. It does not
+migrate/encrypt Open WebUI history, uploads, indexes, logs or existing files.
+GitHub uses the official remote MCP server, not the removed bespoke adapter.
+Open WebUI 0.11.1 approval defaults are experimental and can be overridden.
+Test denial, approval, reload and account permissions before real account writes.
+See docs/ENCRYPTED-WORKSPACE.md for native acceptance and remaining work.

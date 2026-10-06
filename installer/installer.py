@@ -27,7 +27,7 @@ COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
-                 "tool_protocol.py", "web_tools_api.py")
+                 "tool_protocol.py", "web_tools_api.py", "vault_tools.py")
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -186,7 +186,7 @@ def install_environments(root, uv, state):
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
-    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py"):
+    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "workspace_setup.py", "account_tools.py"):
         shutil.copy2(SOURCE / name, control / name)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -249,14 +249,15 @@ def verify_generation(root, configuration):
         wait_ready("http://127.0.0.1:8081/health", webui, timeout=600)
         checks = [("text-" + identifier, "Reply with one sentence about Python.", identifier)
                   for identifier in presets]
-        checks += [(kind, prompt, "local-ai") for kind, prompt in [
+        if not configuration.get("vault", {}).get("enabled"):
+            checks += [(kind, prompt, "local-ai") for kind, prompt in [
             ("text", "Reply with one sentence about Python."),
             ("image", "/image A red toy racing car on a white table, studio photograph, no text."),
             ("text-after-image", "Reply with one sentence about statistics."),
             ("video", "/video A fixed camera watches a red toy racing car move slowly from left to right on a white table. The wheels rotate naturally. Soft studio light and a plain background. Stable camera, no text or logos."),
             ("text-after-video", "Reply with one sentence about reproducibility."),
         ]]
-        report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": []}
+        report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": [], "media": "blocked-by-vault-policy" if configuration.get("vault", {}).get("enabled") else "included"}
         for kind, prompt, identifier in checks:
             logging.info("Hardware acceptance test: %s. Video may take a long time.", kind)
             started = time.monotonic()
@@ -305,6 +306,11 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
+    for label, module in (("Configure AI Workspace", "workspace_setup.py"), ("Connect GitHub", "account_tools.py")):
+        helper = root / (label + '.command')
+        helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
+                          '\nexec .venv/bin/python ' + module + ' --root ' + shlex.quote(str(root)) + '\n')
+        helper.chmod(0o755)
     application = Path.home() / "Applications/Local AI.app"
     if application.exists() and not (application / "Contents/local-ai-owner.txt").exists():
         raise RuntimeError("An unrelated Local AI.app already exists. No application was overwritten.")
@@ -353,6 +359,10 @@ def main():
             download(url, root / "ComfyUI/models" / relative, checksum)
         logging.info("Stage 5/8: gateway and automatically configured chat UI")
         configuration = install_environments(root, args.uv, state)
+        from workspace_setup import install_cryptomator, save_config
+        app = install_cryptomator(root, download, run)
+        configuration['cryptomator_app'] = str(app)
+        save_config(root, configuration)
         logging.info("Stage 6/8: hardware generation and memory handoff tests")
         fingerprint = acceptance_fingerprint(root)
         accepted_file = root / "accepted-fingerprint.txt"
@@ -381,6 +391,8 @@ def main():
             from remote_access import configure
             configure(root)
             checkpoint(state, "remote-access-configured")
+        print('Cryptomator is installed. Close Local AI and run Configure AI Workspace.command to register your vault.')
+        print('Run Connect GitHub.command to add your account. Neither helper receives your vault password.')
         logging.info("Stage 8/8: launching Local AI")
         logging.info("Daily launcher: %s", application)
         runtime_python = str(root / "control/.venv/bin/python")

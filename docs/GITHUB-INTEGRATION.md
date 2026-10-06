@@ -1,23 +1,10 @@
-# GitHub integration: supported host path, not yet configured
+# GitHub integration
 
-The bespoke disabled GitHub MCP adapter and its proposal/approval lifecycle have
-been removed. No local AI account access, credential provider, repository write
-connection or separate approval website is active.
+Use `Connect GitHub.command` after the installer completes and Local AI is stopped.
+It configures GitHub's official remote MCP service in Open WebUI, with selected
+tools and a fine-grained token stored locally outside iCloud with mode 0600.
+No custom agent loop, proposal store or approval website is reintroduced.
 
-The intended integration is GitHub's official MCP server connected through Open
-WebUI's supported tool interfaces. Open WebUI should own the tool loop, in-chat
-approval and result continuation. A narrowly scoped policy bridge may still be
-needed for requirements the host/token cannot enforce. It is not implemented.
-
-Do not attach an unrestricted GitHub token merely because the UI has an approval
-toggle. Before enabling writes: select a supported tested WebUI release, check
-native Allow/Deny and restart behavior, constrain account permissions, verify
-which chat contexts bypass approval, and exercise a disposable repository.
-Confirm file SHA conflicts and uncertain-write outcomes using the official server.
-
-Keychain storage and account activation have not been implemented. Secrets must
-remain outside prompts and model-visible tool arguments. GitHub traffic may use
-the normal connection, as requested; it need not use the VPN search service.
-
-See [native tools and the revised boundary](NATIVE-TOOLS.md). Historical adapter
-code remains recoverable from commit bb8cf01c4a387857393b6a72178344a258658da0.
+See [Encrypted workspace and GitHub](ENCRYPTED-WORKSPACE.md) for setup, permission
+boundaries, experimental approval limitations and the required live tests.
+No live account connection has been validated from this authoring environment.

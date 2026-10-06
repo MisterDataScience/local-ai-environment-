@@ -19,9 +19,21 @@ Gaming/Normal/Max profiles and automatic background AI startup remain unimplemen
 | [docs/ORCHESTRATOR-ASSESSMENT.md](docs/ORCHESTRATOR-ASSESSMENT.md) | Actual gateway capabilities and established-tool assessment |
 | [downloads/](downloads/) | Existing installer and manual setup ZIP bundles |
 
+## Encrypted workspace update
+
+Cryptomator is now included in the installer. Register an iCloud-backed vault
+with `Configure AI Workspace.command`, manually unlock it, and enable the
+workspace tools in Open WebUI. No vault password or recovery key is requested,
+saved to Keychain, or passed to the model. GitHub has a separate connection helper.
+See [the setup and exact limitations](docs/ENCRYPTED-WORKSPACE.md).
+
+**Vault mode currently blocks media generation and legacy media downloads.**
+Chat history/uploads remain in local Open WebUI storage. This is a tested storage
+integration foundation, not completion of every encrypted-storage requirement.
+
 ## Current software choices
 
-The disabled bespoke GitHub adapter and approval lifecycle have been removed. Account connections remain unconfigured; the intended route is supported MCP integration and Open WebUI's approval UI. See [GitHub integration](docs/GITHUB-INTEGRATION.md).
+The disabled bespoke GitHub adapter and approval lifecycle have been removed. GitHub can now be configured through the official remote MCP service with the Connect GitHub helper; live authentication and approval checks remain pending. See [GitHub integration](docs/GITHUB-INTEGRATION.md).
 
 The gateway remains one process and owns model lifecycle work. Open WebUI owns the tool loop and approval interface. The gateway translates structured tool messages to/from Ollama without executing them. See [native tools and current limits](docs/NATIVE-TOOLS.md).
 

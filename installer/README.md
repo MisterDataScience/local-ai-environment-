@@ -1,3 +1,17 @@
+# Update: Cryptomator workspace and GitHub
+
+The installer now includes Cryptomator. After installation, stop Local AI and run
+`~/LocalAI-Automated/Configure AI Workspace.command`, then optionally
+`~/LocalAI-Automated/Connect GitHub.command`. See ENCRYPTED-WORKSPACE.md in the ZIP
+or [the current guide](../docs/ENCRYPTED-WORKSPACE.md).
+
+No vault password is saved or sent to the AI. You create and unlock the vault in
+Cryptomator, then select the unlocked volume in the helper. GitHub credentials
+are handled separately with hidden input and local private file storage.
+Vault mode blocks media generation/downloads until media storage is migrated.
+Chat history/uploads remain in local Open WebUI storage. Account connections
+must be enabled in chat Integrations and live-tested; approval is experimental.
+
 # Automated Local AI Installer for Your Mac
 
 This replaces the manual installation sequence with one installer for an **Apple Silicon Mac, 32GB or more unified memory, macOS 15 or newer**. Have **100GB free SSD space**, a working internet connection and mains power before starting.
@@ -22,7 +36,7 @@ No Homebrew commands, manual model placement, environment activation, API-key co
 
 ## What it installs
 
-The gateway keeps model loading/unloading and serial media handoffs. Open WebUI owns tools and approvals; the gateway passes function definitions, calls and results between it and Ollama. The former private tool loop, calculator/time workers and disabled GitHub adapter are removed. See [native tools](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/NATIVE-TOOLS.md), also included in the ZIP. VPN setup registers a server-side OpenAPI connection named Local AI VPN retrieval; enable it in the chat's Integrations menu or attach it to a model. Account connections remain unconfigured.
+The gateway keeps model loading/unloading and serial media handoffs. Open WebUI owns tools and approvals; the gateway passes function definitions, calls and results between it and Ollama. The former private tool loop, calculator/time workers and disabled GitHub adapter are removed. See [native tools](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/NATIVE-TOOLS.md), also included in the ZIP. VPN setup registers a server-side OpenAPI connection named Local AI VPN retrieval; enable it in the chat's Integrations menu or attach it to a model. GitHub can be configured with the new helper; no account credential is included.
 
 | Component | Choice |
 | --- | --- |

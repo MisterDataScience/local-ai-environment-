@@ -102,6 +102,18 @@ def webui_environment(root, configuration):
             "spec": "", "path": "tools/openapi.json", "auth_type": "bearer",
             "key": configuration["api_key"], "config": {"enable": True},
             "info": {"id": "local-ai-vpn", "name": "Local AI VPN retrieval", "description": "VPN search and page reading"}}])
+    connections = json.loads(env.get('TOOL_SERVER_CONNECTIONS', '[]'))
+    if configuration.get('vault', {}).get('enabled'):
+        connections.append({'type': 'openapi', 'url': 'http://127.0.0.1:8001',
+            'spec_type': 'url', 'spec': '', 'path': 'workspace/openapi.json',
+            'auth_type': 'bearer', 'key': configuration['api_key'], 'config': {'enable': True},
+            'info': {'id': 'local-ai-workspace', 'name': 'Encrypted AI Workspace',
+                     'description': 'Files in your manually unlocked Cryptomator vault'}})
+    if configuration.get('account_tools', {}).get('github'):
+        from account_tools import connection
+        connections.append(connection(root))
+    if connections:
+        env['TOOL_SERVER_CONNECTIONS'] = json.dumps(connections)
     return env
 
 

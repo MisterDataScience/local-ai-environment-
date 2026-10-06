@@ -10,6 +10,7 @@ import time
 from urllib.parse import urlparse
 import uuid
 from web_tools_api import specification, execute as retrieve_tool
+import vault_tools
 
 LOG = logging.getLogger("gateway")
 
@@ -51,6 +52,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             return self.json_response(200, {"status": "ok", "state": self.server.engine.state})
         if path.startswith("/media/"):
+            if self.server.engine.config.get('vault', {}).get('enabled'):
+                return self.json_response(403, {'error': 'Media access is blocked in vault mode; legacy files remain outside the vault.'})
             # Files have unguessable generated names; service is bound only to loopback.
             name = path.removeprefix("/media/")
             if "/" in name or "\\" in name or ".." in name:
@@ -73,6 +76,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(200, {"object": "list", "data": [
                 {"id": identifier, "name": preset["name"], "object": "model", "created": 0,
                  "owned_by": "local"} for identifier, preset in self.server.engine.text_models.items()]})
+        if path == "/workspace/openapi.json":
+            return self.json_response(200, vault_tools.specification())
         if path == "/tools/openapi.json":
             return self.json_response(200, specification())
         self.json_response(404, {"error": "Not found"})
@@ -81,6 +86,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorised():
             return
         path = urlparse(self.path).path
+        if path.startswith('/workspace/'):
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 1600000:
+                    self.close_connection = True
+                    raise ValueError('Invalid workspace request size')
+                body = json.loads(self.rfile.read(length))
+                result = vault_tools.execute(self.server.engine.config, path.rsplit('/', 1)[1], body)
+                return self.json_response(200, result)
+            except (ValueError, RuntimeError, OSError) as error:
+                return self.json_response(409, {'error': str(error)})
         if path in {"/tools/vpn_search_web", "/tools/vpn_read_page"}:
             try:
                 length = int(self.headers.get("Content-Length", "0"))

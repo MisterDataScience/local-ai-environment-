@@ -118,6 +118,8 @@ class Engine:
                     self.log_file = None
 
     def render(self, kind, prompt):
+        if self.config.get('vault', {}).get('enabled'):
+            raise RuntimeError('Media generation is blocked in vault mode until ComfyUI outputs and temporary files are migrated and verified. Text and workspace tools remain available.')
         template = json.loads((self.root / "workflows" / f"{kind}.json").read_text())
         workflow = fill_workflow(template, prompt)
         self.unload_ollama()
