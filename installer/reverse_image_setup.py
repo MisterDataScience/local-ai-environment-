@@ -39,6 +39,8 @@ def configure(root, disable=False):
 
         if not web.get("enabled") or web.get("proxy_url") != PROXY_URL:
             raise RuntimeError("Enable Web Access first. Reverse image search requires the installer-managed VPN proxy.")
+        if not config.get("vault", {}).get("enabled"):
+            raise RuntimeError("Configure AI Workspace first. Reverse image search reads only explicitly selected images from the encrypted workspace.")
 
         folder_id = input("Yandex Cloud folder ID: ").strip()
         api_key = getpass.getpass("Yandex Search API key: ").strip()
