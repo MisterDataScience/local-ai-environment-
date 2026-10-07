@@ -1,5 +1,13 @@
 # Context management
 
+Team update: the table below describes legacy 16K presets. The installed team uses
+8K coordinator, 32K analyst/document and 16K coder profiles. OpenCode advertises
+each profile separately. WebUI still has a conservative global compaction trigger:
+with the default team it is 2,048 tokens in Normal/Max and 1,536 in Gaming. It does
+not yet gain per-role long-context compaction. Use OpenCode's analyst/document
+agents for larger text work; WebUI's dedicated adapter is deferred.
+
+
 Updated 2026-10-07 for the intended 32 GB M6 Mac mini. Applies to the automated installer, not the legacy manual-setup snapshot. No native M6 benchmark has been performed here.
 
 ## Ownership and budgets
@@ -18,7 +26,7 @@ The supervisor applies and verifies compaction settings through WebUI's supporte
 
 OpenCode advertises input = context minus output, with an additional reserve of up to 2,048 tokens for instructions and tool work. This makes its native reserved budget effective; advertising context alone did not. Smaller contexts reduce the reserve. A mode transition stops the harness; restart it to refresh its advertised limits.
 
-The gateway honours positive integer max_tokens and max_completion_tokens, using the lower if both are supplied. Output is additionally bounded to half the effective context. These are ceilings, not minimum answer lengths. Configured contexts remain at most 16K, Gaming at most 4K. The installer migrates recognised stock contexts once and preserves custom models, contexts, timeouts and credentials. One model still runs at a time with the existing unload policy. No GPU memory-safeguard override was introduced.
+The gateway honours positive integer max_tokens and max_completion_tokens, using the lower if both are supplied. Output is additionally bounded to half the effective context. These are ceilings, not minimum answer lengths. Legacy/custom contexts remain at most 16K. Validated team profiles allow 8K coordinator, 32K analyst/document and 16K coder; Gaming remains at most 4K. The installer migrates recognised stock contexts once and preserves custom models, contexts, timeouts and credentials. One model still runs at a time with the existing unload policy. No GPU memory-safeguard override was introduced.
 
 ## Native input protection
 

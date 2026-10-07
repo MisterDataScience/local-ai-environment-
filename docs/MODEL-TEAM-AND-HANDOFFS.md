@@ -1,10 +1,11 @@
 # Model team and handoff policy
 
 Decision date: 2026-10-07. Target: a Mac mini with 32 GB total unified memory.
-Status: agreed design, not implemented or hardware-validated. This document records
-future implementation choices; it does not describe capabilities shipped in the
-current installer. Implementation order is in
-[HANDOFF-IMPLEMENTATION-PLAN.md](HANDOFF-IMPLEMENTATION-PLAN.md).
+Status: the first text-only OpenCode implementation is included in the installer.
+Native Mac performance and end-to-end model/client validation remain pending.
+WebUI delegation, vision and broader routing remain future work. The policy below
+records the agreed target; current behavior and differences are detailed in
+[WORK-AGENT.md](WORK-AGENT.md) and [HANDOFF-IMPLEMENTATION-PLAN.md](HANDOFF-IMPLEMENTATION-PLAN.md).
 
 ## Team
 
@@ -19,14 +20,15 @@ The exact community variants need their own validation.
 | Analyst | Huihui Qwen3.5 9B abliterated | Difficult reasoning, planning, conflicting evidence, and substantial synthesis | 32,768 |
 | Coder | Huihui Gemma 4 12B Coder Fable5 Composer2.5 v1 abliterated | Bounded implementation, debugging, tests and code explanation | 16,384 |
 
-The Qwen candidates have published Ollama tags under
-huihui_ai/qwen3.5-abliterated, with 4B and 9b variants. Installation must pin the
-resolved artifact digest and inspect its template/capabilities; tag names alone
-are not immutable. The coder's selected source is
-huihui-ai/Huihui-gemma-4-12B-coder-fable5-composer2.5-v1-abliterated. Its exact
-quantised artifact, digest and compatibility with the project's pinned Ollama
-remain unresolved. Do not silently substitute the unmodified parent or a larger
-model if installation fails. Mark that role unavailable until resolved.
+The Qwen models use `huihui_ai/qwen3.5-abliterated:4B` and `:9b`, Q4_K_M,
+with published manifest identifiers `9acbd90c2645` and `92a443adb124`. Installation
+rejects changed tags and records their full installed digests. The coder uses the
+mradermacher Q4_K_M GGUF of the exact selected Huihui variant, imported as
+`local-ai-gemma4-coder:q4-k-m-v1`. SHA-256:
+`8cecd45f3f353f6d799ca5104533e8bd39944679712e6ca119d5697efc14d552`.
+Ollama's family, quantisation and coordinator tool capability are checked before
+acceptance. Artifact sizes are roughly 3.3/6.6/7.38 GB, not running-memory totals.
+A failed download, digest or architecture check stops installation without fallback.
 
 The coordinator routes in non-thinking mode with a short structured request.
 The analyst may use supported thinking mode. Model templates must preserve the

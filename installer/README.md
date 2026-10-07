@@ -41,7 +41,7 @@ The gateway keeps model loading/unloading and serial media handoffs. Open WebUI 
 
 | Component | Choice |
 | --- | --- |
-| Text backend/model | Native Ollama with Qwen3 4B, 14B and 30B-A3B (Q4_K_M) |
+| Text backend/model | Native Ollama 0.40+ with Huihui Qwen3.5 4B/9B and Gemma4 12B Coder (Q4_K_M) |
 | Image backend/model | Native ComfyUI MPS with SDXL Base 1.0 |
 | Video model | LTX-Video 2B v0.9.5 and FP16 T5 encoder |
 | Chat UI | Open WebUI 0.11.1, configured automatically |
@@ -64,7 +64,7 @@ The eight stages are:
 3. Install ComfyUI, its separate Python environment and Apple GPU dependencies; check MPS availability.
 4. Download all three image/video model files, resuming partial downloads and verifying publisher SHA-256 checksums.
 5. Install the gateway and Open WebUI, generate local secrets and configure the provider/default model/background-task settings.
-6. Start the services, download all configured Qwen3 models, check workflow schemas, test each text model and run **text, image, text, video, text** generation tests with WebUI running.
+6. Start the services, prepare and verify all configured text models, check workflow schemas, test each text model and run **text, image, text, video, text** generation tests with WebUI running.
 7. Create the daily launcher and save installed-version records.
 8. Start Local AI and open Safari.
 
@@ -93,7 +93,7 @@ Explain this Python function.        -> text
 /reverse Inbox/photo.jpg              -> VPN-only Yandex reverse image search, if configured
 ```
 
-Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large: 60 seconds. No model loads merely from selecting it. A text request for a different model explicitly unloads the old model first. Use `AI Modes.command` for enforced Gaming/Normal/Max restrictions. Gaming permits only Qwen3 4B and blocks media. Normal permits small/everyday text and images. Max permits all configured models and media. Wait for Ready after switching. See RESOURCE-MODES.md in the ZIP.
+Team profiles use the 4B coordinator (8K), 4B document reader (32K), 9B analyst (32K) and 12B coder (16K). One model runs at a time. A model or context-profile change unloads the previous runner first. New idle timeouts are 120 seconds; upgrades preserve existing timeouts. Gaming allows coordinator/legacy-small text only, with 4K context and 1K output. Normal allows the team and images; Max also permits video and other configured models. Wait for Ready after switching. See RESOURCE-MODES.md and WORK-AGENT.md in the ZIP.
 
 The gateway unloads Ollama and confirms an empty loaded-model list before starting ComfyUI. After each image or video job, it stops ComfyUI's process group and waits for exit before allowing text to reload. Multiple gateway requests are serialised. Do not connect another client directly to this private Ollama server or manually start ComfyUI on its private port during use.
 
@@ -159,9 +159,9 @@ Initial installation needs internet. Inference is configured to use local servic
 
 ## Text presets and timeout configuration
 
-Edit `~/LocalAI-Automated/control/config.json` while services are stopped. The `text_models` entries set `model`, `name`, `keep_alive_seconds`, `num_ctx` and `thinking`. Timeouts are integers from 0 to 3600 seconds; 0 releases the model after each reply. Context values are 512 to 16384. Default presets now use 16384 outside Gaming; Gaming clamps them to 4096. Output caps are 1024/4096/8192 for Gaming/Normal/Max, additionally bounded to half the effective context. Restart to apply changes. Client messages cannot override timeout or context settings. Keep `local-ai` as the default ID.
+Edit `~/LocalAI-Automated/control/config.json` while services are stopped. Profiles define `model`, `role`, `name`, `keep_alive_seconds`, `num_ctx` and `thinking`. Role-specific maximum contexts are 8K coordinator, 32K analyst/document and 16K coder. Legacy/custom presets remain capped at 16K. Contexts can be reduced to 512. Output ceilings remain 1K/4K/8K for Gaming/Normal/Max and at most half the profile context. Timeouts are 0–3600 seconds. Restart to apply changes.
 
-The new installer adds Small and Large presets to older configurations once, preserving the existing default model and secrets, with a private `config.before-text-context-v2.json` backup. Later reruns preserve edited presets. Downloads and native acceptance checks follow the configured models. The three default text downloads total roughly 31 GB; this is download size, not peak runtime memory. Large-model memory and performance still require validation on your Mac.
+The installer migrates recognized stock entries once and saves `config.before-model-team-v1.json` privately. Custom entries and credentials survive; team roles receive separate IDs where needed. Team artifact files total roughly 17.3 GB; runtime memory also includes context/buffers, and retained legacy downloads still occupy disk. Native memory and accuracy validation remain required. Set `model_team.enabled` to false to disable OpenCode delegation.
 
 To upgrade an earlier installation, stop Local AI, extract this updated bundle and rerun the same installation command. The installer removes only the named retired project modules and their tests from control; chats, models, workflows and credentials are preserved. The obsolete tool_loop_enabled config flag is ignored. Changed code/configuration invalidates the previous acceptance fingerprint. The installer runs generation checks again and stops if any configured model fails.
 
@@ -203,8 +203,21 @@ care: see [context management and Mac acceptance](../docs/CONTEXT-MANAGEMENT.md)
 
 ### Longer output on the 32 GB M6 Mac mini
 
-The default contexts are now 16K outside Gaming, with 4K output in Normal and 8K in Max. Gaming remains 4K context/1K output. The installer migrates recognised stock contexts once and preserves custom values. Ollama length cutoffs are reported accurately in JSON and SSE; each preset receives a native eight-token cutoff acceptance check. Existing one-model concurrency, unloading and GPU memory safeguards remain in place.
+Team contexts are 8K coordinator, 32K analyst/document and 16K coder, with up to 4K output in Normal and 8K in Max, further bounded to half context. Gaming remains 4K context/1K output. The installer migrates recognised stock contexts once and preserves custom values. Ollama length cutoffs are reported accurately in JSON and SSE; each preset receives a native eight-token cutoff acceptance check. Existing one-model concurrency, unloading and GPU memory safeguards remain in place.
 
-16K must be validated on the actual 32 GB Mac with normal background applications and the optional Docker stack. A short acceptance response does not establish maximum-length performance or memory pressure. Read CONTEXT-MANAGEMENT.md for long-response testing and smaller-context fallback settings. Reinstall the full updated bundle with services stopped; do not copy only gateway.py.
+These profile sizes must be validated on the actual 32 GB Mac with normal background applications and the optional Docker stack. A short acceptance response does not establish maximum-length performance or memory pressure. Read CONTEXT-MANAGEMENT.md for long-response testing and smaller-context fallback settings. Reinstall the full updated bundle with services stopped; do not copy only gateway.py.
 
 Context protection now rejects oversized requests instead of silently discarding input. WebUI compaction follows the active mode (1,536/8,192/6,144 token triggers for Gaming/Normal/Max with stock contexts); smaller custom contexts lower the budgets. OpenCode reserves room for output and tool work. Native acceptance checks oversized first messages, history, tool results and tool definitions on every preset. Summaries remain lossy, and large documents still need splitting or retrieval. See [context management](../docs/CONTEXT-MANAGEMENT.md).
+
+
+## OpenCode team update
+
+`Start Work Agent.command` starts Plan/Build with the 4B coordinator. Native
+foreground tasks can use analyst/coder, at most two attempts per explicit user
+turn including one concrete-failure retry. Specialists cannot use tools or
+delegate. The parent applies code and runs tests under OpenCode's own approvals.
+Direct `/code`, `/analyse` and `/document` commands avoid the coordinator pass.
+Startup verifies the policy loaded. Mode changes or gateway restarts stop the
+work agent. The installer also requires actual native handoff acceptance before
+recording installation success. WebUI delegation and image input remain deferred.
+Read WORK-AGENT.md for details, local storage, limits and native validation.

@@ -1,5 +1,6 @@
 """Validated text presets and bounded output budgets for shared-memory Macs."""
 import copy
+from model_team import PROFILES, valid_profile
 
 OUTPUT_CAPS = {"gaming": 1024, "normal": 4096, "max": 8192}
 
@@ -45,7 +46,10 @@ def configured_text_models(config):
             raise ValueError("Each preset must name a local Ollama model.")
         if not isinstance(preset.get("name"), str) or not preset["name"].strip():
             raise ValueError("Each preset needs a display name.")
-        for key, minimum, maximum in (("keep_alive_seconds", 0, 3600), ("num_ctx", 512, 16384)):
+        if 'role' in preset and not valid_profile(preset):
+            raise ValueError('Unknown model team role or artifact')
+        context_max = PROFILES[preset['role']][1] if 'role' in preset else 16384
+        for key, minimum, maximum in (("keep_alive_seconds", 0, 3600), ("num_ctx", 512, context_max)):
             value = preset.get(key)
             if type(value) is not int or not minimum <= value <= maximum:
                 raise ValueError(f"{key} must be an integer between {minimum} and {maximum}.")

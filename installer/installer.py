@@ -25,6 +25,7 @@ from common import PORTS, http, launch, ollama_binary, ollama_environment, port_
 SOURCE = Path(__file__).resolve().parent
 sys.path.insert(0, str(SOURCE / "payload"))
 from text_models import configured_text_models, upgrade_text_configuration
+from model_team import upgrade_team
 from context_policy import require_backend_version
 from context_settings import ContextSettings
 COMFY_RELEASE = "v0.38.0"
@@ -33,7 +34,8 @@ OLLAMA_CONTEXT_RELEASE = '0.40.0'
 OLLAMA_CONTEXT_SHA256 = '60dd339e77fdc8afe3286c51ff1fd8eb4f467ec178f33f4a85ec69dac6f2b9dd'
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
-                 "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py", "context_policy.py")
+                 "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py", "context_policy.py", "model_team.py")
+TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'team_setup.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -109,7 +111,7 @@ def completed(path, stage):
 
 def acceptance_fingerprint(root):
     hashes = [digest(root / "control" / name) for name in
-              GATEWAY_FILES + ("workflows/image.json", "workflows/video.json", "config.json", "comfy_vault/__init__.py")]
+              GATEWAY_FILES + TEAM_FILES + ("workflows/image.json", "workflows/video.json", "config.json", "comfy_vault/__init__.py")]
     return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
 
 
@@ -220,6 +222,8 @@ def install_environments(root, uv, state):
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
     for name in ("runtime.py", "common.py", "context_settings.py", "remote_access.py", "web_access.py", "reverse_image_setup.py", "workspace_setup.py", "account_tools.py", "vault_backup.py", "mode_selector.py", "work_agent.py"):
         shutil.copy2(SOURCE / name, control / name)
+    for name in TEAM_FILES:
+        shutil.copy2(SOURCE / name, control / name)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     # Install only our descriptor-based save nodes; vault-mode CLI disables every
@@ -252,10 +256,10 @@ def install_environments(root, uv, state):
         config_path.write_text(json.dumps(config, indent=2) + "\n")
         config_path.chmod(0o600)
     config = json.loads(config_path.read_text())
-    upgraded = upgrade_text_configuration(config)
+    upgraded = upgrade_team(upgrade_text_configuration(config))
     if upgraded != config:
         # Keep the old settings and secrets recoverable before migrating.
-        backup = config_path.with_name("config.before-text-context-v2.json")
+        backup = config_path.with_name("config.before-model-team-v1.json")
         if not backup.exists():
             backup.write_text(json.dumps(config, indent=2) + "\n")
             backup.chmod(0o600)
@@ -325,8 +329,8 @@ def verify_generation(root, configuration):
         processes.append(ollama)
         wait_ready("http://127.0.0.1:11435/api/version", ollama)
         presets = configured_text_models(configuration)
-        for model in dict.fromkeys(preset["model"] for preset in presets.values()):
-            run([ollama_binary(root), "pull", model], env=ollama_environment(root))
+        from team_setup import prepare_models
+        prepare_models(root, presets, download, run, http)
         run([control / ".venv/bin/python", control / "check-workflows.py"], cwd=control)
         gateway = launch([control / ".venv/bin/python", control / "gateway.py"], control,
                          root / "logs/gateway.log", os.environ.copy())
@@ -381,6 +385,9 @@ def verify_generation(root, configuration):
                 report['checks'].append({'name': 'context-' + identifier, 'model_id': identifier,
                                          'status': 'passed', 'cases': context_checks})
             (root / "acceptance-report.json").write_text(json.dumps(report, indent=2) + "\n")
+        from team_setup import verify_native_handoffs
+        report['checks'].extend(verify_native_handoffs(root, configuration))
+        (root / "acceptance-report.json").write_text(json.dumps(report, indent=2) + "\n")
     finally:
         for process in reversed(processes):
             stop_process(process, timeout=4200)

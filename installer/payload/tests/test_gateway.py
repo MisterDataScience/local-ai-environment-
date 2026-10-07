@@ -239,6 +239,7 @@ class GatewayTests(unittest.TestCase):
     def test_same_loaded_model_is_reused(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = model_engine.Engine({"text_models": DEFAULT_TEXT_MODELS}, Path(directory))
+            engine.text_profile = ('qwen3:14b', 16384, False)
             try:
                 with patch.object(model_engine, "port_open", return_value=False), \
                      patch.object(engine, "unload_ollama") as unload, \

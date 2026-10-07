@@ -41,7 +41,7 @@ The gateway remains one process and owns model lifecycle work. Open WebUI owns t
 | Role | Choice |
 | --- | --- |
 | Chat interface | Open WebUI 0.11.1 in Safari |
-| Text inference | Native Ollama, selectable Qwen3 4B / 14B / 30B-A3B |
+| Text inference | Native Ollama 0.40+, Huihui Qwen3.5 4B / 9B and Gemma4 12B Coder (4-bit) |
 | Image generation | Native ComfyUI v0.38.0 with SDXL Base 1.0 |
 | Video generation | LTX-Video 2B v0.9.5 with T5 FP16, through ComfyUI |
 | Orchestrator | Custom Python standard-library gateway, `installer/payload/gateway.py` |
@@ -70,6 +70,7 @@ This installs under `~/LocalAI-Automated`. Requirements: Apple Silicon, macOS 15
 ```bash
 python3 -m unittest discover -s installer/tests -v
 python3 -m unittest discover -s installer/payload/tests -v
+node --test installer/tests/test_opencode_team.mjs
 bash -n 'installer/Install Local AI.command'
 ```
 
@@ -95,10 +96,10 @@ them by default.
 
 ## Output budgets for the 32 GB M6 target
 
-Gaming retains 4K context and 1K output. Normal/Max use default 16K contexts with 4K/8K output ceilings. Smaller customised contexts reduce their output ceilings automatically. The gateway preserves Ollama length cutoffs in both JSON and SSE, and OpenCode advertises the active limits. The installer migrates stock contexts once and adds native cutoff checks. Actual M6 memory pressure and long-response performance remain unverified. See [context and output settings](docs/CONTEXT-MANAGEMENT.md).
+Gaming retains 4K context and 1K output. Normal/Max use role contexts of 8K coordinator, 32K analyst/document and 16K coder with 4K/8K output ceilings, bounded to half the context. Smaller customised contexts reduce their output ceilings automatically. The gateway preserves Ollama length cutoffs in both JSON and SSE, and OpenCode advertises the active limits. The installer migrates stock contexts once and adds native cutoff checks. Actual M6 memory pressure and long-response performance remain unverified. See [context and output settings](docs/CONTEXT-MANAGEMENT.md).
 
 The automated installer now applies mode-specific native compaction and rejects oversized text input through Ollama's own context enforcement. It reserves output/tool space in OpenCode and checks first messages, history and tool envelopes during Mac acceptance. [Context management and remaining limits](docs/CONTEXT-MANAGEMENT.md).
 
-## Planned model team and handoffs
+## OpenCode model team and handoffs
 
-The agreed three-model team, routing rules, handoff contract and 32 GB memory policy are recorded in [MODEL-TEAM-AND-HANDOFFS.md](docs/MODEL-TEAM-AND-HANDOFFS.md). [HANDOFF-IMPLEMENTATION-PLAN.md](docs/HANDOFF-IMPLEMENTATION-PLAN.md) maps the work to current modules and orders implementation. These are design documents; the current installer still uses the existing presets and does not implement this delegation system.
+The agreed three-model team, routing rules, handoff contract and 32 GB memory policy are recorded in [MODEL-TEAM-AND-HANDOFFS.md](docs/MODEL-TEAM-AND-HANDOFFS.md). [HANDOFF-IMPLEMENTATION-PLAN.md](docs/HANDOFF-IMPLEMENTATION-PLAN.md) maps the work to current modules and orders implementation. The installer now configures the team in OpenCode, with persistent two-attempt budgets, depth-one delegation, tool-free specialists and direct `/code`, `/analyse` and `/document` commands. WebUI delegation remains planned. Native Mac inference and end-to-end OpenCode validation remain pending.

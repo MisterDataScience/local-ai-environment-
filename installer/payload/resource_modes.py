@@ -2,9 +2,10 @@
 import json
 import os
 import tempfile
+from model_team import valid_profile
 
-MODES = {'gaming': 'Small text only; search and workspace/GitHub tools available.',
-         'normal': 'Small/everyday text and images; video and large text blocked.',
+MODES = {'gaming': 'Coordinator/small text only; search and workspace/GitHub tools available.',
+         'normal': 'Model team and eligible legacy text plus images; video blocked.',
          'max': 'All configured text models, images and video; sequential loading.'}
 
 
@@ -13,6 +14,8 @@ def allowed(mode, identifier, preset, route='text'):
         return True
     if route == 'video' or (mode == 'gaming' and route == 'image'):
         return False
+    if valid_profile(preset):
+        return mode == 'normal' or preset['role'] == 'coordinator'
     models = {'qwen3:4b'} if mode == 'gaming' else {'qwen3:4b', 'qwen3:14b'}
     return preset['model'] in models
 
@@ -44,7 +47,7 @@ PAGE = '''<!doctype html><html><head><meta name="viewport" content="width=device
 <body><h1>Local AI modes</h1><p>This setting applies to every chat and device.</p>
 <select id="mode"><option value="gaming">Gaming</option><option value="normal">Normal</option><option value="max">Max</option></select>
 <button id="apply">Apply mode</button><p id="state">Connecting…</p>
-<p>Gaming: Qwen3 4B, short context, no image or video generation.<br>Normal: small/everyday text and images.<br>Max: all configured models and media.</p>
+<p>Gaming: coordinator/small text, short context, no image or video generation.<br>Normal: model team and eligible text, plus images.<br>Max: all configured models and media.</p>
 <p>Search, GitHub and workspace tools remain available. Existing text inference may finish before memory is released. Wait for Ready before starting your game.</p>
 <p>After changing modes, refresh Open WebUI and select an available model. Changing its model menu cannot override this setting.</p>
 <script>
@@ -55,3 +58,4 @@ async function poll(){try{const d=await api();state.textContent=d.mode.toUpperCa
 select.onchange=()=>select.dataset.edited='yes';button.onclick=async()=>{button.disabled=true;try{await api('POST',select.value);delete select.dataset.edited;await poll();}catch(e){state.textContent=e.message;}finally{button.disabled=false;}};
 if(!key){state.textContent='Open AI Modes.command on your Mac while Local AI is running.';button.disabled=true;}else{poll();setInterval(poll,2000);}
 </script></body></html>'''
+

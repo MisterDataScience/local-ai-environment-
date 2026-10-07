@@ -33,8 +33,9 @@ chat/media routes do not expose OpenCode to your other devices.
 OpenCode calls `http://127.0.0.1:8001/v1` through the existing gateway. It does not
 connect directly to Ollama or ComfyUI. Only the custom local provider is enabled;
 no paid/cloud model credentials or GitHub PAT are passed to the process.
-The initial model is the existing Everyday preset, usually Qwen3 14B. Available
-model entries and context limits come from the current eligible presets.
+Plan and Build use the Huihui Qwen3.5 4B coordinator. The native task tool calls
+the 9B analyst or 12B coder through the same gateway. Available model entries
+and context limits come from the current eligible presets.
 Normal and Max restrictions still apply server-side to every inference request.
 Model selection does not load weights until requested.
 
@@ -50,12 +51,62 @@ It still buffers the complete response: OpenCode's Stop button does not guarante
 immediate cancellation of an already-running Ollama request. Existing handoff
 and unload rules remain in force.
 
-The default 16K contexts and local model tool reliability are constraints. Start
+The role contexts (8K coordinator, 32K analyst/document, 16K coder) and local
+model tool reliability are constraints. Start
 with small, well-scoped tasks. OpenCode's automatic compaction is enabled with a
 2,048-token buffer; it does not make a small context unlimited or guarantee that
 all tool schemas fit. Advertised output is 4,096 in Normal or 8,192 in Max,
 bounded further to half a custom smaller context. Restart after a mode change
 to refresh these limits. Real local-model task performance remains unverified.
+
+
+## Bounded model team
+
+The narrow `opencode-team.mjs` policy plugin uses native OpenCode task sessions;
+it does not run another inference loop. Plan/Build decide when analysis or code
+help is worthwhile. Routine work stays with the coordinator. `/code TEXT` and
+`/analyse TEXT` directly select a specialist without a coordinator pass;
+`/document TEXT` uses the larger 32K profile of the same 4B model. Direct specialists
+return text/proposals and have no execution tools. Switch back to Build to apply
+or test their work using its usual approvals.
+
+Each explicit user turn gets at most two specialist attempts, including one
+retry for a concrete failure. A second call to the same role must state that
+failure. Mixed tasks can use each specialist once. Attempts are reserved before
+execution and remain consumed after failures, interruption, reconnection or
+restart. Native compaction continuations and overflow replays do not reset them.
+Only native user-message IDs registered by the chat hook grant a budget; neither
+model arguments nor arbitrary labels do. Existing pre-upgrade conversations need
+a fresh user message before delegation.
+
+The task prompt is a JSON object with string fields `objective`, `constraints`,
+`evidence`, `completed`, `remaining`, and `result`, plus `retry_failure` when needed.
+Input is limited to 12,000 characters. Evidence must contain relevant excerpts;
+paths are references, not implicit access grants. The plugin escapes native
+`@file` expansion and refuses non-text child attachments. Specialists report
+results, references, assumptions, unresolved issues and validation actually run.
+Native child responses remain in their sessions; parent excerpts above 12,000
+characters are visibly clipped. Context overflow still fails explicitly.
+
+Delegations run in the foreground, one at a time per parent session. No task
+resumption, nested delegation or background task option is enabled. The gateway
+serializes all inference and releases outgoing weights or context profiles before
+loading the next. A failed unload prevents the next inference. Mode changes and
+gateway restarts invalidate the work-agent binding and require relaunching it.
+
+The private `work-agent/state/team-budget.json` ledger holds hashed turn keys,
+call IDs, roles and status, without prompts/results or credentials. Its bounded
+10,000-turn capacity fails closed instead of deleting records and resetting old
+budgets. All plugin instances in the process share serialized accounting. Keep
+this file when reopening sessions. Archive the whole work-agent state together
+when retiring old sessions; deleting only the ledger is not a supported reset.
+
+The base configuration denies task. Successful plugin initialization enables
+only analyst/coder on the coordinator. Startup reads OpenCode's effective agents
+and refuses to continue if these permissions did not load. Set
+`model_team.enabled` to `false` in `control/config.json` with services stopped to
+disable delegation. This leaves installed presets selectable and restores the
+previous single-agent configuration. The installer preserves this setting.
 
 ## Workspace, credentials and execution boundaries
 
@@ -76,7 +127,9 @@ records the imported files so subsequent edits have a reviewable diff. Changes a
 GitHub automatically; review and transfer the patch through your existing workflow.
 
 Read/glob/grep are allowed within the project; edits and shell commands ask.
-External-directory tools, web fetching, web search and subagents are denied.
+External-directory tools, web fetching and web search are denied. Only the
+allowlisted analyst/coder subagents can be called by Plan or Build. Specialists
+have no tools and cannot delegate. General and Explore agents are disabled.
 LSP/formatters are disabled to avoid automatic project executables/downloads.
 Project OpenCode config is disabled. Provider keys and inherited OpenCode settings
 are stripped from the subprocess environment; HOME itself is not changed.

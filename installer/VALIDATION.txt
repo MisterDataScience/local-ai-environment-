@@ -1,3 +1,26 @@
+OpenCode team update 2026-10-07 UTC: 79 installer tests, 86 gateway tests and
+12 JavaScript policy tests passed locally (177 total). Gateway integration uses
+real loopback HTTP with simulated Ollama; it proves protocol/lifecycle sequencing,
+not native model inference. Tests cover both specialist paths, parent resumption,
+profile switches, unload failure, private role migration, artifact refusal,
+effective native-permission checks, direct commands, and acceptance rejection
+when no real child result/model is present. Policy tests cover concurrent calls,
+duplicate calls, concrete-failure retry, persistent accounting across reconnects
+and fresh processes, native compaction continuations and overflow replay, child
+tool/attachment refusal, stale gateway epochs, restarts and bounded results.
+
+The installer now prepares the exact selected Q4_K_M artifacts, records full
+installed model digests, checks model metadata and requires actual native
+OpenCode analyst/coder handoffs plus final parent answers on the Mac. Those
+native acceptance checks have NOT been run here. Apple GPU speed, memory pressure,
+long-context accuracy, real model tool reliability and native UI permission
+behavior remain unverified. The ZIP contains current sources and guides, with
+no weights, credentials or runtime state. WebUI delegation and image input are
+not implemented. All models remain serialized through the existing gateway.
+
+Earlier validation records follow; old model/context descriptions below are
+historical and superseded by the model-team documentation.
+
 Context update 2026-10-07 UTC: 72 installer tests and 83 gateway tests passed
 locally (155 total). Python syntax, installer shell syntax and diff checks passed.
 Coverage includes native protection flags, backend-version refusal, mode-specific

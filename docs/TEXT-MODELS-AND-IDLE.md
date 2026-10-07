@@ -1,62 +1,60 @@
-> Update: global Gaming/Normal/Max controls are now implemented separately. See [RESOURCE-MODES.md](RESOURCE-MODES.md). The original preset design below is retained for context.
+# Text models, profiles and idle retention
 
-# Text model selection and idle unloading
+The updated installer configures three abliterated 4-bit models, with four role
+profiles. Installation records artifact metadata in `control/model-artifacts.json`.
 
-Implemented 2026-10-05, covering steps 1 and 2 of the easiest-first feature list. This is not Gaming Mode or the global profile selector.
+| Role | Stock API ID | Model | Context |
+| --- | --- | --- | ---: |
+| Coordinator | `local-ai` | Huihui Qwen3.5 4B | 8192 |
+| Compatibility small alias | `local-ai-small` | Same 4B coordinator profile | 8192 |
+| Analyst | `local-ai-large` | Huihui Qwen3.5 9B | 32768 |
+| Document | `local-ai-team-document` | Same 4B weights, larger profile | 32768 |
+| Coder | `local-ai-team-coder` | Huihui Gemma4 12B Coder Fable5 Composer2.5 v1 | 16384 |
 
-## Selected defaults
+If a stock ID has custom settings, that entry is preserved and the team uses a
+separate `local-ai-team-coordinator` or `local-ai-team-analyst` ID. The authoritative
+mapping is `model_team.roles` in `control/config.json`. OpenCode uses that mapping.
+Model lists and selection do not load weights; only inference does.
 
-| UI name | API model ID | Ollama model | Idle timeout | Context cap |
-| --- | --- | --- | --- | --- |
-| Everyday · Qwen3 14B | `local-ai` | `qwen3:14b` | 300 seconds | 16384 tokens |
-| Small · Qwen3 4B | `local-ai-small` | `qwen3:4b` | 120 seconds | 16384 tokens |
-| Large · Qwen3 30B-A3B | `local-ai-large` | `qwen3:30b-a3b` | 60 seconds | 16384 tokens |
+All inference shares the serial gateway. A model or context-profile change
+explicitly unloads and confirms release of the previous runner. Same-model,
+same-profile requests may reuse its resident state. Failures to unload block the
+next model. Ollama is configured for one loaded model and one parallel request.
+No GPU memory safeguards are disabled.
 
-Thinking is disabled by default. The new installer downloads and checks every configured model. Approximate downloads are 2.5 GB, 9.3 GB and 19 GB respectively. Download size is not runtime memory. The largest option must pass generation on your Mac before installation is considered successful.
+New team profiles use 120-second idle retention. Existing stock timeouts are
+preserved when upgrading, so legacy coordinator/analyst entries can retain 300/60
+seconds. Edit `keep_alive_seconds` while services are stopped; integers 0–3600
+are accepted and 0 releases after each answer. This is retention, not an inference
+timeout. Profile changes take effect after restart.
 
-Open WebUI receives all three entries from `/v1/models`. It uses its existing model selector; no frontend fork is needed. Depending on the UI version, it may display the friendly name or the API model ID. Model-listing and selection do not preload weights. Sending a message loads the selected model. Existing chats using `local-ai` continue using the Everyday entry.
+`num_ctx` may be reduced to at least 512. Validated coordinator/document/analyst/
+coder maxima are 8192/32768/32768/16384. Unknown custom presets remain limited to
+16384. `role` must match a known artifact; it cannot be assigned to arbitrary
+weights to bypass mode/context restrictions. The 32K profiles require actual Mac
+memory and recall validation and may need reducing with background applications.
 
-## Memory handoff
+Gaming clamps eligible coordinator/legacy-small profiles to 4096 context and
+1024 output. Normal allows the team and images; Max also allows video and other
+configured text models. Normal/Max output ceilings are 4096/8192, additionally
+limited to half each profile's context. The 8K coordinator therefore remains
+limited to 4096 output even in Max. Use analyst/coder for longer output.
 
-The serial executor checks Ollama's loaded-model list before text inference. If any loaded model differs from the requested one, it explicitly unloads all loaded models and polls for an empty list before starting inference. Failure to confirm unloading prevents the next model from loading. The same selected model may be reused while idle retention remains active.
+OpenCode advertises per-model input/output/context limits and uses native
+compaction. WebUI still uses a conservative global trigger determined by the
+smallest eligible profile; full per-role WebUI compaction is future work.
+See [CONTEXT-MANAGEMENT.md](CONTEXT-MANAGEMENT.md).
 
-Each chat request supplies its configured `keep_alive_seconds` to Ollama. Idle expiry is handled by Ollama, not a new background polling process. A new inference refreshes retention. Listing models does not refresh it. The setting applies after generation; it is not a generation timeout. Preset selection does not change the global resource mode. Normal permits Small/Everyday and images; Max permits all configured models and media; Gaming permits only its recognised Small model and blocks media. Gaming also clamps its context to 4K. See RESOURCE-MODES.md.
+Stop services and rerun the updated full installer to upgrade. The private
+`control/config.before-model-team-v1.json` preserves pre-migration settings.
+Custom presets, timeouts, credentials and integrations are preserved. Retired
+weights are not deleted from disk. Repeated installs preserve later edits.
+Set `model_team.enabled` to false to disable OpenCode delegation, or restore the
+backup with services stopped to return to old presets (keep a copy of current
+config first). Native acceptance must be rerun after configuration changes.
 
-## Change settings
-
-Stop Local AI, edit `~/LocalAI-Automated/control/config.json`, then restart. Its `text_models` object contains entries like:
-
-```json
-{
-  "local-ai-small": {
-    "name": "Small · Qwen3 4B",
-    "model": "qwen3:4b",
-    "keep_alive_seconds": 120,
-    "num_ctx": 16384,
-    "thinking": false
-  }
-}
-```
-
-This example shows one entry, not the full configuration. Keep the other entries and credentials. Keep a `local-ai` default entry. `keep_alive_seconds` accepts integers 0–3600; 0 unloads after each reply. Negative values and indefinite retention are rejected. `num_ctx` accepts integers 512–16384. Client requests cannot override these settings. Changed models need downloading; rerun the installer to download configured models and perform native acceptance checks.
-
-## Upgrade behaviour
-
-Stop the running services and run the updated installer bundle. An older configuration receives the new presets once, retaining its existing default model, thinking setting, secrets and unrelated fields. A private `config.before-text-context-v2.json` backup preserves the prior settings. Recognised stock model/context pairs migrate once to 16K; custom contexts and model tags are preserved. Gaming still clamps context to 4K. Normal/Max output caps are 4,096/8,192, additionally bounded to half the configured context. See CONTEXT-MANAGEMENT.md for the 32 GB Mac validation requirements. Repeated installs preserve edited presets. A standalone gateway with an old `text_model` setting continues to expose only `local-ai` until configuration is migrated.
-
-The updated acceptance fingerprint includes `text_models.py`, so the installer does not reuse the old single-model acceptance result. Its report records the selected API ID for each check. Ollama cloud features are disabled in the supervised environment.
-
-## Verification limits
-
-26 authoring tests passed: 10 installer and 16 gateway tests. New tests cover model-list exposure without loading, correct backend model/timeout/context forwarding, rejection of unconfigured model IDs and invalid timeouts, client override prevention, unload-before-switch sequencing, unload failure blocking inference, reuse of the existing model, HTTP/SSE response model identity and preservation of migrated settings.
-
-The native installer exercises each configured text model and the original media handoffs. Actual idle-expiry timing, browser menu presentation, memory use and generation speed require checks on the Mac. No global Gaming restrictions, automatic selection, VPN or background startup were added.
-
-## Primary references
-
-- [Qwen3 4B](https://ollama.com/library/qwen3:4b)
-- [Qwen3 14B](https://ollama.com/library/qwen3:14b)
-- [Qwen3 30B-A3B](https://ollama.com/library/qwen3:30b-a3b)
-- [Ollama chat API](https://docs.ollama.com/api/chat)
-- [Ollama lifecycle FAQ](https://docs.ollama.com/faq)
-
+The installer checks Qwen published manifest IDs and records the full digests;
+it downloads the exact coder GGUF with a full SHA-256 check and imports a local
+Ollama alias. Changed tags or incompatible metadata stop installation. No cloud
+model or unmodified/larger fallback is selected. See the artifact constants in
+`installer/payload/model_team.py` and [MODEL-TEAM-AND-HANDOFFS.md](MODEL-TEAM-AND-HANDOFFS.md).

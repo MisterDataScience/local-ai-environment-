@@ -9,14 +9,14 @@ selected mode but do not expose the mode-control page through the media listener
 
 | Mode | Eligible text models | Images | Video |
 |---|---|---|---|
-| Gaming | Qwen3 4B | Blocked | Blocked |
-| Normal | Qwen3 4B and 14B | Available | Blocked |
+| Gaming | Qwen3.5 4B coordinator profiles; retained legacy Qwen3 4B | Blocked | Blocked |
+| Normal | All validated team profiles; retained legacy Qwen3 4B/14B | Available | Blocked |
 | Max | All configured text presets | Available | Available |
 
 VPN search, page reading, GitHub and encrypted workspace tools remain available
 subject to their own setup, account permissions and vault/network state.
-Normal caps output at 4,096 tokens; Max caps it at 8,192. Default presets use
-16,384-token contexts outside Gaming. Custom smaller contexts also cap output
+Normal caps output at 4,096 tokens; Max caps it at 8,192. Team profiles use 8K coordinator, 32K analyst/document and 16K coder contexts
+outside Gaming. Custom smaller contexts also cap output
 at half their context; client requests may ask for shorter replies. Native
 memory validation on the intended 32 GB M6 Mac mini remains required.
 

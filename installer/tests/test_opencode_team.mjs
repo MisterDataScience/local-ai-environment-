@@ -1,0 +1,163 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import LocalTeam from '../opencode-team.mjs';
+
+async function fixture(t) {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ instance_id: 'backend', epoch: 0, mode: 'normal' }) });
+  t.after(() => { globalThis.fetch = previousFetch; });
+  const root = await mkdtemp(join(tmpdir(), 'local-team-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const ledgerPath = join(root, 'budget.json');
+  await writeFile(ledgerPath, JSON.stringify({ version: 1, turns: {} }));
+  const messages = [{ info: { id: 'user1', role: 'user' }, parts: [{ type: 'text', text: 'Task' }] }];
+  const session = { id: 'session1' };
+  const client = { session: {
+    get: async () => ({ data: session }), messages: async () => ({ data: messages }),
+  }};
+  const options = { ledgerPath, modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code' } };
+  const hooks = await LocalTeam({ client }, options);
+  await hooks['chat.message']({ sessionID: 'session1' }, { message: messages[0].info, parts: messages[0].parts });
+  function call(id, role = 'analyst', extra = {}, parent = 'user1') {
+    messages.push({ info: { id: 'assistant-' + id, role: 'assistant', parentID: parent, agent: 'plan' },
+      parts: [{ id: 'part-' + id, type: 'tool', tool: 'task', callID: id, state: { status: 'running' } }] });
+    return [{ tool: 'task', sessionID: 'session1', callID: id }, { args: {
+      subagent_type: role, description: 'Focused task', prompt: JSON.stringify({ objective: 'Solve',
+      constraints: 'Use evidence', evidence: 'src/a.py: @file is literal', completed: '', remaining: '',
+      result: 'Answer and validation', ...extra }),
+    }}];
+  }
+  const before = (args) => hooks['tool.execute.before'](...args);
+  async function after(args, text = 'Result') {
+    const output = { output: text, metadata: {} };
+    await hooks['tool.execute.after'](args[0], output);
+    return output;
+  }
+  return { hooks, call, before, after, client, options, messages, session, ledgerPath };
+}
+
+test('two bounded native handoffs, literal evidence, then stop', async t => {
+  const f = await fixture(t);
+  const first = f.call('one'); await f.before(first);
+  assert(!first[1].args.prompt.includes('@'));
+  assert(JSON.parse(first[1].args.prompt).evidence.includes('@file'));
+  await f.after(first);
+  const second = f.call('two', 'coder'); await f.before(second); await f.after(second);
+  await assert.rejects(f.before(f.call('three')), /two specialist attempts/);
+  assert.equal(Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0].calls.length, 2);
+});
+
+test('parallel requests and duplicate calls cannot oversubscribe', async t => {
+  const f = await fixture(t);
+  const one = f.call('one'), two = f.call('two', 'coder');
+  const results = await Promise.allSettled([f.before(one), f.before(two)]);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  await assert.rejects(f.before(one), /duplicate call/);
+  await f.after(one); await f.before(two); await f.after(two);
+});
+
+test('one retry requires concrete failure and consumes second attempt', async t => {
+  const f = await fixture(t);
+  const first = f.call('one'); await f.before(first); await f.after(first);
+  await assert.rejects(f.before(f.call('bad-retry')), /concrete failure/);
+  const retry = f.call('retry', 'analyst', { retry_failure: 'Returned an inconsistent total: 2+2=5' });
+  await f.before(retry); await f.after(retry);
+  await assert.rejects(f.before(f.call('three', 'coder')), /two specialist attempts/);
+});
+
+test('errors consume attempts, native error status releases serial gate', async t => {
+  const f = await fixture(t);
+  await f.before(f.call('one'));
+  f.messages[1].parts[0].state.status = 'error';
+  const second = f.call('two', 'coder'); await f.before(second); await f.after(second);
+  await assert.rejects(f.before(f.call('three')), /two specialist attempts/);
+});
+
+test('reconnected hooks share persisted accounting and native turn identity', async t => {
+  const f = await fixture(t);
+  const one = f.call('one'); await f.before(one); await f.after(one);
+  const hooks = await LocalTeam({ client: f.client }, f.options);
+  const two = f.call('two', 'coder'); await hooks['tool.execute.before'](...two);
+  await hooks['tool.execute.after'](two[0], { output: 'Result', metadata: {} });
+  await assert.rejects(f.before(f.call('three')), /two specialist attempts/);
+  f.messages.push({ info: { role: 'user', id: 'user2' }, parts: [{ type: 'text', text: 'New task' }] });
+  await f.hooks['chat.message']({ sessionID: 'session1' }, { message: f.messages.at(-1).info, parts: f.messages.at(-1).parts });
+  await f.before(f.call('new', 'coder', {}, 'user2'));
+});
+
+test('compaction continuation does not reset budget', async t => {
+  const f = await fixture(t);
+  for (const [id, role] of [['one', 'analyst'], ['two', 'coder']]) {
+    const args = f.call(id, role); await f.before(args); await f.after(args);
+  }
+  f.messages.push({ info: { role: 'user', id: 'synthetic' }, parts: [{ type: 'text', text: 'Continue', synthetic: true }] });
+  await assert.rejects(f.before(f.call('three', 'coder', {}, 'synthetic')), /two specialist attempts/);
+  f.messages.push({ info: { role: 'user', id: 'replay' }, parts: [{ type: 'text', text: 'Task' }] });
+  await assert.rejects(f.before(f.call('four', 'coder', {}, 'replay')), /two specialist attempts/);
+});
+
+test('nested delegation, child tools and implicit attachments are blocked', async t => {
+  const f = await fixture(t); f.session.parentID = 'parent';
+  await assert.rejects(f.before(f.call('one')), /cannot use tools/);
+  await assert.rejects(f.hooks['tool.execute.before']({ tool: 'bash', sessionID: 'session1' }, { args: {} }), /cannot use tools/);
+  await assert.rejects(f.hooks['chat.message']({ sessionID: 'session1' }, { parts: [{ type: 'file' }] }), /supplied text/);
+});
+
+test('role, resume, background, unknown identity and malformed envelopes fail', async t => {
+  const f = await fixture(t);
+  await assert.rejects(f.before(f.call('unknown', 'general')), /analyst or coder/);
+  for (const extra of [{ task_id: 'session-other' }, { background: true }, { command: 'shell' }]) {
+    const args = f.call('bad'); Object.assign(args[1].args, extra);
+    await assert.rejects(f.before(args), /disabled/);
+  }
+  const malformed = f.call('json'); malformed[1].args.prompt = 'not json';
+  await assert.rejects(f.before(malformed), /JSON/);
+  const oversized = f.call('large', 'coder', { evidence: 'x'.repeat(12001) });
+  await assert.rejects(f.before(oversized), /12000/);
+  const missing = f.call('missing'); f.messages.pop();
+  await assert.rejects(f.before(missing), /native assistant message/);
+});
+
+test('configuration enables only named specialists and rejects role model changes', async t => {
+  const f = await fixture(t);
+  const config = { tools: { task: false }, agent: { plan: { permission: {} }, build: { permission: {} } } };
+  await f.hooks.config(config);
+  assert.equal(config.tools.task, true);
+  assert.deepEqual(config.agent.plan.permission.task, { '*': 'deny', analyst: 'allow', coder: 'allow' });
+  await f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'local-ai-gateway', id: 'code' } });
+  await assert.rejects(f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'cloud', id: 'code' } }), /model changed/);
+});
+
+test('oversized results are visibly clipped and retained in the native child session', async t => {
+  const f = await fixture(t), args = f.call('one'); await f.before(args);
+  const result = await f.after(args, 'x'.repeat(15000));
+  assert(result.output.endsWith('Do not treat this excerpt as complete.]'));
+  assert.equal(result.metadata.localTeamClipped, true);
+});
+
+test('fresh process state recovers exhausted budget and interrupted attempts', async t => {
+  const f = await fixture(t);
+  const args = f.call('one'); await f.before(args); await f.after(args);
+  const two = f.call('two', 'coder'); await f.before(two);
+  // A distinct module instance represents a fresh process, with the same disk state.
+  const fresh = (await import('../opencode-team.mjs?restart=' + Date.now())).default;
+  const hooks = await fresh({ client: f.client }, f.options);
+  await assert.rejects(hooks['tool.execute.before'](...f.call('third')), /two specialist attempts/);
+  assert.equal(Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0].calls[1].status, 'interrupted');
+});
+
+test('mode changes, gateway restarts and unavailable status block delegation', async t => {
+  const f = await fixture(t);
+  for (const status of [{ instance_id: 'backend', epoch: 1, mode: 'normal' },
+    { instance_id: 'new-backend', epoch: 0, mode: 'normal' },
+    { instance_id: 'backend', epoch: 0, mode: 'gaming' }]) {
+    globalThis.fetch = async () => ({ ok: true, json: async () => status });
+    await assert.rejects(f.before(f.call('stale')), /mode changed or restarted/);
+  }
+  globalThis.fetch = async () => ({ ok: false });
+  await assert.rejects(f.before(f.call('offline')), /mode unavailable/);
+  assert.equal(Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0].calls.length, 0);
+});

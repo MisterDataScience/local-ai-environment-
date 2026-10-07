@@ -55,6 +55,7 @@ class Engine:
         self.process = None
         self.log_file = None
         self.state = "idle"
+        self.text_profile = None
         (root / "media").mkdir(exist_ok=True)
         (root / "logs").mkdir(exist_ok=True)
         # A single executor owns every model operation, including waiting for unloads.
@@ -63,13 +64,15 @@ class Engine:
         self.mode_lock = threading.RLock()
         self.mode = resource_modes.load(root)
         self.mode_epoch = 0
+        self.instance_id = uuid.uuid4().hex
         self.mode_transitioning = False
         self.mode_error = None
 
     def mode_status(self):
         with self.mode_lock:
             return {'mode': self.mode, 'transitioning': self.mode_transitioning,
-                    'error': self.mode_error, 'description': resource_modes.MODES[self.mode]}
+                    'error': self.mode_error, 'description': resource_modes.MODES[self.mode],
+                    'epoch': self.mode_epoch, 'instance_id': self.instance_id}
 
     def visible_models(self):
         with self.mode_lock:
@@ -144,6 +147,7 @@ class Engine:
 
     def unload_ollama(self):
         self.state = "unloading-text"
+        self.text_profile = None
         loaded = api(self.ollama, "/api/ps").get("models", [])
         for model in loaded:
             api(self.ollama, "/api/generate", {"model": model["name"], "keep_alive": 0}, timeout=120)
@@ -336,7 +340,9 @@ class Engine:
                 messages, links = retrieve(self.config, route, prompt, budget)
             # Switching text models also explicitly releases the old model.
             loaded = api(self.ollama, "/api/ps").get("models", [])
-            if any(model["name"] != preset["model"] for model in loaded):
+            profile = (preset['model'], preset['num_ctx'], preset.get('thinking', False))
+            if loaded and (any(model["name"] != preset["model"] for model in loaded)
+                           or self.text_profile != profile):
                 self.unload_ollama()
             self.check_policy(body, route)
             self.state = "generating-text"
@@ -357,6 +363,7 @@ class Engine:
             # Exactly one inference call. Open WebUI executes/approves tools and
             # submits the next inference turn with their results.
             response = api(self.ollama, '/api/chat', payload, timeout=1800)
+            self.text_profile = profile
             message = response['message']
             counts = [response.get('prompt_eval_count'), response.get('eval_count')]
             if all(type(n) is int and n >= 0 for n in counts):
