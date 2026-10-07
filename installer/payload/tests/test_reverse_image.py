@@ -115,6 +115,7 @@ class ReverseImageTests(unittest.TestCase):
     def test_non_web_result_urls_are_not_returned(self):
         response = FakeResponse({"images": [
             {"url": "local:invalid", "pageUrl": "https://user:pass@example.org"},
+            {"url": "http://127.0.0.1/internal.jpg", "pageUrl": "http://localhost/private"},
             {"url": "https://images.example/good.jpg", "pageUrl": "custom:invalid"},
         ]})
         session = FakeSession(response)
