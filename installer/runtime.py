@@ -9,6 +9,7 @@ import subprocess
 import time
 
 from common import PORTS, http, launch, ollama_binary, ollama_environment, port_open, stop_process, wait_ready, webui_environment
+from context_settings import ContextSettings
 
 
 def main():
@@ -66,6 +67,8 @@ def main():
         models = http("http://127.0.0.1:8001/v1/models", key=config["api_key"])
         if not models["data"]:
             raise RuntimeError("The local-ai gateway model is unavailable.")
+        context_settings = ContextSettings()
+        context_warning = False
         if remote.get("enabled"):
             from remote_access import verify_remote_access
             try:
@@ -100,6 +103,15 @@ def main():
             for name, process in processes:
                 if process.poll() is not None:
                     raise RuntimeError(f"{name} exited. Read {root / 'logs' / (name + '.log')}")
+            try:
+                policy = http('http://127.0.0.1:8001/control/context', key=config['api_key'], timeout=2)
+                if context_settings.sync(policy):
+                    logging.info('Native context compaction set for %s: %s tokens', policy['mode'], policy['threshold'])
+                context_warning = False
+            except Exception:
+                if not context_warning:
+                    logging.warning('Context settings could not be refreshed; retrying. Oversized requests must still fail at the backend.')
+                context_warning = True
             time.sleep(2)
     except KeyboardInterrupt:
         print("\nShutting down. An active generation will finish or time out before memory is released.")
@@ -127,3 +139,4 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

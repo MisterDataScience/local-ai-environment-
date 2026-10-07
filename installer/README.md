@@ -49,7 +49,7 @@ The gateway keeps model loading/unloading and serial media handoffs. Open WebUI 
 | Python installation | Private uv-managed environments |
 | Video encoder | Included FFmpeg through imageio-ffmpeg's macOS ARM64 wheel |
 
-ComfyUI is pinned to release v0.38.0. PyTorch and its dependencies are resolved when you install, then their installed versions are recorded. The official Ollama application archive is downloaded at installation time, code-signing is checked and its native CLI is used without launching the Ollama desktop interface. Nothing signs into a cloud-model account.
+ComfyUI is pinned to release v0.38.0. PyTorch and its dependencies are resolved when you install, then their installed versions are recorded. Ollama 0.40.0 is the pinned minimum for native context protection. A compatible private copy is reused; otherwise the official 0.40.0 macOS archive is downloaded with SHA-256 and code-signature verification. The previous private app is retained during upgrade, and its CLI is used without launching the desktop interface. Nothing signs into a cloud-model account.
 
 All installation files are under **`~/LocalAI-Automated`**. The launcher is created at **`~/Applications/Local AI.app`**, with a Terminal fallback at **`~/LocalAI-Automated/Start Local AI.command`**. The previous manual guide's `~/LocalAI` directory is separate. This installer also uses separate ports so it does not need to stop an existing setup.
 
@@ -206,3 +206,5 @@ care: see [context management and Mac acceptance](../docs/CONTEXT-MANAGEMENT.md)
 The default contexts are now 16K outside Gaming, with 4K output in Normal and 8K in Max. Gaming remains 4K context/1K output. The installer migrates recognised stock contexts once and preserves custom values. Ollama length cutoffs are reported accurately in JSON and SSE; each preset receives a native eight-token cutoff acceptance check. Existing one-model concurrency, unloading and GPU memory safeguards remain in place.
 
 16K must be validated on the actual 32 GB Mac with normal background applications and the optional Docker stack. A short acceptance response does not establish maximum-length performance or memory pressure. Read CONTEXT-MANAGEMENT.md for long-response testing and smaller-context fallback settings. Reinstall the full updated bundle with services stopped; do not copy only gateway.py.
+
+Context protection now rejects oversized requests instead of silently discarding input. WebUI compaction follows the active mode (1,536/8,192/6,144 token triggers for Gaming/Normal/Max with stock contexts); smaller custom contexts lower the budgets. OpenCode reserves room for output and tool work. Native acceptance checks oversized first messages, history, tool results and tool definitions on every preset. Summaries remain lossy, and large documents still need splitting or retrieval. See [context management](../docs/CONTEXT-MANAGEMENT.md).

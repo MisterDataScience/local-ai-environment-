@@ -9,7 +9,8 @@ import signal
 import threading
 from urllib.parse import urlparse
 
-from backend_http import port_open
+from backend_http import port_open, api
+from context_policy import require_backend_version
 from http_api import Handler, MediaHandler
 from model_engine import Engine
 
@@ -25,6 +26,11 @@ def main():
     except BlockingIOError:
         raise SystemExit("Another copy of this gateway is already running.")
     config = json.loads((ROOT / "config.json").read_text())
+    try:
+        require_backend_version(api(config.get('ollama_url', 'http://127.0.0.1:11434'), '/api/version').get('version'))
+    except Exception:
+        lock_file.close()
+        raise
     if port_open(urlparse(config.get("comfy_url", "http://127.0.0.1:8188")).port):
         raise SystemExit("Stop manually started ComfyUI before starting the gateway.")
     server = ThreadingHTTPServer(("127.0.0.1", config.get("gateway_port", 8000)), Handler)
@@ -63,3 +69,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

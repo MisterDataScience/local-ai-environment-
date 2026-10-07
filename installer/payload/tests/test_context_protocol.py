@@ -50,9 +50,12 @@ class ContextProtocolTests(unittest.TestCase):
                                     return {'models': []}
                                 self.assertEqual(payload['options']['num_predict'], 7)
                                 self.assertFalse(payload['stream'])
+                                self.assertFalse(payload['truncate'])
+                                self.assertFalse(payload['shift'])
                                 return {'message': {'content': 'unfinished essay'}, 'done_reason': reason,
                                         'prompt_eval_count': 20, 'eval_count': 7}
                             body = {'model': 'local-ai', 'stream': stream, 'max_completion_tokens': 7,
+                                    'truncate': True, 'shift': True,
                                     '_finish_reason': 'injected',
                                     'messages': [{'role': 'user', 'content': 'Write an essay'}]}
                             request = Request(f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
@@ -104,6 +107,8 @@ class ContextProtocolTests(unittest.TestCase):
 
     def test_only_explicit_backend_context_errors_are_classified(self):
         for message, expected in [('input length exceeds the context window', backend_http.ContextLengthError),
+                                  ('the prompt is longer than the context length currently available to the model', backend_http.ContextLengthError),
+                                  ('request (9000 tokens) exceeds the available context size (4096 tokens)', backend_http.ContextLengthError),
                                   ('model not found', RuntimeError)]:
             error = HTTPError('http://localhost/api/chat', 400, 'bad request', {},
                               io.BytesIO(json.dumps({'error': message}).encode()))

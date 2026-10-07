@@ -91,18 +91,20 @@ def configuration(config, identifiers, mode='normal'):
     from text_models import configured_text_models, output_ceiling
     presets = configured_text_models(config)
     models = {key: {'name': presets[key]['name'], 'limit': {
-        'context': presets[key]['num_ctx'], 'output': output_ceiling(mode, presets[key])}}
+        'context': presets[key]['num_ctx'], 'output': output_ceiling(mode, presets[key]),
+        'input': presets[key]['num_ctx'] - output_ceiling(mode, presets[key])}}
         for key in identifiers if key in presets}
     if not models:
         raise ValueError('No eligible local model for the work agent')
     preferred = 'local-ai' if 'local-ai' in models else next(iter(models))
+    reserved = min(2048, min(m['limit']['context'] for m in models.values()) // 4)
     return {'$schema': 'https://opencode.ai/config.json', 'autoupdate': False,
             'share': 'disabled', 'enabled_providers': ['local-ai-gateway'],
             'model': 'local-ai-gateway/' + preferred, 'small_model': 'local-ai-gateway/' + preferred,
             'provider': {'local-ai-gateway': {'npm': '@ai-sdk/openai-compatible',
                 'name': 'Local AI gateway', 'options': {'baseURL': 'http://127.0.0.1:8001/v1',
                 'apiKey': '{env:LOCAL_AI_GATEWAY_KEY}', 'timeout': 1900000}, 'models': models}},
-            'default_agent': 'plan', 'compaction': {'auto': True, 'prune': True, 'reserved': 2048},
+            'default_agent': 'plan', 'compaction': {'auto': True, 'prune': True, 'reserved': reserved},
             'permission': {'*': 'ask', 'read': {'*': 'allow', '*.env': 'deny', '*.env.*': 'deny'},
                 'glob': 'allow', 'grep': 'allow', 'edit': 'ask', 'bash': 'ask',
                 'external_directory': 'deny', 'webfetch': 'deny', 'websearch': 'deny', 'task': 'deny'},

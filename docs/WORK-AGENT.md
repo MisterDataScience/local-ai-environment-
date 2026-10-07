@@ -121,3 +121,5 @@ Sources:
 - https://opencode.ai/docs/permissions/
 - https://github.com/open-webui/open-webui/blob/v0.11.1/backend/open_webui/config.py
 
+
+Context budgeting now advertises input as context minus the mode's output ceiling. Native compaction then subtracts its reserve (up to 2,048 tokens, reduced for small contexts), leaving room for instructions and tool work. Gateway requests disable Ollama truncation and context shifting; oversized input returns context_length_exceeded instead of silently losing history. See [context management](CONTEXT-MANAGEMENT.md) for mode budgets and native acceptance.

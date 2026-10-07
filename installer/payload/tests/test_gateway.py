@@ -24,6 +24,15 @@ def request(text):
 
 
 class GatewayTests(unittest.TestCase):
+    def test_old_backend_is_rejected_before_any_listener_opens(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'config.json').write_text('{}')
+            with patch.object(gateway, 'ROOT', root), patch.object(gateway, 'api', return_value={'version': '0.39.0'}), patch.object(gateway, 'ThreadingHTTPServer') as server:
+                with self.assertRaisesRegex(RuntimeError, '0.40.0'):
+                    gateway.main()
+                server.assert_not_called()
+
     def test_engine_returns_tool_call_without_executing_another_round(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = model_engine.Engine({"text_models": DEFAULT_TEXT_MODELS}, Path(directory))
@@ -62,6 +71,7 @@ class GatewayTests(unittest.TestCase):
                  patch.object(gateway, "Engine", return_value=engine) as create_engine, \
                  patch.object(gateway, "ThreadingHTTPServer", side_effect=[api_server, media_server]) as server, \
                  patch.object(gateway.signal, "signal"), patch.object(gateway.threading, "Thread"), \
+                 patch.object(gateway, "api", return_value={'version': '0.40.0'}), \
                  patch.object(gateway.logging, "basicConfig"):
                 gateway.main()
             create_engine.assert_called_once_with(config)
@@ -428,3 +438,4 @@ class GatewayTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

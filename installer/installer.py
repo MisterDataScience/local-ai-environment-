@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import re
 import secrets
 import shlex
 import shutil
@@ -17,17 +18,22 @@ import sys
 import tempfile
 import time
 import zipfile
+from urllib.error import HTTPError
 
 from common import PORTS, http, launch, ollama_binary, ollama_environment, port_open, stop_process, wait_ready, webui_environment
 
 SOURCE = Path(__file__).resolve().parent
 sys.path.insert(0, str(SOURCE / "payload"))
 from text_models import configured_text_models, upgrade_text_configuration
+from context_policy import require_backend_version
+from context_settings import ContextSettings
 COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
+OLLAMA_CONTEXT_RELEASE = '0.40.0'
+OLLAMA_CONTEXT_SHA256 = '60dd339e77fdc8afe3286c51ff1fd8eb4f467ec178f33f4a85ec69dac6f2b9dd'
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
-                 "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py")
+                 "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py", "context_policy.py")
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -126,12 +132,27 @@ def preflight(root):
     logging.info("Hardware checks passed: %.0fGB unified memory", memory / 1024**3)
 
 
+def ollama_client_version(binary, root):
+    output = subprocess.check_output([str(binary), '--version'], env=ollama_environment(root),
+                                     stderr=subprocess.STDOUT, text=True, timeout=15)
+    # The private daemon is stopped; prefer the CLI version over another server.
+    match = re.search(r'client version is (\S+)', output) or re.search(r'ollama version is (\S+)', output)
+    if not match:
+        raise RuntimeError('Could not identify the private Ollama version')
+    return require_backend_version(match.group(1))
+
+
 def install_ollama(root):
     binary = ollama_binary(root)
     if binary.exists():
-        return
-    archive = root / "cache/Ollama-darwin.zip"
-    download("https://ollama.com/download/Ollama-darwin.zip", archive)
+        try:
+            ollama_client_version(binary, root)
+            return
+        except (RuntimeError, subprocess.SubprocessError):
+            logging.info('Upgrading the private Ollama copy for native context protection')
+    archive = root / f"cache/Ollama-{OLLAMA_CONTEXT_RELEASE}-darwin.zip"
+    download(f"https://github.com/ollama/ollama/releases/download/v{OLLAMA_CONTEXT_RELEASE}/Ollama-darwin.zip",
+             archive, OLLAMA_CONTEXT_SHA256)
     with tempfile.TemporaryDirectory(dir=root / "cache") as directory:
         # ditto preserves framework links and code-signing metadata in the official app archive.
         with zipfile.ZipFile(archive) as zipped:
@@ -146,7 +167,18 @@ def install_ollama(root):
         run(["/usr/bin/codesign", "--verify", "--deep", "--strict", app])
         if not (app / "Contents/Resources/ollama").is_file():
             raise RuntimeError("Official Ollama archive no longer contains the expected CLI binary.")
-        shutil.move(str(app), root / "tools/Ollama.app")
+        ollama_client_version(app / 'Contents/Resources/ollama', root)
+        previous = root / 'tools/Ollama.app'
+        backup = None
+        if previous.exists():
+            backup = root / ('tools/Ollama.app.before-context-' + str(time.time_ns()))
+            previous.rename(backup)
+        try:
+            shutil.move(str(app), previous)
+        except Exception:
+            if backup is not None and not previous.exists():
+                backup.rename(previous)
+            raise
 
 
 def install_comfy(root, uv, state):
@@ -186,7 +218,7 @@ def install_environments(root, uv, state):
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
-    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "reverse_image_setup.py", "workspace_setup.py", "account_tools.py", "vault_backup.py", "mode_selector.py", "work_agent.py"):
+    for name in ("runtime.py", "common.py", "context_settings.py", "remote_access.py", "web_access.py", "reverse_image_setup.py", "workspace_setup.py", "account_tools.py", "vault_backup.py", "mode_selector.py", "work_agent.py"):
         shutil.copy2(SOURCE / name, control / name)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -247,6 +279,41 @@ def verify_text_cutoff(key, identifier):
     return {'finish_reason': reason, 'usage': response.get('usage', {})}
 
 
+def verify_context_rejection(key, identifier, context):
+    """Prove oversized inputs are rejected, including history and tool envelopes."""
+    large = ' x' * max(context * 4, 4096)
+    tool = {'type': 'function', 'function': {'name': 'read_text', 'description': 'Read text',
+                                           'parameters': {'type': 'object', 'properties': {}}}}
+    cases = [
+        ('first-message', [{'role': 'user', 'content': large}], []),
+        ('old-history', [{'role': 'system', 'content': 'Keep all instructions.'},
+                         {'role': 'user', 'content': large}, {'role': 'assistant', 'content': 'Recorded.'},
+                         {'role': 'user', 'content': 'Reply briefly using the earlier information.'}], []),
+        ('tool-result', [{'role': 'user', 'content': 'Read the document.'},
+                         {'role': 'assistant', 'content': None, 'tool_calls': [
+                             {'id': 'acceptance-read', 'type': 'function', 'function':
+                              {'name': 'read_text', 'arguments': '{}'}}]},
+                         {'role': 'tool', 'tool_call_id': 'acceptance-read', 'content': large},
+                         {'role': 'user', 'content': 'Summarise it.'}], [tool]),
+        ('tool-schema', [{'role': 'user', 'content': 'Reply briefly.'}], [
+            {'type': 'function', 'function': dict(tool['function'], description=large)}]),
+    ]
+    results = []
+    for name, messages, tools in cases:
+        body = {'model': identifier, 'messages': messages, 'stream': False,
+                'max_completion_tokens': 1, 'tools': tools}
+        try:
+            http('http://127.0.0.1:8001/v1/chat/completions', body, key=key, timeout=4000)
+        except HTTPError as error:
+            payload = json.loads(error.read(8192))
+            if error.code != 400 or payload.get('error', {}).get('code') != 'context_length_exceeded':
+                raise RuntimeError(f'{identifier}/{name}: context acceptance returned an unexpected error') from None
+            results.append({'case': name, 'status': 'passed', 'code': 'context_length_exceeded'})
+        else:
+            raise RuntimeError(f'{identifier}/{name}: oversized input was accepted; native context protection is not verified')
+    return results
+
+
 def verify_generation(root, configuration):
     import resource_modes
     if resource_modes.load(root / "control") != "max":
@@ -269,6 +336,7 @@ def verify_generation(root, configuration):
                        root / "webui", root / "logs/webui.log", webui_environment(root, configuration))
         processes.append(webui)
         wait_ready("http://127.0.0.1:8081/health", webui, timeout=600)
+        ContextSettings().sync(http('http://127.0.0.1:8001/control/context', key=configuration['api_key']))
         checks = [("text-" + identifier, "Reply with one sentence about Python.", identifier)
                   for identifier in presets]
         checks += [(kind, prompt, "local-ai") for kind, prompt in [
@@ -309,6 +377,9 @@ def verify_generation(root, configuration):
                 cutoff = verify_text_cutoff(configuration['api_key'], identifier)
                 report['checks'].append({'name': 'cutoff-' + identifier, 'model_id': identifier,
                                          'status': 'passed', **cutoff})
+                context_checks = verify_context_rejection(configuration['api_key'], identifier, presets[identifier]['num_ctx'])
+                report['checks'].append({'name': 'context-' + identifier, 'model_id': identifier,
+                                         'status': 'passed', 'cases': context_checks})
             (root / "acceptance-report.json").write_text(json.dumps(report, indent=2) + "\n")
     finally:
         for process in reversed(processes):

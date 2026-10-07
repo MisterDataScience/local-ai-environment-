@@ -12,6 +12,7 @@ approval interface; the former private loop and disabled GitHub adapter are remo
 | routing.py | Text validation and explicit command routing |
 | tool_protocol.py | OpenAI/Ollama tool schema/message conversion; no execution |
 | workflows.py | Workflow substitution and saved-output discovery |
+| context_policy.py | Mode-specific compaction budgets and required backend version |
 | text_models.py | Text preset validation and migration |
 | web_client.py | Fixed-loopback VPN retrieval, evidence and citations |
 | web_tools_api.py | Authenticated OpenAPI VPN bridge called by Open WebUI |
@@ -31,3 +32,6 @@ installer with Local AI stopped, rather than replacing only gateway.py.
 
 See [NATIVE-TOOLS.md](NATIVE-TOOLS.md) for protocol support, configuration and
 remaining native/browser checks. The manual-setup directory is historical.
+
+
+The authenticated local /control/context endpoint exposes budgets to runtime.py. It is unavailable on the media listener. context_settings.py applies and verifies those budgets through the native WebUI settings API. Text inference disables Ollama input truncation and context shifting.

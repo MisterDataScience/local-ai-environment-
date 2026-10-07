@@ -96,6 +96,7 @@ def webui_environment(root, configuration):
         "CONTEXT_COMPACTION_TOKEN_CAP": "1536",
         "CONTEXT_COMPACTION_RETENTION_PERCENTAGE": "20",
         "CONTEXT_COMPACTION_MODEL": "",
+        "TASK_MODEL_PARAMS": json.dumps({"max_tokens": 512}),
         "ENABLE_CODE_EXECUTION": "True", "CODE_EXECUTION_ENGINE": "pyodide",
         "ENABLE_CODE_INTERPRETER": "True", "CODE_INTERPRETER_ENGINE": "pyodide",
         "DEFAULT_MODEL_PARAMS": json.dumps({"function_calling": "native", "tool_approval_mode": "ask"}),
@@ -128,3 +129,4 @@ def webui_environment(root, configuration):
 
 def ollama_binary(root):
     return root / "tools/Ollama.app/Contents/Resources/ollama"
+

@@ -96,3 +96,5 @@ them by default.
 ## Output budgets for the 32 GB M6 target
 
 Gaming retains 4K context and 1K output. Normal/Max use default 16K contexts with 4K/8K output ceilings. Smaller customised contexts reduce their output ceilings automatically. The gateway preserves Ollama length cutoffs in both JSON and SSE, and OpenCode advertises the active limits. The installer migrates stock contexts once and adds native cutoff checks. Actual M6 memory pressure and long-response performance remain unverified. See [context and output settings](docs/CONTEXT-MANAGEMENT.md).
+
+The automated installer now applies mode-specific native compaction and rejects oversized text input through Ollama's own context enforcement. It reserves output/tool space in OpenCode and checks first messages, history and tool envelopes during Mac acceptance. [Context management and remaining limits](docs/CONTEXT-MANAGEMENT.md).

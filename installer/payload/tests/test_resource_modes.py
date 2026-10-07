@@ -150,12 +150,20 @@ class ModeTests(unittest.TestCase):
                 with self.assertRaises(HTTPError) as error:
                     urlopen(base + '/control/mode')
                 self.assertEqual(error.exception.code, 401 if handler is Handler else 404)
+                with self.assertRaises(HTTPError) as error:
+                    urlopen(base + '/control/context')
+                self.assertEqual(error.exception.code, 401 if handler is Handler else 404)
                 if handler is Handler:
+                    with urlopen(Request(base + '/control/context', headers={'Authorization': 'Bearer test'})) as r:
+                        self.assertEqual(json.load(r)['threshold'], 1536)
                     with urlopen(Request(base + '/v1/models', headers={'Authorization': 'Bearer test'})) as r:
                         self.assertEqual([x['id'] for x in json.load(r)['data']], ['local-ai-small'])
                     with urlopen(Request(base + '/control/mode', data=b'{"mode":"normal"}', headers={'Authorization': 'Bearer test'})) as r:
                         self.assertEqual(r.status, 202)
                 else:
+                    with self.assertRaises(HTTPError) as error:
+                        urlopen(Request(base + '/control/context', headers={'Authorization': 'Bearer test'}))
+                    self.assertEqual(error.exception.code, 404)
                     with self.assertRaises(HTTPError) as error:
                         urlopen(Request(base + '/control/mode', data=b'{"mode":"max"}', headers={'Authorization': 'Bearer test'}))
                     self.assertEqual(error.exception.code, 404)
@@ -166,3 +174,4 @@ class ModeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

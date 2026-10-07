@@ -18,6 +18,7 @@ import uuid
 from backend_http import api, port_open
 from routing import messages_and_route
 from text_models import configured_text_models, output_ceiling
+from context_policy import compaction_policy
 from web_client import retrieve
 from tool_protocol import tools_for_ollama, assistant_for_openai
 from workflows import fill_workflow, output_files
@@ -74,6 +75,10 @@ class Engine:
         with self.mode_lock:
             return {key: preset for key, preset in self.text_models.items()
                     if resource_modes.allowed(self.mode, key, preset)}
+
+    def context_status(self):
+        with self.mode_lock:
+            return compaction_policy(self.text_models, self.mode)
 
     def check_policy(self, body, route):
         with self.mode_lock:
@@ -341,6 +346,9 @@ class Engine:
             payload = {
                 "model": preset["model"], "messages": messages,
                 "options": options, "stream": False,
+                # Preserve the full rendered input, including tools. Oversized
+                # requests must fail rather than silently discard instructions.
+                "truncate": False, "shift": False,
                 "think": preset.get("thinking", False), "keep_alive": preset["keep_alive_seconds"],
             }
             tools = tools_for_ollama(body) if route == "text" else []

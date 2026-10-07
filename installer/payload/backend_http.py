@@ -12,7 +12,7 @@ class ContextLengthError(RuntimeError):
 
 def completion_error(error):
     if isinstance(error, ContextLengthError):
-        return 400, {"error": {"message": "Context length exceeded. Compact the conversation or reduce the supplied content.",
+        return 400, {"error": {"message": "This request exceeds the model's context. Compact the conversation, split a large document or tool result, or select a model with a larger configured context. No automatic retry or input trimming was performed.",
                                "type": "invalid_request_error", "code": "context_length_exceeded"}}
     return 502, {"error": {"message": str(error), "type": "server_error", "code": "backend_error"}}
 
@@ -32,7 +32,9 @@ def api(base, path, payload=None, timeout=30):
                 message = message.get("message", "")
             explicit_overflow = isinstance(message, str) and any(phrase in message.lower() for phrase in (
                 "context length exceeded", "exceeds the context window", "input length exceeds",
-                "exceeds maximum context length", "maximum context length"))
+                "exceeds maximum context length", "maximum context length",
+                "context size exceeded", "prompt is too long", "exceed context size",
+                "prompt is longer than the context length", "exceeds the available context size"))
             if path == "/api/chat" and error.code in (400, 413) and explicit_overflow:
                 raise ContextLengthError("Backend rejected the request: context length exceeded") from error
         except (ValueError, TypeError):
@@ -44,3 +46,4 @@ def port_open(port):
     with socket.socket() as connection:
         connection.settimeout(0.5)
         return connection.connect_ex(("127.0.0.1", port)) == 0
+

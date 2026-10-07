@@ -1,3 +1,15 @@
+Context update 2026-10-07 UTC: 72 installer tests and 83 gateway tests passed
+locally (155 total). Python syntax, installer shell syntax and diff checks passed.
+Coverage includes native protection flags, backend-version refusal, mode-specific
+compaction, small custom contexts, authenticated context endpoint/media isolation,
+WebUI settings API verification/retry/redirect refusal, private upgrade preservation,
+and failure of acceptance when oversized input succeeds or returns a generic error.
+The installer checks four native input overflow cases per preset and verifies the
+WebUI settings API. These checks have NOT been executed on the user's Mac here.
+The ZIP is rebuilt from current source, checked for exact code/document contents
+and excludes caches, credentials, models and runtime data. Summaries remain lossy.
+No additional model concurrency, streaming change or RAM safeguard override added.
+
 Authoring checks completed 2026-10-06 UTC.
 Update 2026-10-07 UTC: 65 installer tests and 79 gateway tests passed locally,
 including the new reverse-image cases and output/context regressions. JSON/SSE
@@ -49,8 +61,9 @@ Ollama usage accounting. OpenCode binary execution/UI and local-model agent
 performance were NOT tested here. Mac acceptance is documented in WORK-AGENT.md.
 Open WebUI Pyodide defaults verified against pinned v0.11.1 source and made explicit.
 
-Context integration: native WebUI compaction configured; loopback JSON/SSE error
-and usage propagation tested; requested reply budgets honoured within mode caps.
-No native-client end-to-end inference or exact full-request token budget verified.
+Context integration: mode-aware native WebUI compaction configured; loopback
+JSON/SSE error and usage propagation tested. Ollama native tokenizer enforcement
+is required with truncation and shifting disabled. Native Mac/client end-to-end
+inference and full-request context acceptance remain pending.
 See docs/CONTEXT-MANAGEMENT.md for remaining gaps and Mac acceptance.
 

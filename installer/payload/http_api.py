@@ -136,6 +136,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/control/mode":
             return self.json_response(200, self.server.engine.mode_status())
+        if path == "/control/context":
+            return self.json_response(200, self.server.engine.context_status())
         if path == "/v1/models":
             return self.json_response(200, {"object": "list", "data": [
                 {"id": identifier, "name": preset["name"], "object": "model", "created": 0,

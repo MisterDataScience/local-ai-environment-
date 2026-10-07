@@ -18,6 +18,8 @@ class WorkAgentTests(unittest.TestCase):
         self.assertEqual(provider['options']['baseURL'], 'http://127.0.0.1:8001/v1')
         self.assertEqual(provider['models']['local-ai']['limit']['context'], 16384)
         self.assertEqual(provider['models']['local-ai']['limit']['output'], 4096)
+        self.assertEqual(provider['models']['local-ai']['limit']['input'], 12288)
+        self.assertEqual(cfg['compaction']['reserved'], 2048)
         self.assertEqual(cfg['permission']['bash'], 'ask')
         self.assertEqual(cfg['permission']['edit'], 'ask')
         self.assertEqual(cfg['permission']['external_directory'], 'deny')
@@ -35,6 +37,8 @@ class WorkAgentTests(unittest.TestCase):
         presets['local-ai']['num_ctx'] = 4096
         cfg = w.configuration({'text_models': presets}, ['local-ai'], 'max')
         self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['output'], 2048)
+        self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['input'], 2048)
+        self.assertEqual(cfg['compaction']['reserved'], 1024)
 
     def test_project_copy_excludes_hooks_credentials_and_agent_config(self):
         with tempfile.TemporaryDirectory() as d:
