@@ -98,3 +98,7 @@ them by default.
 Gaming retains 4K context and 1K output. Normal/Max use default 16K contexts with 4K/8K output ceilings. Smaller customised contexts reduce their output ceilings automatically. The gateway preserves Ollama length cutoffs in both JSON and SSE, and OpenCode advertises the active limits. The installer migrates stock contexts once and adds native cutoff checks. Actual M6 memory pressure and long-response performance remain unverified. See [context and output settings](docs/CONTEXT-MANAGEMENT.md).
 
 The automated installer now applies mode-specific native compaction and rejects oversized text input through Ollama's own context enforcement. It reserves output/tool space in OpenCode and checks first messages, history and tool envelopes during Mac acceptance. [Context management and remaining limits](docs/CONTEXT-MANAGEMENT.md).
+
+## Planned model team and handoffs
+
+The agreed three-model team, routing rules, handoff contract and 32 GB memory policy are recorded in [MODEL-TEAM-AND-HANDOFFS.md](docs/MODEL-TEAM-AND-HANDOFFS.md). [HANDOFF-IMPLEMENTATION-PLAN.md](docs/HANDOFF-IMPLEMENTATION-PLAN.md) maps the work to current modules and orders implementation. These are design documents; the current installer still uses the existing presets and does not implement this delegation system.
