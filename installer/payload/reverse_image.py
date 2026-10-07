@@ -227,3 +227,17 @@ def retrieve(config, workspace_path):
         if destination:
             links.append(f"{index}. [{index}]({_safe_markdown_url(destination)})")
     return messages, "\n\nReverse-image results:\n" + "\n".join(links)
+
+
+def search_tool(config, workspace_path):
+    original = _workspace_image(config, workspace_path)
+    derivative, width, height = sanitise_image(original)
+    matches = _search_yandex(config, derivative)
+    return {
+        "notice": (
+            "A metadata-free derivative was sent to Yandex through the installer-managed VPN proxy. "
+            "Visual similarity does not prove identity, authorship, provenance, or original publication."
+        ),
+        "sanitised_dimensions": {"width": width, "height": height},
+        "matches": matches,
+    }
