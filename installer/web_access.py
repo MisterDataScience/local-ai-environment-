@@ -57,10 +57,12 @@ def specification(images):
         "vpn": {"image": images["vpn"], "cap_add": ["NET_ADMIN"],
                 "devices": ["/dev/net/tun:/dev/net/tun"], "env_file": ["vpn.env"],
                 "environment": {"VPN_SERVICE_PROVIDER": "protonvpn", "VPN_TYPE": "wireguard",
-                                "FREE_ONLY": "on", "FIREWALL": "on", "FIREWALL_INPUT_PORTS": "8090",
+                                "FREE_ONLY": "on", "FIREWALL": "on", "FIREWALL_INPUT_PORTS": "8090,8888",
+                                "HTTPPROXY": "on", "HTTPPROXY_LOG": "off",
+                                "HTTPPROXY_LISTENING_ADDRESS": ":8888", "HTTPPROXY_STEALTH": "on",
                                 "VPN_PORT_FORWARDING": "off", "DNS_UPSTREAM_RESOLVER_TYPE": "dot",
                                 "DNS_UPSTREAM_RESOLVERS": "cloudflare", "DNS_UPSTREAM_IPV6": "off"},
-                "ports": ["127.0.0.1:8090:8090"], "mem_limit": "256m", "cpus": 0.5},
+                "ports": ["127.0.0.1:8090:8090", "127.0.0.1:8888:8888"], "mem_limit": "256m", "cpus": 0.5},
         "search": {"image": images["search"], "network_mode": network,
                    "depends_on": {"vpn": {"condition": "service_healthy"}},
                    "volumes": ["./settings.yml:/etc/searxng/settings.yml:ro", "./resolv.conf:/etc/resolv.conf:ro"],
@@ -161,12 +163,13 @@ def configure(root):
         backup = root / "control/config.before-web-access.json"
         if not backup.exists():
             save(backup, config)
-        config["web"] = {"enabled": True, "url": "http://127.0.0.1:8090", "api_key": api_key}
+        config["web"] = {"enabled": True, "url": "http://127.0.0.1:8090",
+                         "proxy_url": "http://127.0.0.1:8888", "api_key": api_key}
         save(config_path, config)
         start(root)
         save(root / "web-acceptance-report.json", {"status": "vpn_service_ready", "images": images,
              "search_and_page_test": "pending", "vpn_drop_and_dns_leak_test": "pending"})
-        print("VPN service ready. Use /search QUERY or /read https://example.org QUESTION in your chat.")
+        print("VPN service ready. Search/page retrieval and the loopback-only HTTP proxy are available.")
         print("Actual search/page and tunnel-drop checks are still required. See WEB-ACCESS.md.")
     finally:
         runtime_lock.close()

@@ -37,7 +37,7 @@ No Homebrew commands, manual model placement, environment activation, API-key co
 
 ## What it installs
 
-The gateway keeps model loading/unloading and serial media handoffs. Open WebUI owns tools and approvals; the gateway passes function definitions, calls and results between it and Ollama. The former private tool loop, calculator/time workers and disabled GitHub adapter are removed. See [native tools](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/NATIVE-TOOLS.md), also included in the ZIP. VPN setup registers a server-side OpenAPI connection named Local AI VPN retrieval; enable it in the chat's Integrations menu or attach it to a model. GitHub can be configured with the new helper; no account credential is included.
+The gateway keeps model loading/unloading and serial media handoffs. Open WebUI owns tools and approvals; the gateway passes function definitions, calls and results between it and Ollama. The former private tool loop, calculator/time workers and disabled GitHub adapter are removed. See [native tools](https://github.com/MisterDataScience/local-ai-environment-/blob/main/docs/NATIVE-TOOLS.md), also included in the ZIP. VPN setup registers a server-side OpenAPI connection named Local AI VPN retrieval; enable it in the chat's Integrations menu or attach it to a model. The same connection can expose opt-in Yandex reverse image search after `Configure Reverse Image Search.command` is run. GitHub can be configured with the new helper; no account credential is included.
 
 | Component | Choice |
 | --- | --- |
@@ -90,13 +90,26 @@ Explain this Python function.        -> text
 /video A red car slowly driving.     -> video
 /search Python official tutorial    -> VPN search, if configured
 /read https://www.python.org/        -> VPN page summary, if configured
+/reverse Inbox/photo.jpg              -> VPN-only Yandex reverse image search, if configured
 ```
 
 Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large: 60 seconds. No model loads merely from selecting it. A text request for a different model explicitly unloads the old model first. Use `AI Modes.command` for enforced Gaming/Normal/Max restrictions. Gaming permits only Qwen3 4B and blocks media. Normal permits small/everyday text and images. Max permits all configured models and media. Wait for Ready after switching. See RESOURCE-MODES.md in the ZIP.
 
 The gateway unloads Ollama and confirms an empty loaded-model list before starting ComfyUI. After each image or video job, it stops ComfyUI's process group and waits for exit before allowing text to reload. Multiple gateway requests are serialised. Do not connect another client directly to this private Ollama server or manually start ComfyUI on its private port during use.
 
-Each inference response is buffered until complete; structured tool calls are preserved in both normal and SSE responses. Open WebUI handles execution and continuation. Images appear in chat and video returns an MP4 link. Optional web commands still supply bounded evidence and sources. Native document/memory/notes/code tools belong to Open WebUI and need their own configuration and validation. Image understanding, image-conditioned video, voice and automatic media routing are not implemented by the gateway.
+Each inference response is buffered until complete; structured tool calls are preserved in both normal and SSE responses. Open WebUI handles execution and continuation. Images appear in chat and video returns an MP4 link. Optional web commands still supply bounded evidence and sources. Reverse image search, when separately configured, accepts only an encrypted-workspace image path, strips metadata into a local derivative and sends it to Yandex through the loopback-only Gluetun HTTP proxy with no direct fallback. Native document/memory/notes/code tools belong to Open WebUI and need their own configuration and validation. Image understanding, image-conditioned video, voice and automatic media routing are not implemented by the gateway.
+
+## Optional reverse image search
+
+This feature requires the encrypted AI Workspace and VPN web access first. While Local AI is stopped, run:
+
+```bash
+/bin/bash "$HOME/LocalAI-Automated/Configure Reverse Image Search.command"
+```
+
+Enter the Yandex Cloud folder ID and Search API key locally. The key is hidden during entry and stored in the owner-only local configuration. Restart Local AI afterward. The tool is never invoked automatically. It reads only a path explicitly selected inside the encrypted workspace, creates a metadata-free bounded JPEG derivative and sends that derivative through `http://127.0.0.1:8888`, Gluetun's HTTP proxy. If VPN health or the proxy fails, the search fails rather than trying the ordinary connection. Yandex still receives the derivative image itself.
+
+See `docs/WEB-ACCESS.md` for Yandex role/scope setup, privacy boundaries and native validation requirements.
 
 ## Shutdown
 

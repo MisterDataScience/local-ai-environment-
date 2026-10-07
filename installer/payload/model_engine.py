@@ -22,6 +22,7 @@ from web_client import retrieve
 from tool_protocol import tools_for_ollama, assistant_for_openai
 from workflows import fill_workflow, output_files
 import resource_modes
+import reverse_image
 import vault_media
 from vault_tools import mounted_root, enabled as vault_enabled
 
@@ -315,6 +316,9 @@ class Engine:
                 raise RuntimeError("Stop manually started ComfyUI. The gateway must own it.")
             if route in {"image", "video"}:
                 return self.render(route, prompt)
+            if route == "reverse":
+                self.state = "retrieving-reverse-image"
+                return reverse_image.format_result(reverse_image.search_tool(self.config, prompt))
             links = ""
             preset = dict(self.text_models[body['model']])
             if self.mode == 'gaming':

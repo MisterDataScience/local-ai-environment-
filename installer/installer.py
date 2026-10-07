@@ -27,7 +27,7 @@ COMFY_RELEASE = "v0.38.0"
 WEBUI_RELEASE = "0.11.1"
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
-                 "tool_protocol.py", "web_tools_api.py", "vault_tools.py", "vault_media.py", "resource_modes.py")
+                 "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py")
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -186,7 +186,7 @@ def install_environments(root, uv, state):
     # Preserve workflow edits on subsequent installer runs.
     if not (control / "workflows").exists():
         shutil.copytree(SOURCE / "payload/workflows", control / "workflows")
-    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "workspace_setup.py", "account_tools.py", "vault_backup.py", "mode_selector.py", "work_agent.py"):
+    for name in ("runtime.py", "common.py", "remote_access.py", "web_access.py", "reverse_image_setup.py", "workspace_setup.py", "account_tools.py", "vault_backup.py", "mode_selector.py", "work_agent.py"):
         shutil.copy2(SOURCE / name, control / name)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -199,7 +199,7 @@ def install_environments(root, uv, state):
     python = control / ".venv/bin/python"
     if not python.exists():
         run([uv, "venv", "--python", "3.11", control / ".venv"])
-    run([uv, "pip", "install", "--python", python, "Pillow>=11,<13", "imageio-ffmpeg==0.6.0"])
+    run([uv, "pip", "install", "--python", python, "Pillow>=11,<13", "requests>=2.32,<3", "imageio-ffmpeg==0.6.0"])
     run([python, "-c", "import imageio_ffmpeg, subprocess; subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True)"])
     run([python, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=control)
     webui = root / "webui"
@@ -314,7 +314,7 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
-    for label, module in (("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
+    for label, module in (("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
                          ("Restore AI Workspace", "vault_backup.py --restore"), ("Archive Existing AI Files", "vault_backup.py --migrate-legacy")):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +

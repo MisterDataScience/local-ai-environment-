@@ -82,6 +82,15 @@ class NativeToolsTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 protocol.assistant_for_openai(message, [TOOL])
 
+    def test_reverse_command_requires_explicit_path_and_routes_without_guessing(self):
+        body = {"model": "local-ai", "messages": [{"role": "user", "content": "/reverse Inbox/photo.jpg"}]}
+        messages, route, prompt = routing.messages_and_route(body)
+        self.assertEqual(route, "reverse")
+        self.assertEqual(prompt, "Inbox/photo.jpg")
+        self.assertEqual(messages[-1]["content"], "/reverse Inbox/photo.jpg")
+        with self.assertRaises(ValueError):
+            routing.messages_and_route({"model": "local-ai", "messages": [{"role": "user", "content": "/reverse"}]})
+
     def test_old_commands_do_not_repeat_on_tool_continuation(self):
         body = {"model": "local-ai", "messages": [{"role": "user", "content": "/image old"},
                 {"role": "assistant", "content": "", "tool_calls": [CALL]},
@@ -144,9 +153,9 @@ class NativeToolsTests(unittest.TestCase):
 
 
 class WebBridgeTests(unittest.TestCase):
-    def test_specification_exposes_only_two_vpn_operations(self):
+    def test_specification_exposes_three_vpn_operations(self):
         spec = web_tools_api.specification()
-        self.assertEqual({v["post"]["operationId"] for v in spec["paths"].values()}, {"vpn_search_web", "vpn_read_page"})
+        self.assertEqual({v["post"]["operationId"] for v in spec["paths"].values()}, {"vpn_search_web", "vpn_read_page", "vpn_reverse_image"})
         self.assertEqual(spec["security"], [{"bearerAuth": []}])
 
     def test_retrieval_uses_existing_vpn_client_and_returns_sources(self):
@@ -156,11 +165,20 @@ class WebBridgeTests(unittest.TestCase):
         fetch.assert_called_once_with(config, "search", {"query": "test"}, text_budget=6000)
         self.assertEqual(result["sources"][0]["text"], "evidence")
 
+    def test_reverse_image_uses_dedicated_fail_closed_client(self):
+        config = {"web": {"enabled": True}}
+        result = {"matches": [{"page_url": "https://example.org"}]}
+        with patch.object(web_tools_api.reverse_image, "search_tool", return_value=result) as search:
+            self.assertEqual(web_tools_api.execute(config, "vpn_reverse_image",
+                                                   {"workspace_path": "Inbox/photo.jpg"}), result)
+        search.assert_called_once_with(config, "Inbox/photo.jpg")
+
     def test_invalid_arguments_fail_before_network(self):
         with patch.object(web_tools_api, "fetch_sources") as fetch:
             for name, args in (("shell", {}), ("vpn_search_web", {"query": "x", "token": "secret"}),
                                ("vpn_read_page", {"url": "file:///etc/passwd"}),
-                               ("vpn_read_page", {"url": "https://user:secret@example.org"})):
+                               ("vpn_read_page", {"url": "https://user:secret@example.org"}),
+                               ("vpn_reverse_image", {"workspace_path": "Inbox/a.jpg", "extra": "x"})):
                 with self.assertRaises(ValueError):
                     web_tools_api.execute({}, name, args)
             fetch.assert_not_called()
