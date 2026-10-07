@@ -1,6 +1,6 @@
 # VPN-isolated web search, page reading and reverse image search
 
-Implemented in the prototype on 2026-10-05. Unit/mock checks passed; the Docker stack, Proton tunnel, DNS isolation and live search have not been exercised on your Mac. This is not a verified anonymity or leak-proof claim.
+Web search/page reading was implemented on 2026-10-05; reverse image search was added on 2026-10-07. Existing web unit/mock checks passed before the reverse-image change, and new reverse-image tests are included in the installer suite, but no repository CI run has executed them yet. The Docker stack, Proton tunnel, DNS isolation and live Yandex search have not been exercised on your Mac. This is not a verified anonymity or leak-proof claim.
 
 ## Included behaviour
 
