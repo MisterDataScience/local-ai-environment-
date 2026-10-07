@@ -35,7 +35,7 @@ For ordinary chat, the launcher registers an authenticated server-side OpenAPI c
 
 ## Optional Yandex reverse image search
 
-Reverse image search is opt-in and is never called automatically. It uses Yandex Search API only when the `vpn_reverse_image` tool is explicitly invoked. The tool accepts a relative image path inside the manually unlocked encrypted AI Workspace, for example `Inbox/photo.jpg`.
+Reverse image search is opt-in and is never called automatically by the gateway. It uses Yandex Search API only when you use the explicit `/reverse` command or explicitly request the `vpn_reverse_image` tool. The tool accepts a relative image path inside the manually unlocked encrypted AI Workspace, for example `Inbox/photo.jpg`.
 
 Before anything leaves the Mac, the gateway opens the selected file through the workspace's mount-checked, no-follow file boundary, decodes it locally, applies EXIF orientation, removes metadata, converts it to RGB JPEG and downsizes it to a bounded derivative. The original filename, workspace path and EXIF metadata are not included in the Yandex request. Yandex still receives the derivative's image pixels, so this is not appropriate for an image you are unwilling to disclose to Yandex in any visual form.
 
@@ -102,7 +102,7 @@ PDFs, authenticated sites, paywalls, JavaScript-only pages, transcripts, recursi
 
 - Public HTTP/HTTPS URLs on ports 80/443 only. URL credentials and local/private/reserved/multicast addresses are rejected, including mixed public/private DNS. Connections are pinned to a validated IP, with certificate verification and original-hostname TLS. Redirects are revalidated; HTTPS downgrades blocked.
 - Redirect, byte, text, time and concurrency limits bound work. Scripts/styles are stripped; no JavaScript executes. Retrieved instructions are untrusted evidence. Prompt-injection mitigation is not a model-behaviour guarantee.
-- Only the authenticated reader endpoint and the Gluetun HTTP proxy are published, on **127.0.0.1:8090** and **127.0.0.1:8888** respectively. Both bind to loopback. SearXNG and VPN health are not separately published. The reader is unprivileged/read-only, with no Docker socket or chat/model files mounted. Do not expose 8090 through LAN/Tailscale/Funnel.
+- Only the authenticated reader endpoint and the Gluetun HTTP proxy are published, on **127.0.0.1:8090** and **127.0.0.1:8888** respectively. Both bind to loopback. SearXNG and VPN health are not separately published. The reader is unprivileged/read-only, with no Docker socket or chat/model files mounted. Do not expose 8090 or 8888 through LAN/Tailscale/Funnel.
 - The gateway contacts only the fixed loopback endpoint. Remote-device retrieval happens on the Mac. Clicking a source yourself uses normal browser/device traffic, not AI retrieval.
 - Proton sees your VPN connection; sites see its exit IP. Upstream search engines receive the search query. The reader sends the requested URL, not chat history. Your local model receives fetched text. This is not absolute anonymity.
 - Open WebUI built-in search is disabled. `ENABLE_LOCAL_WEB_FETCH=False` blocks private-network destinations for its loader, **not all public URL loading**. Do not use separate website/URL ingestion or third-party tools/plugins/previews as substitutes for the VPN OpenAPI bridge or explicit commands. This version does not impose OS-level outbound blocking on native processes. Isolation claims cover the implemented gateway paths, not every possible WebUI extension or feature.
