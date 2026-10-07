@@ -18,9 +18,9 @@ from backend_http import completion_error
 LOG = logging.getLogger("gateway")
 
 
-def completion_message(result):
+def completion_message(result, finish_reason=None):
     message = {"role": "assistant", "content": result} if isinstance(result, str) else result
-    return message, "tool_calls" if message.get("tool_calls") else "stop"
+    return message, finish_reason or ("tool_calls" if message.get("tool_calls") else "stop")
 
 
 def completion_delta(message):
@@ -196,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
         if not body.get("stream"):
             try:
                 content = future.result()
-                message, finish = completion_message(content)
+                message, finish = completion_message(content, body.get('_finish_reason'))
                 return self.json_response(200, {"id": identifier, "object": "chat.completion",
                     "created": created, "model": body["model"], "usage": body.get("_usage", {}), "choices": [
                         {"index": 0, "message": message, "finish_reason": finish}]})
@@ -229,7 +229,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(("data: " + json.dumps(payload) + "\n\ndata: [DONE]\n\n").encode())
                 self.wfile.flush()
                 return
-            message, reason = completion_message(content)
+            message, reason = completion_message(content, body.get('_finish_reason'))
             for delta, finish in [(completion_delta(message), None), ({}, reason)]:
                 chunk = {"id": identifier, "object": "chat.completion.chunk", "created": created,
                          "model": body["model"], "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
@@ -253,3 +253,4 @@ class MediaHandler(Handler):
     def do_POST(self):
         self.close_connection = True
         return self.json_response(404, {"error": "Not found"})
+

@@ -50,10 +50,12 @@ It still buffers the complete response: OpenCode's Stop button does not guarante
 immediate cancellation of an already-running Ollama request. Existing handoff
 and unload rules remain in force.
 
-The current 4K/8K contexts and local model tool reliability are constraints. Start
+The default 16K contexts and local model tool reliability are constraints. Start
 with small, well-scoped tasks. OpenCode's automatic compaction is enabled with a
 2,048-token buffer; it does not make a small context unlimited or guarantee that
-all tool schemas fit. Real local-model task performance remains unverified.
+all tool schemas fit. Advertised output is 4,096 in Normal or 8,192 in Max,
+bounded further to half a custom smaller context. Restart after a mode change
+to refresh these limits. Real local-model task performance remains unverified.
 
 ## Workspace, credentials and execution boundaries
 
@@ -118,3 +120,4 @@ Sources:
 - https://opencode.ai/docs/web/
 - https://opencode.ai/docs/permissions/
 - https://github.com/open-webui/open-webui/blob/v0.11.1/backend/open_webui/config.py
+

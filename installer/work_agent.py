@@ -86,12 +86,13 @@ def copy_project(source, destination, max_bytes=256*1024*1024):
         raise
 
 
-def configuration(config, identifiers):
+def configuration(config, identifiers, mode='normal'):
     sys.path.insert(0, str(Path(__file__).resolve().parent / 'payload'))
-    from text_models import configured_text_models
+    from text_models import configured_text_models, output_ceiling
     presets = configured_text_models(config)
     models = {key: {'name': presets[key]['name'], 'limit': {
-        'context': presets[key]['num_ctx'], 'output': 2048}} for key in identifiers if key in presets}
+        'context': presets[key]['num_ctx'], 'output': output_ceiling(mode, presets[key])}}
+        for key in identifiers if key in presets}
     if not models:
         raise ValueError('No eligible local model for the work agent')
     preferred = 'local-ai' if 'local-ai' in models else next(iter(models))
@@ -140,7 +141,7 @@ def main():
     if port_open(4096):
         raise RuntimeError('Port 4096 is occupied. Close the other work agent first.')
     models = http(base + '/v1/models', key=key)['data']
-    settings = configuration(config, [m['id'] for m in models])
+    settings = configuration(config, [m['id'] for m in models], status['mode'])
     binary = root / 'tools/opencode' / VERSION / 'opencode'
     if not binary.is_file():
         raise RuntimeError('OpenCode is missing. Rerun the Local AI installer.')
@@ -191,3 +192,4 @@ if __name__ == '__main__':
         main()
     except Exception as error:
         raise SystemExit('Work agent stopped: ' + str(error))
+

@@ -159,9 +159,9 @@ Initial installation needs internet. Inference is configured to use local servic
 
 ## Text presets and timeout configuration
 
-Edit `~/LocalAI-Automated/control/config.json` while services are stopped. The `text_models` entries set `model`, `name`, `keep_alive_seconds`, `num_ctx` and `thinking`. Timeouts are integers from 0 to 3600 seconds; 0 releases the model after each reply. Context values are 512 to 8192. Restart to apply changes. Client messages cannot override timeout or context settings. Keep `local-ai` as the default ID.
+Edit `~/LocalAI-Automated/control/config.json` while services are stopped. The `text_models` entries set `model`, `name`, `keep_alive_seconds`, `num_ctx` and `thinking`. Timeouts are integers from 0 to 3600 seconds; 0 releases the model after each reply. Context values are 512 to 16384. Default presets now use 16384 outside Gaming; Gaming clamps them to 4096. Output caps are 1024/4096/8192 for Gaming/Normal/Max, additionally bounded to half the effective context. Restart to apply changes. Client messages cannot override timeout or context settings. Keep `local-ai` as the default ID.
 
-The new installer adds Small and Large presets to older configurations once, preserving the existing default model and secrets, with a private `config.before-text-presets.json` backup. Later reruns preserve edited presets. Downloads and native acceptance checks follow the configured models. The three default text downloads total roughly 31 GB; this is download size, not peak runtime memory. Large-model memory and performance still require validation on your Mac.
+The new installer adds Small and Large presets to older configurations once, preserving the existing default model and secrets, with a private `config.before-text-context-v2.json` backup. Later reruns preserve edited presets. Downloads and native acceptance checks follow the configured models. The three default text downloads total roughly 31 GB; this is download size, not peak runtime memory. Large-model memory and performance still require validation on your Mac.
 
 To upgrade an earlier installation, stop Local AI, extract this updated bundle and rerun the same installation command. The installer removes only the named retired project modules and their tests from control; chats, models, workflows and credentials are preserved. The obsolete tool_loop_enabled config flag is ignored. Changed code/configuration invalidates the previous acceptance fingerprint. The installer runs generation checks again and stops if any configured model fails.
 
@@ -199,3 +199,10 @@ The installer enables Open WebUI's existing conversation compaction at a conserv
 compaction and pruning. Gateway reply limits and structured failures support these
 clients; no duplicate summariser is installed. Large individual inputs still need
 care: see [context management and Mac acceptance](../docs/CONTEXT-MANAGEMENT.md).
+
+
+### Longer output on the 32 GB M6 Mac mini
+
+The default contexts are now 16K outside Gaming, with 4K output in Normal and 8K in Max. Gaming remains 4K context/1K output. The installer migrates recognised stock contexts once and preserves custom values. Ollama length cutoffs are reported accurately in JSON and SSE; each preset receives a native eight-token cutoff acceptance check. Existing one-model concurrency, unloading and GPU memory safeguards remain in place.
+
+16K must be validated on the actual 32 GB Mac with normal background applications and the optional Docker stack. A short acceptance response does not establish maximum-length performance or memory pressure. Read CONTEXT-MANAGEMENT.md for long-response testing and smaller-context fallback settings. Reinstall the full updated bundle with services stopped; do not copy only gateway.py.

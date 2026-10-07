@@ -223,7 +223,7 @@ def install_environments(root, uv, state):
     upgraded = upgrade_text_configuration(config)
     if upgraded != config:
         # Keep the old settings and secrets recoverable before migrating.
-        backup = config_path.with_name("config.before-text-presets.json")
+        backup = config_path.with_name("config.before-text-context-v2.json")
         if not backup.exists():
             backup.write_text(json.dumps(config, indent=2) + "\n")
             backup.chmod(0o600)
@@ -232,6 +232,19 @@ def install_environments(root, uv, state):
         temporary.chmod(0o600)
         temporary.replace(config_path)
     return upgraded
+
+
+def verify_text_cutoff(key, identifier):
+    """Exercise native output exhaustion, not just a one-sentence smoke test."""
+    response = http('http://127.0.0.1:8001/v1/chat/completions',
+                    {'model': identifier, 'stream': False, 'max_completion_tokens': 8,
+                     'messages': [{'role': 'user', 'content':
+                                   'Write a detailed 2000-word essay about the history of computing.'}]},
+                    key=key, timeout=4000)
+    reason = response['choices'][0]['finish_reason']
+    if reason != 'length':
+        raise RuntimeError(f'{identifier}: output-cutoff acceptance did not report length; check the installed Ollama backend.')
+    return {'finish_reason': reason, 'usage': response.get('usage', {})}
 
 
 def verify_generation(root, configuration):
@@ -292,6 +305,10 @@ def verify_generation(root, configuration):
             report["checks"].append({"name": kind, "model_id": identifier,
                                      "seconds": round(time.monotonic() - started, 1),
                                      "status": "passed", "result": content})
+            if kind == 'text-' + identifier:
+                cutoff = verify_text_cutoff(configuration['api_key'], identifier)
+                report['checks'].append({'name': 'cutoff-' + identifier, 'model_id': identifier,
+                                         'status': 'passed', **cutoff})
             (root / "acceptance-report.json").write_text(json.dumps(report, indent=2) + "\n")
     finally:
         for process in reversed(processes):
@@ -420,3 +437,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

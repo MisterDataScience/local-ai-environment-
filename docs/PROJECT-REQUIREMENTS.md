@@ -4,7 +4,7 @@ Recorded 2026-10-05. Optional private Tailscale remote access has since been add
 
 ## Hardware and purpose
 
-Target: a 32 GB unified-memory Apple Silicon Mac mini. Provide local text/reasoning/coding chat, images, video and controlled web search/retrieval from one chat interface. macOS, ordinary applications and games share the same memory pool. Cold-start latency and sequential model swapping are acceptable.
+Target: the user's 32 GB unified-memory M6 Mac mini. Native verification on that machine remains pending. Provide local text/reasoning/coding chat, images, video and controlled web search/retrieval from one chat interface. macOS, ordinary applications and games share the same memory pool. Cold-start latency and sequential model swapping are acceptable.
 
 The user should not need to launch or configure Ollama, ComfyUI, Docker, search, VPN or the gateway during ordinary use. Initial account credentials and any required macOS permissions are separate setup requirements.
 
@@ -27,7 +27,7 @@ Infrastructure running does not mean model weights must remain resident. A persi
 | Normal | Better everyday model | Enabled through VPN | Images available; video eligibility to define | On-demand loading and sequential handoff |
 | Max / Heavy | Largest sensible model validated on this Mac | Enabled through VPN | Both available | Full reasoning/coding access, sequential handoff |
 
-Prefer explicit selection initially; automatic game detection is not required. Initial text presets now use Qwen3 4B, 14B and 30B-A3B, with 120/300/60-second idle timeouts. They are selectable text options, not enforced global profiles; budgets and native compatibility remain unmeasured. World of Warcraft is an example gaming workload, not a verified performance test.
+Prefer explicit selection initially; automatic game detection is not required. Initial text presets now use Qwen3 4B, 14B and 30B-A3B, with 120/300/60-second idle timeouts. They are selectable text options under enforced Gaming/Normal/Max profiles; budgets and native compatibility remain unmeasured. Current stock contexts are 16K outside Gaming and 4K in Gaming; output caps are 4K/8K for Normal/Max and 1K for Gaming, further bounded by customised smaller contexts. World of Warcraft is an example gaming workload, not a verified performance test.
 
 Gaming Mode must enforce restrictions in backend code, not just a prompt or hidden menu option. Old chats, queued requests and tools must obey the active global profile.
 
@@ -85,3 +85,4 @@ First inspect the already-selected orchestrator and compare established tools. D
 ## Remote devices
 
 Access the same chat, history, folders and generated outputs from iPad, phone and Windows through private Tailscale HTTPS. This installer option is implemented with one-time sign-in and extension approval. It does not route ordinary internet traffic through Proton or implement background AI startup. See REMOTE-ACCESS.md for scope and pending browser validation.
+

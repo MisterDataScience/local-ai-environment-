@@ -16,7 +16,8 @@ class WorkAgentTests(unittest.TestCase):
         self.assertEqual(cfg['enabled_providers'], ['local-ai-gateway'])
         provider = cfg['provider']['local-ai-gateway']
         self.assertEqual(provider['options']['baseURL'], 'http://127.0.0.1:8001/v1')
-        self.assertEqual(provider['models']['local-ai']['limit']['context'], 8192)
+        self.assertEqual(provider['models']['local-ai']['limit']['context'], 16384)
+        self.assertEqual(provider['models']['local-ai']['limit']['output'], 4096)
         self.assertEqual(cfg['permission']['bash'], 'ask')
         self.assertEqual(cfg['permission']['edit'], 'ask')
         self.assertEqual(cfg['permission']['external_directory'], 'deny')
@@ -24,6 +25,16 @@ class WorkAgentTests(unittest.TestCase):
         self.assertEqual(cfg['default_agent'], 'plan')
         self.assertFalse(cfg['autoupdate'])
         self.assertEqual(cfg['share'], 'disabled')
+
+    def test_output_advertisement_matches_mode_and_custom_context(self):
+        import copy
+        for mode, expected in [('normal', 4096), ('max', 8192)]:
+            cfg = w.configuration({'text_models': DEFAULT_TEXT_MODELS}, ['local-ai'], mode)
+            self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['output'], expected)
+        presets = copy.deepcopy(DEFAULT_TEXT_MODELS)
+        presets['local-ai']['num_ctx'] = 4096
+        cfg = w.configuration({'text_models': presets}, ['local-ai'], 'max')
+        self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['output'], 2048)
 
     def test_project_copy_excludes_hooks_credentials_and_agent_config(self):
         with tempfile.TemporaryDirectory() as d:
@@ -114,3 +125,4 @@ class WorkAgentTests(unittest.TestCase):
             run.assert_not_called()
 
 if __name__ == '__main__': unittest.main()
+

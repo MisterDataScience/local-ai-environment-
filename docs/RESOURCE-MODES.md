@@ -15,6 +15,11 @@ selected mode but do not expose the mode-control page through the media listener
 
 VPN search, page reading, GitHub and encrypted workspace tools remain available
 subject to their own setup, account permissions and vault/network state.
+Normal caps output at 4,096 tokens; Max caps it at 8,192. Default presets use
+16,384-token contexts outside Gaming. Custom smaller contexts also cap output
+at half their context; client requests may ask for shorter replies. Native
+memory validation on the intended 32 GB M6 Mac mini remains required.
+
 Gaming caps context at 4,096 tokens, output at 1,024 tokens, thinking off, and idle
 residency at 120 seconds. These are enforced request/model limits, **not an OS RAM
 quota** or a guarantee of game performance. macOS, Docker, WebUI and games share
@@ -68,3 +73,4 @@ limits, persisted mode, queue invalidation, active-render interruption, unload
 failure recovery, authenticated HTTP controls, model-list filtering and isolation
 from the media listener. On the Mac additionally verify native browser selection,
 Open WebUI refresh behaviour, real Ollama unloading, MPS release and game memory.
+

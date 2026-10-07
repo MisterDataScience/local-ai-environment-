@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 import threading
+import tempfile
 import unittest
 from http.server import ThreadingHTTPServer
 from unittest.mock import Mock, patch
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import backend_http
 import http_api
 import model_engine
+from text_models import DEFAULT_TEXT_MODELS, output_ceiling
 
 
 class ContextProtocolTests(unittest.TestCase):
@@ -22,11 +24,83 @@ class ContextProtocolTests(unittest.TestCase):
         self.assertEqual(model_engine.output_limit({'max_tokens': 1000}), 1000)
         self.assertEqual(model_engine.output_limit({'max_completion_tokens': 500}), 500)
         self.assertEqual(model_engine.output_limit({'max_tokens': 800, 'max_completion_tokens': 400}), 400)
-        self.assertEqual(model_engine.output_limit({'max_tokens': 9999}), 2048)
-        self.assertEqual(model_engine.output_limit({'max_tokens': 9999}, True), 1024)
+        self.assertEqual(model_engine.output_limit({'max_tokens': 9999}), 8192)
+        for mode, ceiling in [('gaming', 1024), ('normal', 4096), ('max', 8192)]:
+            self.assertEqual(model_engine.output_limit({}, mode), ceiling)
+            self.assertEqual(model_engine.output_limit({'max_tokens': 99999}, mode), ceiling)
+            self.assertEqual(model_engine.output_limit({'max_tokens': 32}, mode), 32)
+        self.assertEqual(output_ceiling('max', {'num_ctx': 4096}), 2048)
         for value in (0, -1, True, 1.5, '100', None):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 model_engine.output_limit({'max_tokens': value})
+
+    def test_engine_cutoff_reason_reaches_json_and_sse_without_changing_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = model_engine.Engine({'api_key': 'test-key', 'text_models': DEFAULT_TEXT_MODELS}, Path(directory))
+            server = ThreadingHTTPServer(('127.0.0.1', 0), http_api.Handler)
+            server.engine = engine
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for reason, expected in [('length', 'length'), ('stop', 'stop'), (None, 'stop')]:
+                    for stream in (False, True):
+                        with self.subTest(reason=reason, stream=stream):
+                            def backend(base, path, payload=None, timeout=30):
+                                if path == '/api/ps':
+                                    return {'models': []}
+                                self.assertEqual(payload['options']['num_predict'], 7)
+                                self.assertFalse(payload['stream'])
+                                return {'message': {'content': 'unfinished essay'}, 'done_reason': reason,
+                                        'prompt_eval_count': 20, 'eval_count': 7}
+                            body = {'model': 'local-ai', 'stream': stream, 'max_completion_tokens': 7,
+                                    '_finish_reason': 'injected',
+                                    'messages': [{'role': 'user', 'content': 'Write an essay'}]}
+                            request = Request(f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
+                                data=json.dumps(body).encode(), headers={'Authorization': 'Bearer test-key'})
+                            with patch.object(model_engine, 'api', side_effect=backend), \
+                                 patch.object(model_engine, 'port_open', return_value=False), \
+                                 urlopen(request, timeout=2) as response:
+                                text = response.read().decode()
+                            if stream:
+                                chunks = [json.loads(line[6:]) for line in text.splitlines()
+                                          if line.startswith('data: ') and line != 'data: [DONE]']
+                                self.assertIsNone(chunks[0]['choices'][0]['finish_reason'])
+                                self.assertEqual(chunks[0]['choices'][0]['delta']['content'], 'unfinished essay')
+                                result = chunks[-1]
+                            else:
+                                result = json.loads(text)
+                                self.assertEqual(result['choices'][0]['message']['content'], 'unfinished essay')
+                            self.assertEqual(result['choices'][0]['finish_reason'], expected)
+                            self.assertEqual(result['usage']['completion_tokens'], 7)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(2)
+                engine.executor.shutdown()
+
+    def test_actual_backend_options_follow_mode_and_preserved_custom_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = model_engine.Engine({'text_models': DEFAULT_TEXT_MODELS}, Path(directory))
+            try:
+                for mode, expected, context in [('gaming', 1024, 4096), ('normal', 4096, 16384), ('max', 8192, 16384)]:
+                    engine.mode = mode
+                    body = {'model': 'local-ai-small', 'max_tokens': 99999,
+                            'messages': [{'role': 'user', 'content': 'Write an essay'}]}
+                    with patch.object(model_engine, 'port_open', return_value=False), \
+                         patch.object(model_engine, 'api', side_effect=[{'models': []},
+                             {'message': {'content': 'essay'}, 'done_reason': 'length'}]) as backend:
+                        engine.submit(body).result(2)
+                    options = backend.call_args.args[2]['options']
+                    self.assertEqual(options['num_ctx'], context)
+                    self.assertEqual(options['num_predict'], expected)
+                    self.assertEqual(body['_finish_reason'], 'length')
+                engine.text_models['local-ai-small']['num_ctx'] = 4096
+                with patch.object(model_engine, 'port_open', return_value=False), \
+                     patch.object(model_engine, 'api', side_effect=[{'models': []}, {'message': {'content': 'essay'}}]) as backend:
+                    engine.submit(body).result(2)
+                self.assertEqual(backend.call_args.args[2]['options']['num_predict'], 2048)
+            finally:
+                engine.executor.shutdown()
 
     def test_only_explicit_backend_context_errors_are_classified(self):
         for message, expected in [('input length exceeds the context window', backend_http.ContextLengthError),
@@ -88,3 +162,4 @@ class ContextProtocolTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(2)
+

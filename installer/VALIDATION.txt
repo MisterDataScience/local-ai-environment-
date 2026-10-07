@@ -1,4 +1,18 @@
 Authoring checks completed 2026-10-06 UTC.
+Update 2026-10-07 UTC: 65 installer tests and 79 gateway tests passed locally,
+including the new reverse-image cases and output/context regressions. JSON/SSE
+cutoff propagation was tested through real loopback HTTP with mocked Ollama.
+Tests verify 1K/4K/8K output caps, 4K Gaming/16K stock contexts, shorter client
+budgets, reduced ceilings for custom small contexts, one-time stock migration,
+preserved custom settings, OpenCode limits and native-cutoff acceptance failure.
+The installer now requests an eight-token essay from every native preset and
+requires finish_reason=length. This check has not been executed on a Mac here.
+Intended hardware is the user's 32 GB M6 Mac mini. No M6 GPU benchmark, memory
+pressure, swap, long-essay or native-client cutoff display result is claimed.
+No concurrency increase or GPU/OS memory-safeguard override was introduced.
+The automated ZIP is rebuilt from the updated source and includes its guides.
+
+Earlier validation record:
 59 installer/remote/web/workspace/backup/harness tests and 68 gateway/protocol/vault/mode tests passed.
 Python syntax and installer shell syntax passed. ZIP rebuilt from current source.
 New coverage: direct vault PNG output, actual Linux FFmpeg pipe-to-MP4 encoding,
@@ -39,3 +53,4 @@ Context integration: native WebUI compaction configured; loopback JSON/SSE error
 and usage propagation tested; requested reply budgets honoured within mode caps.
 No native-client end-to-end inference or exact full-request token budget verified.
 See docs/CONTEXT-MANAGEMENT.md for remaining gaps and Mac acceptance.
+

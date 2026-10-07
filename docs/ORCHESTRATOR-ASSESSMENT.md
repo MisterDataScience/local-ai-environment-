@@ -19,9 +19,9 @@ The gateway is now modular: `gateway.py` starts it, `http_api.py` handles HTTP, 
 | Explicit unloading | Enumerates `/api/ps`, sends `/api/generate` with `keep_alive: 0`, polls empty list | Existing custom coordination using native Ollama API |
 | Sequential use | Single executor, unload before render, teardown before text | Existing custom code |
 | ComfyUI release | Starts per render and terminates process group afterward | Existing custom process management |
-| Global profile state | None | New code |
-| Profile model/tool restrictions | None | New backend policy code |
-| Gaming selector | None | UI integration and state transition code |
+| Global profile state | Persisted Gaming/Normal/Max | Implemented; native acceptance pending |
+| Profile model/tool restrictions | Backend tag-based text/media checks, queue invalidation and release barrier | Implemented; not an OS resource quota |
+| Gaming selector | Separate authenticated local mode page | Implemented; native browser validation pending |
 | Search/retrieval | Explicit commands or server-side OpenAPI VPN bridge | Shared VPN service; native WebUI tool integration unverified on Mac |
 | Tool loop / approval UI | Open WebUI's native functionality; gateway passes calls/results | Former bespoke loop and disabled account adapter removed; end-to-end tests pending |
 | Selective VPN | Reader/SearXNG share Gluetun/Proton Free network and DNS | Implemented; live tunnel-drop/DNS tests pending; native UI-loader/plugin egress not fully blocked |
@@ -63,4 +63,9 @@ Search isolation requires special care: Open WebUI distinguishes search from web
 
 ## Subsequent remote-access addition
 
-The installer now optionally configures Tailscale Serve for Open WebUI and a separate media-only loopback listener. New generated-media links use a private HTTPS hostname instead of localhost when enabled. This does not replace the orchestrator or add global profiles, search or unattended startup. See REMOTE-ACCESS.md; native tailnet and browser validation are pending.
+The installer now optionally configures Tailscale Serve for Open WebUI and a separate media-only loopback listener. New generated-media links use a private HTTPS hostname instead of localhost when enabled. This does not replace the orchestrator or add unattended startup. Global profiles and VPN search are implemented separately. See REMOTE-ACCESS.md; native tailnet and browser validation are pending.
+
+
+## Current output/context policy
+
+Updated 2026-10-07: stock presets now use 16K contexts outside Gaming; Gaming clamps context to 4K. Output ceilings are 1K/4K/8K in Gaming/Normal/Max, further bounded to half a smaller customised context. Length cutoffs propagate to JSON/SSE. The 32 GB M6 Mac mini target requires native memory and long-response checks. See CONTEXT-MANAGEMENT.md.

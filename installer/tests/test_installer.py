@@ -49,6 +49,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(upgraded["api_key"], "existing-secret")
         self.assertEqual(upgraded["render_timeout_seconds"], 900)
         self.assertEqual(upgraded["text_models"]["local-ai"]["model"], "custom:7b")
+        self.assertEqual(upgraded["text_models"]["local-ai"]["num_ctx"], 8192)
         self.assertTrue(upgraded["text_models"]["local-ai"]["thinking"])
         self.assertEqual(len(upgraded["text_models"]), 3)
         upgraded["text_models"]["local-ai-small"]["keep_alive_seconds"] = 45
@@ -66,6 +67,43 @@ class InstallerTests(unittest.TestCase):
                 installer.download("https://example.test/model", destination, checksum)
             self.assertEqual(destination.read_bytes(), content)
             self.assertEqual(runner.call_count, 1)
+
+    def test_stock_context_upgrade_is_once_only_and_preserves_custom_settings(self):
+        import copy
+        from text_models import DEFAULT_TEXT_MODELS, configured_text_models
+        presets = copy.deepcopy(DEFAULT_TEXT_MODELS)
+        presets['local-ai']['num_ctx'] = 8192
+        presets['local-ai']['keep_alive_seconds'] = 45
+        presets['local-ai-small']['num_ctx'] = 4096
+        presets['local-ai-large']['num_ctx'] = 4096
+        source = {'api_key': 'unchanged', 'text_models': presets}
+        upgraded = installer.upgrade_text_configuration(source)
+        self.assertEqual([p['num_ctx'] for p in upgraded['text_models'].values()], [16384] * 3)
+        self.assertEqual(upgraded['text_models']['local-ai']['keep_alive_seconds'], 45)
+        self.assertEqual(upgraded['api_key'], 'unchanged')
+        self.assertEqual(source['text_models']['local-ai']['num_ctx'], 8192)
+        # An intentional later reduction must survive subsequent installer runs.
+        upgraded['text_models']['local-ai']['num_ctx'] = 8192
+        self.assertEqual(installer.upgrade_text_configuration(upgraded), upgraded)
+        presets['local-ai']['num_ctx'] = 6144
+        presets['local-ai-large']['model'] = 'custom:7b'
+        custom = installer.upgrade_text_configuration(source)
+        self.assertEqual(custom['text_models']['local-ai']['num_ctx'], 6144)
+        self.assertEqual(custom['text_models']['local-ai-large']['num_ctx'], 4096)
+        presets['local-ai']['num_ctx'] = 16385
+        with self.assertRaises(ValueError):
+            configured_text_models(source)
+
+    def test_native_cutoff_acceptance_requires_length_signal(self):
+        with patch.object(installer, 'http', return_value={
+                'choices': [{'finish_reason': 'length', 'message': {'content': 'partial'}}],
+                'usage': {'completion_tokens': 8}}) as request:
+            result = installer.verify_text_cutoff('test-key', 'local-ai')
+        self.assertEqual(result['finish_reason'], 'length')
+        self.assertEqual(request.call_args.args[1]['max_completion_tokens'], 8)
+        with patch.object(installer, 'http', return_value={'choices': [{'finish_reason': 'stop'}]}):
+            with self.assertRaises(RuntimeError):
+                installer.verify_text_cutoff('test-key', 'local-ai')
 
     def test_interrupted_download_keeps_partial_for_resume(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -156,3 +194,4 @@ class InstallerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

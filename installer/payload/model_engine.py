@@ -17,7 +17,7 @@ import uuid
 
 from backend_http import api, port_open
 from routing import messages_and_route
-from text_models import configured_text_models
+from text_models import configured_text_models, output_ceiling
 from web_client import retrieve
 from tool_protocol import tools_for_ollama, assistant_for_openai
 from workflows import fill_workflow, output_files
@@ -30,8 +30,8 @@ ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("gateway")
 
 
-def output_limit(body, gaming=False):
-    ceiling = 1024 if gaming else 2048
+def output_limit(body, mode="max", preset=None):
+    ceiling = output_ceiling(mode, preset)
     requested = []
     for key in ("max_tokens", "max_completion_tokens"):
         if key in body:
@@ -114,6 +114,7 @@ class Engine:
 
     def submit(self, body):
         body.pop("_usage", None)
+        body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
         with self.mode_lock:
@@ -334,7 +335,7 @@ class Engine:
                 self.unload_ollama()
             self.check_policy(body, route)
             self.state = "generating-text"
-            options = {"num_ctx": preset["num_ctx"], "num_predict": output_limit(body, self.mode == "gaming")}
+            options = {"num_ctx": preset["num_ctx"], "num_predict": output_limit(body, self.mode, preset)}
             if isinstance(body.get("temperature"), (int, float)):
                 options["temperature"] = body["temperature"]
             payload = {
@@ -354,7 +355,13 @@ class Engine:
                 body['_usage'] = {'prompt_tokens': counts[0], 'completion_tokens': counts[1],
                                   'total_tokens': sum(counts)}
             answer = assistant_for_openai(message, tools)
+            # Preserve the backend's cutoff signal instead of calling every
+            # non-tool response a normal stop. Counts alone cannot prove cutoff.
+            body['_finish_reason'] = ('length' if response.get('done_reason') == 'length'
+                                      else 'tool_calls' if isinstance(answer, dict) and answer.get('tool_calls')
+                                      else 'stop')
             return answer + links if isinstance(answer, str) else answer
         finally:
             self.state = "idle"
             LOG.info("Finished %s request", route)
+
