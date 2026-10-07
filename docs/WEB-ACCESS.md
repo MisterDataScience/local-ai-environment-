@@ -39,6 +39,8 @@ Reverse image search is opt-in and is never called automatically. It uses Yandex
 
 Before anything leaves the Mac, the gateway opens the selected file through the workspace's mount-checked, no-follow file boundary, decodes it locally, applies EXIF orientation, removes metadata, converts it to RGB JPEG and downsizes it to a bounded derivative. The original filename, workspace path and EXIF metadata are not included in the Yandex request. Yandex still receives the derivative's image pixels, so this is not appropriate for an image you are unwilling to disclose to Yandex in any visual form.
 
+The explicit chat command is `/reverse Inbox/photo.jpg`. It performs the search and returns bounded matches without asking the local model to reinterpret the image. The OpenAPI operation is also available for an explicitly requested reverse-image search when the integration is enabled.
+
 The Yandex request does not use the Mac's ordinary HTTP client route. Gluetun exposes its HTTP proxy only on `127.0.0.1:8888`; the reverse-image client has environment-proxy inheritance disabled and explicitly assigns that proxy for both HTTP and HTTPS. It first checks the existing authenticated VPN health service. Redirects are disabled. If the VPN health check fails, the proxy is missing, the proxy request fails or the response is invalid, the operation stops. There is no direct-internet retry.
 
 ### One-time setup
@@ -91,6 +93,7 @@ This removes only this installation's Compose containers/network, preserving con
 | `/search What changed in Python 3.14?` | Search, attempt two result pages, answer locally with sources |
 | `/read https://docs.python.org/3/whatsnew/3.14.html Summarise the changes.` | Read that HTML page and answer the question |
 | `/read https://www.python.org/` | Summarise the page |
+| `/reverse Inbox/photo.jpg` | Send a metadata-free derivative through the VPN proxy to Yandex and return bounded matches |
 | Ordinary research/page-reading request | Enable Local AI VPN retrieval in the chat; model can call its tools, with selection and citations requiring validation |
 
 PDFs, authenticated sites, paywalls, JavaScript-only pages, transcripts, recursive crawling and clicking buttons are unsupported. Sites can refuse VPN IPs or this reader. Engines can rate-limit SearXNG. Failed page reads are labelled; snippets are not labelled full pages. Citation correctness is model-dependent.
