@@ -72,9 +72,13 @@ class WebTests(unittest.TestCase):
             self.assertNotIn("networks", cfg)
             self.assertIn("./resolv.conf:/etc/resolv.conf:ro", cfg["volumes"])
         vpn = data["services"]["vpn"]
-        self.assertEqual(vpn["ports"], ["127.0.0.1:8090:8090"])
+        self.assertEqual(vpn["ports"], ["127.0.0.1:8090:8090", "127.0.0.1:8888:8888"])
         self.assertEqual(vpn["environment"]["FREE_ONLY"], "on")
         self.assertEqual(vpn["environment"]["FIREWALL"], "on")
+        self.assertEqual(vpn["environment"]["HTTPPROXY"], "on")
+        self.assertEqual(vpn["environment"]["HTTPPROXY_LOG"], "off")
+        self.assertEqual(vpn["environment"]["HTTPPROXY_LISTENING_ADDRESS"], ":8888")
+        self.assertEqual(vpn["environment"]["HTTPPROXY_STEALTH"], "on")
         self.assertNotIn("FIREWALL_OUTBOUND_SUBNETS", vpn["environment"])
         self.assertNotIn("FIREWALL_VPN_INPUT_PORTS", vpn["environment"])
 
@@ -211,6 +215,7 @@ class WebTests(unittest.TestCase):
             self.assertEqual(cfg["api_key"], "old")
             self.assertEqual(cfg["text_models"], {"custom": 1})
             self.assertEqual(cfg["web"]["url"], "http://127.0.0.1:8090")
+            self.assertEqual(cfg["web"]["proxy_url"], "http://127.0.0.1:8888")
             self.assertEqual((root / "web/vpn.env").stat().st_mode & 0o777, 0o600)
             self.assertEqual((root / "control/config.json").stat().st_mode & 0o777, 0o600)
             self.assertEqual((root / "web/resolv.conf").read_text().splitlines()[0], "nameserver 127.0.0.1")
