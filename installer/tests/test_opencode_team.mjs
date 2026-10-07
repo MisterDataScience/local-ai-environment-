@@ -19,7 +19,7 @@ async function fixture(t) {
     get: async () => ({ data: session }), messages: async () => ({ data: messages }),
   }};
   const options = { ledgerPath, modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code' } };
-  const hooks = await LocalTeam({ client }, options);
+  const hooks = await LocalTeam({ client, directory: root }, options);
   await hooks['chat.message']({ sessionID: 'session1' }, { message: messages[0].info, parts: messages[0].parts });
   function call(id, role = 'analyst', extra = {}, parent = 'user1') {
     messages.push({ info: { id: 'assistant-' + id, role: 'assistant', parentID: parent, agent: 'plan' },
@@ -27,7 +27,8 @@ async function fixture(t) {
     return [{ tool: 'task', sessionID: 'session1', callID: id }, { args: {
       subagent_type: role, description: 'Focused task', prompt: JSON.stringify({ objective: 'Solve',
       constraints: 'Use evidence', evidence: 'src/a.py: @file is literal', completed: '', remaining: '',
-      result: 'Answer and validation', ...extra }),
+      result: 'Answer and validation', facts: [], assumptions: [], unknowns: [], references: [],
+      acceptance: [{ id: 'A1', requirement: 'Task', source_quote: 'Task', verification: { kind: 'analysis', command: '' } }], ...extra }),
     }}];
   }
   const before = (args) => hooks['tool.execute.before'](...args);
@@ -36,7 +37,7 @@ async function fixture(t) {
     await hooks['tool.execute.after'](args[0], output);
     return output;
   }
-  return { hooks, call, before, after, client, options, messages, session, ledgerPath };
+  return { hooks, call, before, after, client, options, messages, session, ledgerPath, directory: root };
 }
 
 test('two bounded native handoffs, literal evidence, then stop', async t => {
@@ -76,10 +77,19 @@ test('errors consume attempts, native error status releases serial gate', async 
   await assert.rejects(f.before(f.call('three')), /two specialist attempts/);
 });
 
+test('retry cannot weaken the saved acceptance checklist', async t => {
+  const f = await fixture(t), first = f.call('one');
+  await f.before(first); await f.after(first);
+  const retry = f.call('retry', 'analyst', { retry_failure: 'The answer was incorrect',
+    acceptance: [{ id: 'A1', requirement: 'Something easier', source_quote: '', verification: { kind: 'analysis', command: '' } }] });
+  await assert.rejects(f.before(retry), /preserve the original acceptance/);
+  assert.equal(Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0].calls.length, 1);
+});
+
 test('reconnected hooks share persisted accounting and native turn identity', async t => {
   const f = await fixture(t);
   const one = f.call('one'); await f.before(one); await f.after(one);
-  const hooks = await LocalTeam({ client: f.client }, f.options);
+  const hooks = await LocalTeam({ client: f.client, directory: f.directory }, f.options);
   const two = f.call('two', 'coder'); await hooks['tool.execute.before'](...two);
   await hooks['tool.execute.after'](two[0], { output: 'Result', metadata: {} });
   await assert.rejects(f.before(f.call('three')), /two specialist attempts/);
@@ -131,11 +141,13 @@ test('configuration enables only named specialists and rejects role model change
   await assert.rejects(f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'cloud', id: 'code' } }), /model changed/);
 });
 
-test('oversized results are visibly clipped and retained in the native child session', async t => {
+test('oversized results are preserved in a recoverable full report', async t => {
   const f = await fixture(t), args = f.call('one'); await f.before(args);
   const result = await f.after(args, 'x'.repeat(15000));
-  assert(result.output.endsWith('Do not treat this excerpt as complete.]'));
-  assert.equal(result.metadata.localTeamClipped, true);
+  const brief = JSON.parse(result.output);
+  assert.equal(brief.status, 'needs_attention');
+  assert.equal(JSON.parse(await readFile(brief.full_report, 'utf8')).raw_result, 'x'.repeat(15000));
+  assert(result.output.length < 3000);
 });
 
 test('fresh process state recovers exhausted budget and interrupted attempts', async t => {
@@ -144,7 +156,7 @@ test('fresh process state recovers exhausted budget and interrupted attempts', a
   const two = f.call('two', 'coder'); await f.before(two);
   // A distinct module instance represents a fresh process, with the same disk state.
   const fresh = (await import('../opencode-team.mjs?restart=' + Date.now())).default;
-  const hooks = await fresh({ client: f.client }, f.options);
+  const hooks = await fresh({ client: f.client, directory: f.directory }, f.options);
   await assert.rejects(hooks['tool.execute.before'](...f.call('third')), /two specialist attempts/);
   assert.equal(Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0].calls[1].status, 'interrupted');
 });
@@ -191,6 +203,20 @@ test('Build coder can inspect edit and test, with native approval arguments unch
   for (const name of ['task', 'webfetch', 'websearch', 'account_write']) {
     await assert.rejects(f.use(name), /not allowed/);
   }
+});
+
+test('native child return produces a complete source-bound review artifact', async t => {
+  const f = await coderFixture(t);
+  const raw = JSON.stringify({ summary: 'Reviewed', acceptance: [{ id: 'A1', status: 'met',
+    evidence: 'Analysis complete', tool_call_ids: [] }], tests: [], changed_files: [], assumptions: [], unresolved: [] });
+  f.childMessages.push({ info: { id: 'final', role: 'assistant', finish: 'stop' }, parts: [{ type: 'text', text: raw }] });
+  const output = { output: 'Native wrapper', metadata: { sessionId: 'child' } };
+  await f.hooks['tool.execute.after']({ tool: 'task', sessionID: 'session1', callID: 'delegate' }, output);
+  const brief = JSON.parse(output.output), report = JSON.parse(await readFile(brief.full_report, 'utf8'));
+  assert.equal(brief.status, 'ready_for_review');
+  assert.equal(report.raw_result, raw);
+  assert.equal(report.acceptance[0].source.message_id, 'user1');
+  assert.equal(report.acceptance[0].requirement, 'Task');
 });
 
 test('Plan coder can inspect but cannot mutate through edit write patch or shell', async t => {

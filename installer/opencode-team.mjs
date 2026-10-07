@@ -1,11 +1,11 @@
 // OpenCode v1.18.34 policy hooks. Native task owns the child session/tool loop.
-// No inference calls, account credentials or source text are stored here.
+// No inference calls or account credentials. Contracts/reports contain local text.
 import { readFile, open, rename } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { dirname } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { hash, validateContract, bindContract, assessResult, saveArtifact, RESULT_INSTRUCTION } from './handoff-contract.mjs';
 
 const MAX_INPUT = 12000;
-const MAX_RESULT = 12000;
 const CODER_TOOLS = new Set(['read', 'glob', 'grep', 'edit', 'write', 'apply_patch', 'bash']);
 const READ_TOOLS = new Set(['read', 'glob', 'grep']);
 const fields = ['objective', 'constraints', 'evidence', 'completed', 'remaining', 'result'];
@@ -45,9 +45,9 @@ async function loadStore(ledgerPath) {
   return { ledger, exclusive, save, active: new Map() };
 }
 
-export default async function LocalTeam({ client }, options = {}) {
+export default async function LocalTeam({ client, directory }, options = {}) {
   const { ledgerPath, roles, modeToken } = options;
-  if (!ledgerPath || !roles?.coordinator || !roles?.analyst || !roles?.coder || !modeToken) fail('configuration missing');
+  if (!ledgerPath || !directory || !roles?.coordinator || !roles?.analyst || !roles?.coder || !modeToken) fail('configuration missing');
   if (!stores.has(ledgerPath)) stores.set(ledgerPath, loadStore(ledgerPath));
   const { ledger, exclusive, save, active } = await stores.get(ledgerPath);
 
@@ -113,7 +113,9 @@ export default async function LocalTeam({ client }, options = {}) {
       ledger.turns[turnKey(input.sessionID, m.info.id)]);
     if (!origin) fail('no explicit user turn');
     const key = turnKey(input.sessionID, origin.info.id);
-    return { key, messages };
+    const sourceMessages = messages.slice(0, position + 1).filter(m => m.info.role === 'user' &&
+      ledger.turns[turnKey(input.sessionID, m.info.id)]);
+    return { key, messages, sourceMessages };
   }
 
   function envelope(args) {
@@ -124,12 +126,13 @@ export default async function LocalTeam({ client }, options = {}) {
     let value;
     try { value = JSON.parse(args.prompt); } catch { fail('prompt must be a JSON handoff envelope'); }
     if (!value || Array.isArray(value) || typeof value !== 'object') fail('invalid handoff envelope');
-    if (Object.keys(value).some(k => ![...fields, 'retry_failure'].includes(k))) fail('unknown handoff field');
+    if (Object.keys(value).some(k => ![...fields, 'retry_failure', 'facts', 'assumptions', 'unknowns', 'references', 'acceptance'].includes(k))) fail('unknown handoff field');
     for (const field of fields) {
       if (typeof value[field] !== 'string') fail('handoff requires string field: ' + field);
     }
     if (!value.objective.trim() || !value.result.trim()) fail('objective and result must be explicit');
     if (value.retry_failure !== undefined && (typeof value.retry_failure !== 'string' || !value.retry_failure.trim())) fail('retry needs a concrete failure');
+    validateContract(value);
     // Native task resolves @file references before inference. Escaped JSON keeps
     // supplied evidence literal and prevents implicit file/agent attachments.
     args.prompt = JSON.stringify(value).replaceAll('@', '\\u0040');
@@ -177,12 +180,12 @@ export default async function LocalTeam({ client }, options = {}) {
         if (session.parentID) fail('non-coder specialists cannot use tools or delegate');
       }
       if (input.tool !== 'task') return;
-      const value = envelope(output.args);
       await exclusive(async () => {
         await checkMode();
-        const { key, messages } = await identity(input);
+        const { key, messages, sourceMessages } = await identity(input);
         const turn = ledger.turns[key] ?? { calls: [] };
         if (turn.calls.some(c => c.id === input.callID)) fail('duplicate call already consumed its attempt');
+        const value = envelope(output.args);
         if (turn.calls.length >= 2) fail('two specialist attempts already used for this user turn');
         if (active.has(input.sessionID)) {
           // Errors do not call the after hook. Native persisted error state is
@@ -196,7 +199,18 @@ export default async function LocalTeam({ client }, options = {}) {
         if (turn.calls.some(c => c.role === output.args.subagent_type) && !value.retry_failure) {
           fail('a repeated specialist requires retry_failure describing the concrete failure');
         }
-        turn.calls.push({ id: input.callID, role: output.args.subagent_type, status: 'reserved' });
+        const contract = bindContract(value, sourceMessages);
+        const acceptanceHash = hash(JSON.stringify(contract.acceptance));
+        const prior = turn.calls.find(c => c.role === output.args.subagent_type);
+        if (prior && prior.acceptance_hash !== acceptanceHash) fail('retry must preserve the original acceptance checklist');
+        contract.return_format = RESULT_INSTRUCTION;
+        const packet = JSON.stringify(contract).replaceAll('@', '\\u0040');
+        if (packet.length > MAX_INPUT) fail('bound handoff exceeds 12000 characters; use file references and a smaller brief');
+        const saved = await saveArtifact(join(dirname(ledgerPath), 'handoff-contracts'),
+          hash(key + input.callID) + '.json', contract);
+        output.args.prompt = packet;
+        turn.calls.push({ id: input.callID, role: output.args.subagent_type, status: 'reserved',
+          acceptance_hash: acceptanceHash, contract_file: saved.path, contract_sha256: saved.sha256 });
         ledger.turns[key] = turn;
         await save();
         active.set(input.sessionID, input.callID);
@@ -204,23 +218,53 @@ export default async function LocalTeam({ client }, options = {}) {
     },
     async 'tool.execute.after'(input, output) {
       if (input.tool !== 'task') return;
+      const { key } = await identity(input);
+      const call = ledger.turns[key].calls.find(c => c.id === input.callID);
+      if (!call?.contract_file) fail('return has no saved acceptance contract');
+      const text = await readFile(call.contract_file, 'utf8');
+      if (hash(text) !== call.contract_sha256) fail('saved acceptance contract changed');
+      const contract = JSON.parse(text);
+      let raw = output.output;
+      let tools = [];
+      const sourceIssues = [];
+      const childID = output.metadata?.sessionId;
+      if (!childID) sourceIssues.push('Native child session identity missing.');
+      else {
+        const child = data(await client.session.get({ path: { id: childID } }));
+        if (child.parentID !== input.sessionID) fail('return belongs to another parent');
+        const messages = data(await client.session.messages({ path: { id: childID } }));
+        const final = messages.findLast(m => m.info.role === 'assistant');
+        raw = final?.parts.filter(p => p.type === 'text').map(p => p.text).join('\n') ?? '';
+        tools = messages.flatMap(m => m.parts).filter(p => p.type === 'tool');
+        if (!final || final.info.error || final.info.finish === 'length') sourceIssues.push('Specialist response missing, failed or cut off.');
+      }
+      const report = assessResult(contract, raw, tools, sourceIssues);
+      const artifact = await saveArtifact(join(resolve(directory), '.local-ai-handoffs'),
+        hash(key + input.callID + JSON.stringify(report)) + '.json', report);
       await exclusive(async () => {
-        for (const turn of Object.values(ledger.turns)) {
-          const call = turn.calls.find(c => c.id === input.callID);
-          if (call) call.status = 'completed';
-        }
+        call.status = 'completed';
+        call.review_status = report.status;
+        call.result_sha256 = artifact.sha256;
         await save();
         active.delete(input.sessionID);
       });
-      if (output.output.length > MAX_RESULT) {
-        output.output = output.output.slice(0, MAX_RESULT) + '\n[Handoff result clipped at 12000 characters. Full response remains in the child session. Do not treat this excerpt as complete.]';
-        output.metadata = { ...output.metadata, localTeamClipped: true };
-      }
+      output.output = JSON.stringify({ status: report.status,
+        summary_excerpt: report.summary.slice(0, 1600), summary_shortened: report.summary.length > 1600,
+        acceptance: report.acceptance.map(c => ({ id: c.id, status: c.status, basis: c.basis })),
+        issues: report.issues.slice(0, 12), full_report: artifact.path, sha256: artifact.sha256,
+        instruction: 'Read the full report before claiming completion. It preserves the exact checklist, complete specialist result and native tool evidence. Review every criterion; needs_attention is not completion. Native execution alone does not prove correctness.' });
+      output.metadata = { ...output.metadata, localTeamReview: report.status, localTeamReport: artifact.path,
+        localTeamReportSha256: artifact.sha256 };
     },
     async 'tool.definition'(input, output) {
       if (input.toolID !== 'task') return;
       output.description += '\nLocal team: at most two foreground attempts per user turn. Only analyst or coder. '
         + 'prompt must be JSON with string fields objective, constraints, evidence, completed, remaining, result. '
+        + 'Also require string lists facts, assumptions, unknowns; references:[{path:relative project path,symbol:string}]; '
+        + 'acceptance:[{id:A1 through A8,requirement:string,source_quote:exact user quote or empty for derived criteria,'
+        + 'verification:{kind:test|inspection|analysis,command:exact test command or empty}}]. '
+        + 'A nonempty source_quote must equal requirement exactly and appear in an explicit user message. '
+        + 'Retries must keep the same checklist. Specialist returns are checked against every ID and native tool records. '
         + 'Supply actual excerpts in evidence; paths are references only. Maximum 12000 characters. '
         + 'A repeated role requires retry_failure describing a concrete failure. No task_id, command or background.';
     },

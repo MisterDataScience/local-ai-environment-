@@ -25,7 +25,8 @@ Open WebUI remains the general chat interface. Native Mac validation is pending.
    Analyst/document agents have no tools; the coder has bounded project tools
    with native edit/command approvals and cannot delegate. Task resumption and background
    delegation are disabled. Input/result envelopes are bounded and native
-   implicit `@file` expansion is escaped. Results retain visible clipping notices.
+   implicit `@file` expansion is escaped. Full results are saved as recoverable
+   project artifacts, with compact status and report pointers sent to the parent.
 4. **Memory and lifecycle.** All requests use the existing serial gateway.
    Outgoing weights/context profiles unload before the next profile starts;
    unload failure blocks it. Parent inference completes before child inference

@@ -1,5 +1,9 @@
 # Local AI environment
 
+Handoff reliability now includes immutable acceptance checklists, source-bound
+quotes, native test-execution evidence and recoverable full reports. See
+[work-agent contracts](docs/WORK-AGENT.md#acceptance-contracts).
+
 Personal local AI project for a **32 GB unified-memory Apple Silicon Mac mini**. This project is separate from OTHM coursework.
 
 **Status: prototype.** The included installer implements text, image and short video generation through a custom Python gateway. The previously established unit/mock suite passed in the authoring environment. New reverse-image unit/mock tests are included but have not been run by repository CI. Native Mac installation, Apple GPU inference and memory use have not been verified here. The installer performs acceptance checks on the target Mac.

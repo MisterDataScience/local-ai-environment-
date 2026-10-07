@@ -1,5 +1,11 @@
 # Model team and handoff policy
 
+Acceptance-contract update: handoffs preserve source-bound quoted requirements,
+label derived criteria, separate facts/assumptions/unknowns, and keep the checklist
+unchanged on retries. Structured returns are checked against native tool records;
+full results remain recoverable. These checks add no model judge and do not prove
+semantic correctness. See WORK-AGENT.md for the schema, storage and limitations.
+
 Decision date: 2026-10-07. Target: a Mac mini with 32 GB total unified memory.
 Status: the first text-only OpenCode implementation is included in the installer.
 Native Mac performance and end-to-end model/client validation remain pending.

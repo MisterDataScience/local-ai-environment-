@@ -1,5 +1,9 @@
 # Update: Cryptomator workspace and GitHub
 
+Team handoffs now use acceptance contracts and recoverable full reports, with
+deterministic checks against native test/inspection records and no extra model
+judge. See WORK-AGENT.md in the ZIP for the schema and plaintext storage caveats.
+
 The installer now includes Cryptomator. After installation, stop Local AI and run
 `~/LocalAI-Automated/Configure AI Workspace.command`, then optionally
 `~/LocalAI-Automated/Connect GitHub.command`. See ENCRYPTED-WORKSPACE.md in the ZIP

@@ -132,7 +132,12 @@ def verify_native_handoffs(root, config):
                                     else 'Short answer. Do not execute tools.'),
                     'evidence': 'Project file: coder-acceptance.txt' if role == 'coder' else '17 * 20 - 17 = 323.',
                     'completed': '', 'remaining': 'Explain the supplied arithmetic.',
-                    'result': 'A short explanation and an honest validation statement.'})
+                    'result': 'A short explanation and an honest validation statement.',
+                    'facts': ['17 * 20 - 17 = 323.'], 'assumptions': [], 'unknowns': [],
+                    'references': [{'path': 'coder-acceptance.txt', 'symbol': ''}] if role == 'coder' else [],
+                    'acceptance': [{'id': 'A1', 'requirement': 'Explain the supplied arithmetic.',
+                        'source_quote': '', 'verification': {'kind': 'inspection' if role == 'coder' else 'analysis',
+                                                           'command': ''}}]})
                 prompt = ('Acceptance check. Call the task tool exactly once with subagent_type ' + role
                           + ', description "Check supplied arithmetic", and prompt set to this JSON string: '
                           + packet + '. Wait for its result, then briefly report it. Do not answer before delegating.')
@@ -150,6 +155,8 @@ def verify_native_handoffs(root, config):
                 child = task.get('metadata', {}).get('sessionId')
                 if not child:
                     raise RuntimeError('OpenCode did not preserve child session identity')
+                if task.get('metadata', {}).get('localTeamReview') != 'ready_for_review':
+                    raise RuntimeError('Native specialist return did not satisfy its handoff contract')
                 child_messages = native('/session/' + child + '/message')
                 outputs = [m for m in child_messages if m['info']['role'] == 'assistant']
                 expected = config['model_team']['roles'][role]

@@ -1,3 +1,9 @@
+Handoff contract update 2026-10-07 UTC: 79 installer tests and 26 JavaScript
+contract/policy tests passed locally (105 checks). Native Mac model compliance,
+approval behavior, performance and memory use remain unverified. Native acceptance
+now requires a ready-for-review structured handoff return, not merely child text.
+The gateway is unchanged from its previously passing 86-test suite.
+
 Coder execution update 2026-10-07 UTC: 79 installer tests and 17 JavaScript
 policy tests passed for this change (96 checks). The gateway is unchanged from
 the prior 86-test passing run. New coverage verifies Build coder project tools,

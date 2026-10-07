@@ -88,8 +88,37 @@ paths are references, not implicit access grants. The plugin escapes native
 reports changed files, actual test commands/results and remaining issues, keeping
 full changes in the project copy. Other specialists report results, references,
 assumptions, unresolved issues and validation actually run.
-Native child responses remain in their sessions; parent excerpts above 12,000
-characters are visibly clipped. Context overflow still fails explicitly.
+Native child responses remain in their sessions. Full returns are also saved in
+project-local `.local-ai-handoffs/*.json`; the parent receives a compact status,
+per-criterion outcomes and an exact report path/hash, not a silently clipped result.
+Context overflow still fails explicitly.
+
+### Acceptance contracts
+
+Each packet additionally requires `facts`, `assumptions`, `unknowns` (string lists),
+`references` (`{path, symbol}` with relative project paths), and 1–8 `acceptance`
+items: `{id, requirement, source_quote, verification: {kind, command}}`.
+IDs are unique A1–A8. `kind` is `analysis`, `inspection` or `test`; only tests
+have a nonempty exact command. Explicit quoted requirements must equal their
+source quote and appear verbatim in an explicit user message. Derived criteria
+use an empty quote and are labelled accordingly. Same-role retries cannot change
+the saved acceptance checklist, even if a model proposes an easier replacement.
+
+The plugin appends the structured return format. Every criterion needs a status
+and evidence. Test-success claims require matching native command IDs, exact
+commands and recorded zero exit codes. Inspection claims require linked completed
+read/grep/glob calls. Missing IDs or evidence remain unverified. Analysis stays
+labelled as a specialist claim. Missing/duplicate/unknown criteria, malformed
+returns or unresolved issues produce `needs_attention`, not completion.
+`ready_for_review` means reviewable, not independently proven correct. The parent
+must read the full report before claiming completion. No extra model judge runs.
+
+Contracts live in `work-agent/state/handoff-contracts`; complete reports contain
+the original contract, raw return and native command records in the project copy.
+These are local plaintext artifacts, not automatically encrypted or deleted.
+Do not publish them with sensitive project material. Project import skips old
+`.local-ai-handoffs` directories. Source binding cannot detect omitted requirements,
+and successful execution cannot establish test adequacy or semantic correctness.
 
 Delegations run in the foreground, one at a time per parent session. No task
 resumption, nested delegation or background task option is enabled. The gateway

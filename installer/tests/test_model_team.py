@@ -164,7 +164,7 @@ class TeamTests(unittest.TestCase):
                         else:
                             result = [] if fault == 'no-task' else [{'parts': [{'type': 'tool', 'tool': 'task',
                                 'state': {'status': 'completed', 'input': {'subagent_type': role},
-                                          'metadata': {'sessionId': 'child'}}}]}]
+                                          'metadata': {'sessionId': 'child', 'localTeamReview': 'ready_for_review'}}}]}]
                     return io.BytesIO(json.dumps(result).encode())
                 status = {'mode': 'max', 'instance_id': 'backend', 'epoch': 0}
                 with patch('common.http', side_effect=[status, {'data': [{'id': k} for k in cfg['text_models']]}]), \
