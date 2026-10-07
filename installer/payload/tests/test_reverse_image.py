@@ -138,5 +138,21 @@ class ReverseImageTests(unittest.TestCase):
         self.assertNotIn("private-name", json.dumps(result))
 
 
+    def test_formatted_result_is_bounded_and_disclaims_provenance(self):
+        text = reverse_image.format_result({"matches": [{
+            "page_title": "Example",
+            "page_url": "https://example.org/a(b)",
+            "image_url": None,
+            "width": "640",
+            "height": "480",
+            "passage": "Possible matching page",
+        }]})
+        self.assertIn("metadata-free derivative", text)
+        self.assertIn("not proof", text)
+        self.assertIn("https://example.org/a%28b%29", text)
+        self.assertIn("640 × 480", text)
+
+
+
 if __name__ == "__main__":
     unittest.main()
