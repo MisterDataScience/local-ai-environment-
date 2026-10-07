@@ -82,6 +82,15 @@ class NativeToolsTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 protocol.assistant_for_openai(message, [TOOL])
 
+    def test_reverse_command_requires_explicit_path_and_routes_without_guessing(self):
+        body = {"model": "local-ai", "messages": [{"role": "user", "content": "/reverse Inbox/photo.jpg"}]}
+        messages, route, prompt = routing.messages_and_route(body)
+        self.assertEqual(route, "reverse")
+        self.assertEqual(prompt, "Inbox/photo.jpg")
+        self.assertEqual(messages[-1]["content"], "/reverse Inbox/photo.jpg")
+        with self.assertRaises(ValueError):
+            routing.messages_and_route({"model": "local-ai", "messages": [{"role": "user", "content": "/reverse"}]})
+
     def test_old_commands_do_not_repeat_on_tool_continuation(self):
         body = {"model": "local-ai", "messages": [{"role": "user", "content": "/image old"},
                 {"role": "assistant", "content": "", "tool_calls": [CALL]},
