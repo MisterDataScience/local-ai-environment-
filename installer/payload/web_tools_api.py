@@ -14,7 +14,7 @@ def specification():
             "responses": {"200": {"description": "Bounded source evidence"}}}}
     paths["/tools/vpn_reverse_image"] = {"post": {
         "operationId": "vpn_reverse_image",
-        "description": "Reverse-search one image from the encrypted AI Workspace. A metadata-free derivative is sent to Yandex only through the installer-managed VPN HTTP proxy; failure never falls back to the ordinary connection.",
+        "description": "Use only when the user explicitly requests reverse-image search. Reverse-search one image from the encrypted AI Workspace. A metadata-free derivative is sent to Yandex only through the installer-managed VPN HTTP proxy; failure never falls back to the ordinary connection.",
         "requestBody": {"required": True, "content": {"application/json": {"schema": {
             "type": "object",
             "properties": {"workspace_path": {"type": "string", "description": "Relative image path beneath Inbox, Projects, Outputs or Archive."}},
