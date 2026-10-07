@@ -220,3 +220,27 @@ def search_tool(config, workspace_path):
         "sanitised_dimensions": {"width": width, "height": height},
         "matches": matches,
     }
+
+
+def format_result(result):
+    lines = [
+        "Reverse-image search used a metadata-free derivative through the VPN proxy.",
+        "Visual similarity is not proof of identity, authorship, provenance or original publication.",
+        "",
+    ]
+    for index, match in enumerate(result.get("matches", []), 1):
+        title = match.get("page_title") or match.get("host") or "Match"
+        destination = match.get("page_url") or match.get("image_url")
+        details = " × ".join(x for x in (match.get("width"), match.get("height")) if x)
+        label = f"{index}. {title}"
+        if details:
+            label += f" ({details})"
+        lines.append(label)
+        if destination:
+            safe = destination.replace("(", "%28").replace(")", "%29").replace("<", "%3C").replace(">", "%3E")
+            lines.append(safe)
+        passage = match.get("passage")
+        if passage:
+            lines.append(str(passage)[:500])
+        lines.append("")
+    return "\n".join(lines).rstrip()
