@@ -16,7 +16,7 @@ def messages_and_route(body, model_ids=None):
     # Whitespace after a command may also be a newline or a tab.
     parts = stripped.split(maxsplit=1)
     command = parts[0].lower() if parts else ""
-    if cleaned[-1]["role"] == "user" and command in {"/image", "/video", "/search", "/read"}:
+    if cleaned[-1]["role"] == "user" and command in {"/image", "/video", "/search", "/read", "/reverse"}:
         if len(parts) != 2 or not parts[1].strip():
             raise ValueError("Put a description/query/URL after the command.")
         return cleaned, command[1:], parts[1].strip()
