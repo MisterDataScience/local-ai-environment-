@@ -173,7 +173,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json_response(200, result)
             except (ValueError, RuntimeError, OSError) as error:
                 return self.json_response(409, {'error': str(error)})
-        if path in {"/tools/vpn_search_web", "/tools/vpn_read_page"}:
+        if path in {"/tools/vpn_search_web", "/tools/vpn_read_page", "/tools/vpn_reverse_image"}:
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 if not 0 < length <= 8192:
