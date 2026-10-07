@@ -4,7 +4,7 @@ Personal local AI project for a **32 GB unified-memory Apple Silicon Mac mini**.
 
 **Status: prototype.** The included installer implements text, image and short video generation through a custom Python gateway. Unit/mock tests passed in the authoring environment. Native Mac installation, Apple GPU inference and memory use have not been verified here. The installer performs acceptance checks on the target Mac.
 
-Gaming/Normal/Max profiles are enforced through the gateway; use `AI Modes.command`. Automatic background AI startup remains unimplemented. Optional Proton VPN search and HTML page reading are implemented; native tunnel-drop/DNS validation remains pending.
+Gaming/Normal/Max profiles are enforced through the gateway; use `AI Modes.command`. Automatic background AI startup remains unimplemented. Optional Proton VPN search, HTML page reading and opt-in Yandex reverse image search are implemented; native tunnel-drop/DNS and live reverse-search validation remain pending.
 
 ## Files
 
@@ -45,7 +45,7 @@ The gateway remains one process and owns model lifecycle work. Open WebUI owns t
 | Image generation | Native ComfyUI v0.38.0 with SDXL Base 1.0 |
 | Video generation | LTX-Video 2B v0.9.5 with T5 FP16, through ComfyUI |
 | Orchestrator | Custom Python standard-library gateway, `installer/payload/gateway.py` |
-| Web access | SearXNG + bounded reader, sharing Gluetun/Proton Free's network namespace |
+| Web access | SearXNG + bounded reader, sharing Gluetun/Proton Free's network namespace; optional Yandex reverse image search uses Gluetun's loopback HTTP proxy |
 
 Ordinary chat goes to Ollama. `/image DESCRIPTION` and `/video DESCRIPTION` trigger media generation. One job runs at a time. Before rendering, the gateway unloads Ollama and checks its loaded-model list; after rendering it stops ComfyUI before text can resume. Text uses configurable per-model idle timeouts: Small 2 minutes, Everyday 5 minutes and Large 1 minute. Selecting a model does not load it; the next request does. Global resource modes restrict which presets and media jobs are eligible. See [Resource modes](docs/RESOURCE-MODES.md). The gateway accepts function definitions and matching text tool results; it does not execute supplied functions. Image/audio inputs remain unsupported.
 
@@ -53,7 +53,7 @@ The current daily launcher starts services in Terminal and opens Safari. Termina
 
 Remote access is now available as an optional installer stage. See [private access from your other devices](docs/REMOTE-ACCESS.md). Tailscale sign-in and macOS extension approval remain interactive setup steps.
 
-Web access is optional: [setup, commands and privacy boundaries](docs/WEB-ACCESS.md). Use `/search QUERY` or `/read URL QUESTION`. These gateway paths have no direct-internet fallback. A local Docker engine and Proton WireGuard key require one-time setup. This does not block all native WebUI URL-loader/plugin traffic.
+Web access is optional: [setup, commands and privacy boundaries](docs/WEB-ACCESS.md). Use `/search QUERY` or `/read URL QUESTION`. Reverse image search is separately opt-in, uses images explicitly selected from the encrypted workspace, strips metadata into a derivative, and fails closed unless the installer-managed VPN proxy is available. These gateway paths have no direct-internet fallback. A local Docker engine and Proton WireGuard key require one-time setup. This does not block all native WebUI URL-loader/plugin traffic.
 
 ## Install the current prototype
 
