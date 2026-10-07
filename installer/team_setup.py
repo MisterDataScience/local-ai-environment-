@@ -5,6 +5,7 @@ import time
 import secrets
 import subprocess
 import re
+from fnmatch import fnmatchcase
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
@@ -62,11 +63,24 @@ def verify_work_agent(process, env, enabled, timeout=90):
             request = Request('http://127.0.0.1:4096/agent', headers={'Authorization': 'Basic ' + token})
             with urlopen(request, timeout=3) as response:
                 agents = {a['name']: a for a in json.load(response)}
-            for role in ('analyst', 'coder'):
+            for role in ('analyst',):
                 rules = agents.get(role, {}).get('permission', [])
                 tool_rules = [r for r in rules if r['permission'] != 'external_directory']
                 if not tool_rules or tool_rules[-1] != {'permission': '*', 'pattern': '*', 'action': 'deny'}:
                     raise RuntimeError('Specialist tool permissions were not loaded')
+            coder = agents.get('coder', {})
+            def action(permission, target='*'):
+                matches = [r for r in coder.get('permission', []) if r['permission'] in ('*', permission)
+                           and fnmatchcase(target, r['pattern'])]
+                return matches[-1]['action'] if matches else None
+            for permission, target, expected in [('read', 'example.py', 'allow'), ('read', '.env', 'deny'),
+                    ('glob', '*', 'allow'), ('grep', '*', 'allow'), ('edit', '*', 'ask'),
+                    ('bash', '*', 'ask'), ('task', '*', 'deny'), ('webfetch', '*', 'deny'),
+                    ('external_directory', '/outside-project', 'deny')]:
+                if action(permission, target) != expected:
+                    raise RuntimeError('Coder native approval permissions were not loaded: ' + permission)
+            if coder.get('steps') != 12:
+                raise RuntimeError('Coder step limit was not loaded')
             for parent in ('plan', 'build'):
                 rules = agents.get(parent, {}).get('permission', [])
                 for role in ('analyst', 'coder'):
@@ -94,6 +108,7 @@ def verify_native_handoffs(root, config):
     env.update(OPENCODE_SERVER_USERNAME='opencode', OPENCODE_SERVER_PASSWORD=secrets.token_urlsafe(24))
     folder = root / 'work-agent/acceptance'
     folder.mkdir(parents=True, exist_ok=True)
+    (folder / 'coder-acceptance.txt').write_text('Acceptance evidence: 17 * 20 - 17 = 323.\n')
     token = base64.b64encode(('opencode:' + env['OPENCODE_SERVER_PASSWORD']).encode()).decode()
     def native(path, body=None):
         request = Request('http://127.0.0.1:4096' + path,
@@ -111,8 +126,11 @@ def verify_native_handoffs(root, config):
             for role in ('analyst', 'coder'):
                 started = time.monotonic()
                 session = native('/session', {'title': 'Local model team acceptance: ' + role})['id']
-                packet = json.dumps({'objective': 'Explain why 17 * 19 equals 323.',
-                    'constraints': 'Short answer. Do not execute tools.', 'evidence': '17 * 20 - 17 = 323.',
+                packet = json.dumps({'objective': ('Read coder-acceptance.txt and explain its arithmetic.'
+                    if role == 'coder' else 'Explain why 17 * 19 equals 323.'),
+                    'constraints': ('Use the read tool. Do not edit or execute commands.' if role == 'coder'
+                                    else 'Short answer. Do not execute tools.'),
+                    'evidence': 'Project file: coder-acceptance.txt' if role == 'coder' else '17 * 20 - 17 = 323.',
                     'completed': '', 'remaining': 'Explain the supplied arithmetic.',
                     'result': 'A short explanation and an honest validation statement.'})
                 prompt = ('Acceptance check. Call the task tool exactly once with subagent_type ' + role
@@ -140,8 +158,13 @@ def verify_native_handoffs(root, config):
                     raise RuntimeError('Native specialist used an unexpected model')
                 if not any(p['type'] == 'text' and p.get('text', '').strip() for m in outputs for p in m['parts']):
                     raise RuntimeError('Native specialist returned no text')
-                if any(p['type'] == 'tool' for m in child_messages for p in m['parts']):
-                    raise RuntimeError('Native specialist attempted a tool')
+                child_tools = [p for m in child_messages for p in m['parts'] if p['type'] == 'tool']
+                if role == 'analyst' and child_tools:
+                    raise RuntimeError('Native analyst attempted a tool')
+                if role == 'coder' and (not any(p.get('tool') == 'read' and p.get('state', {}).get('status') == 'completed'
+                                               for p in child_tools)
+                    or any(p.get('tool') not in ('read', 'glob', 'grep') for p in child_tools)):
+                    raise RuntimeError('Native Plan coder did not complete permitted file inspection')
                 if not any(p['type'] == 'text' and p.get('text', '').strip() for p in response.get('parts', [])):
                     raise RuntimeError('Coordinator did not return a final answer')
                 checks.append({'name': 'opencode-handoff-' + role, 'status': 'passed',

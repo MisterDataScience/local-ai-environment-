@@ -7,6 +7,11 @@ WebUI delegation, vision and broader routing remain future work. The policy belo
 records the agreed target; current behavior and differences are detailed in
 [WORK-AGENT.md](WORK-AGENT.md) and [HANDOFF-IMPLEMENTATION-PLAN.md](HANDOFF-IMPLEMENTATION-PLAN.md).
 
+Coder execution update: OpenCode's coder now has bounded project read/edit/test
+tools. Build and direct `/code` use native edit/shell approvals; Plan delegation
+is read-only. The analyst/document agents remain tool-free. No specialist can
+delegate. See WORK-AGENT.md for the exact limits and native acceptance.
+
 ## Team
 
 Prefer recent, capable models with abliterated variants. Select for useful task

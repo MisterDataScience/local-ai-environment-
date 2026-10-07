@@ -66,9 +66,10 @@ The narrow `opencode-team.mjs` policy plugin uses native OpenCode task sessions;
 it does not run another inference loop. Plan/Build decide when analysis or code
 help is worthwhile. Routine work stays with the coordinator. `/code TEXT` and
 `/analyse TEXT` directly select a specialist without a coordinator pass;
-`/document TEXT` uses the larger 32K profile of the same 4B model. Direct specialists
-return text/proposals and have no execution tools. Switch back to Build to apply
-or test their work using its usual approvals.
+`/document TEXT` uses the larger 32K profile of the same 4B model. The coder can inspect project files, implement changes and run tests, using native
+approval prompts for edits and commands. This applies to Build delegations and
+direct `/code` requests. A coder called by Plan is read-only. The analyst and
+document agents still return text without tool access.
 
 Each explicit user turn gets at most two specialist attempts, including one
 retry for a concrete failure. A second call to the same role must state that
@@ -83,8 +84,10 @@ The task prompt is a JSON object with string fields `objective`, `constraints`,
 `evidence`, `completed`, `remaining`, and `result`, plus `retry_failure` when needed.
 Input is limited to 12,000 characters. Evidence must contain relevant excerpts;
 paths are references, not implicit access grants. The plugin escapes native
-`@file` expansion and refuses non-text child attachments. Specialists report
-results, references, assumptions, unresolved issues and validation actually run.
+`@file` expansion and refuses non-text child attachments. The coder reads files itself rather than relying only on copied excerpts. It
+reports changed files, actual test commands/results and remaining issues, keeping
+full changes in the project copy. Other specialists report results, references,
+assumptions, unresolved issues and validation actually run.
 Native child responses remain in their sessions; parent excerpts above 12,000
 characters are visibly clipped. Context overflow still fails explicitly.
 
@@ -108,6 +111,33 @@ and refuses to continue if these permissions did not load. Set
 disable delegation. This leaves installed presets selectable and restores the
 previous single-agent configuration. The installer preserves this setting.
 
+## Coder execution limits and acceptance
+
+The coder is limited to 12 model steps and 24 native tool attempts per delegated
+task or direct user turn. Denied/error attempts count in native session history;
+reconnecting does not reset them. Delegation still consumes one of the parent's
+two specialist attempts. Failed work can use the remaining retry when its concrete
+failure is supplied. No extra model is loaded for approvals or monitoring.
+
+The policy verifies the coder's actual native assistant identity and its active,
+reserved parent task before child tools can run. Plan restrictions are enforced
+explicitly because upstream OpenCode does not inherit the parent agent's own
+permissions into the child. Build and direct-coder edits/commands still pass
+through native OpenCode approval prompts. The plugin never auto-approves them.
+A changed resource mode or gateway instance blocks further coder tools.
+
+Startup checks the effective coder permissions, including edit/bash set to ask,
+`.env` read denial and task/network-tool denial. Automated Mac acceptance requires
+the coder to inspect a disposable project file using its actual native read tool.
+It does not silently grant edit/shell approval during headless installation.
+
+For native execution acceptance, use a disposable project copy with a small bug
+and a failing test. In Plan, verify coder file inspection works and edits/commands
+are blocked. In Build or `/code`, deny an edit and confirm the file is unchanged;
+then approve the edit and the test command and inspect the resulting diff and
+actual test output. Confirm only the project copy changed. These native approval,
+file-edit and command-execution checks remain pending on the Mac.
+
 ## Workspace, credentials and execution boundaries
 
 Copies live in `~/LocalAI-Automated/work-agent/projects/`; sessions, configuration
@@ -128,8 +158,10 @@ GitHub automatically; review and transfer the patch through your existing workfl
 
 Read/glob/grep are allowed within the project; edits and shell commands ask.
 External-directory tools, web fetching and web search are denied. Only the
-allowlisted analyst/coder subagents can be called by Plan or Build. Specialists
-have no tools and cannot delegate. General and Explore agents are disabled.
+allowlisted analyst/coder subagents can be called by Plan or Build. The analyst/document agents have no tools. The coder can use read/glob/grep,
+plus edit/write/apply_patch and bash with native approval. It cannot delegate,
+use account/network tools, or expand its directory permissions. General and
+Explore agents are disabled.
 LSP/formatters are disabled to avoid automatic project executables/downloads.
 Project OpenCode config is disabled. Provider keys and inherited OpenCode settings
 are stripped from the subprocess environment; HOME itself is not changed.

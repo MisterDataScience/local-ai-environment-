@@ -161,3 +161,73 @@ test('mode changes, gateway restarts and unavailable status block delegation', a
   await assert.rejects(f.before(f.call('offline')), /mode unavailable/);
   assert.equal(Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0].calls.length, 0);
 });
+
+async function coderFixture(t, parentAgent = 'build') {
+  const f = await fixture(t);
+  const handoff = f.call('delegate', 'coder');
+  f.messages.at(-1).info.agent = parentAgent;
+  await f.before(handoff);
+  f.messages.at(-1).parts[0].state.metadata = { sessionId: 'child' };
+  const child = { id: 'child', parentID: 'session1' };
+  const childMessages = [];
+  f.client.session.get = async ({ path }) => ({ data: path.id === 'child' ? child : f.session });
+  f.client.session.messages = async ({ path }) => ({ data: path.id === 'child' ? childMessages : f.messages });
+  async function use(tool, agent = 'coder') {
+    const callID = 'tool-' + childMessages.length;
+    childMessages.push({ info: { id: 'message-' + callID, role: 'assistant', agent },
+      parts: [{ type: 'tool', tool, callID, state: { status: 'running' } }] });
+    const output = { args: tool === 'bash' ? { command: 'python -m unittest' } : { filePath: 'example.py' } };
+    await f.hooks['tool.execute.before']({ tool, sessionID: 'child', callID }, output);
+    return output;
+  }
+  return { ...f, child, childMessages, use };
+}
+
+test('Build coder can inspect edit and test, with native approval arguments unchanged', async t => {
+  const f = await coderFixture(t);
+  for (const name of ['read', 'glob', 'grep', 'edit', 'write', 'apply_patch']) await f.use(name);
+  assert.deepEqual((await f.use('bash')).args, { command: 'python -m unittest' });
+  assert.equal(f.hooks['permission.ask'], undefined, 'policy must never auto-approve native requests');
+  for (const name of ['task', 'webfetch', 'websearch', 'account_write']) {
+    await assert.rejects(f.use(name), /not allowed/);
+  }
+});
+
+test('Plan coder can inspect but cannot mutate through edit write patch or shell', async t => {
+  const f = await coderFixture(t, 'plan');
+  for (const name of ['read', 'glob', 'grep']) await f.use(name);
+  for (const name of ['edit', 'write', 'apply_patch', 'bash']) {
+    await assert.rejects(f.use(name), /Plan coder is read-only/);
+  }
+});
+
+test('coder requires active reserved parent task and cannot elevate another specialist', async t => {
+  const f = await coderFixture(t);
+  await assert.rejects(f.use('read', 'analyst'), /non-coder specialists/);
+  f.messages.at(-1).parts[0].state.status = 'completed';
+  await assert.rejects(f.use('edit'), /active coordinator task/);
+  f.messages.at(-1).parts[0].state.status = 'running';
+  f.messages.at(-1).parts[0].callID = 'unreserved';
+  await assert.rejects(f.use('read'), /no reserved attempt/);
+});
+
+test('coder task has bounded native tool attempts and mode changes stop tools', async t => {
+  const f = await coderFixture(t);
+  for (let i = 0; i < 24; i++) await f.use('read');
+  await assert.rejects(f.use('read'), /24-tool-attempt/);
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ instance_id: 'backend', epoch: 1, mode: 'normal' }) });
+  await assert.rejects(f.use('bash'), /mode changed/);
+});
+
+test('direct coder uses explicit user turn with tools but cannot delegate', async t => {
+  const f = await fixture(t);
+  const call = f.call('direct');
+  f.messages.at(-1).info.agent = 'coder';
+  f.messages.at(-1).parts[0].tool = 'edit';
+  call[0].tool = 'edit';
+  await f.before(call);
+  call[0].tool = 'task';
+  await assert.rejects(f.before(call), /only the coordinator/);
+  call[0].tool = 'webfetch';
+  await assert.rejects(f.before(call), /not allowed/);
+});

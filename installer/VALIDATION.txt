@@ -1,3 +1,16 @@
+Coder execution update 2026-10-07 UTC: 79 installer tests and 17 JavaScript
+policy tests passed for this change (96 checks). The gateway is unchanged from
+the prior 86-test passing run. New coverage verifies Build coder project tools,
+Plan read-only enforcement, native edit/bash approval configuration, rejection
+of automatic edit permission, direct-coder execution, active reserved parent
+binding, analyst tool refusal, denied delegation/network tools, 24-tool limits
+and mode invalidation. The plugin never handles permission.ask or grants approval.
+
+Native Mac acceptance now requires a real coder read of a disposable project
+file. Actual denied/approved edits and shell test execution remain manual native
+acceptance checks and have NOT been executed here. Code and tests are packaged
+with the updated guides. No gateway concurrency or output caps were changed.
+
 OpenCode team update 2026-10-07 UTC: 79 installer tests, 86 gateway tests and
 12 JavaScript policy tests passed locally (177 total). Gateway integration uses
 real loopback HTTP with simulated Ollama; it proves protocol/lifecycle sequencing,

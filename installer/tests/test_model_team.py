@@ -74,7 +74,10 @@ class TeamTests(unittest.TestCase):
             self.assertEqual(settings['agent']['build']['permission']['task'], 'deny')
             self.assertFalse(settings['tools']['task'])
             self.assertEqual(settings['agent']['analyst']['permission'], {'*': 'deny'})
-            self.assertEqual(settings['agent']['coder']['steps'], 1)
+            self.assertEqual(settings['agent']['coder']['steps'], 12)
+            self.assertEqual(settings['agent']['coder']['permission']['edit'], 'ask')
+            self.assertEqual(settings['agent']['coder']['permission']['bash'], 'ask')
+            self.assertEqual(settings['agent']['coder']['permission']['task'], 'deny')
             self.assertEqual(settings['subagent_depth'], 1)
             self.assertFalse(settings['command']['code']['subtask'])
             self.assertEqual(settings['provider']['local-ai-gateway']['models']['local-ai-large']['limit']['context'], 32768)
@@ -112,6 +115,11 @@ class TeamTests(unittest.TestCase):
                   for r in ('analyst', 'coder')]
         agents += [{'name': r, 'permission': [{'permission': 'task', 'pattern': '*', 'action': 'deny'}]}
                    for r in ('plan', 'build')]
+        agents[1]['steps'] = 12
+        agents[1]['permission'] = [{'permission': '*', 'pattern': '*', 'action': 'deny'}] + [
+            {'permission': name, 'pattern': pattern, 'action': action} for name, pattern, action in (
+                ('read', '*', 'allow'), ('read', '*.env', 'deny'), ('glob', '*', 'allow'),
+                ('grep', '*', 'allow'), ('edit', '*', 'ask'), ('bash', '*', 'ask'))]
         response = Mock()
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
@@ -123,9 +131,13 @@ class TeamTests(unittest.TestCase):
                 agent['permission'].extend({'permission': 'task', 'pattern': r, 'action': 'allow'} for r in ('analyst', 'coder'))
             response.read.return_value = json.dumps(agents).encode()
             team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
+            agents[1]['permission'].append({'permission': 'edit', 'pattern': '*', 'action': 'allow'})
+            response.read.return_value = json.dumps(agents).encode()
+            with self.assertRaisesRegex(RuntimeError, 'approval permissions'):
+                team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
 
     def test_native_acceptance_requires_real_child_model_and_tool_result(self):
-        for fault in (None, 'no-task', 'wrong-model', 'child-tool'):
+        for fault in (None, 'no-task', 'wrong-model', 'child-tool', 'coder-no-read'):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as d:
                 root = Path(d)
                 (root / 'control').mkdir()
@@ -146,7 +158,9 @@ class TeamTests(unittest.TestCase):
                             result = [{'info': {'role': 'assistant', 'providerID': 'local-ai-gateway',
                                 'modelID': 'wrong' if fault == 'wrong-model' else cfg['model_team']['roles'][role]},
                                 'parts': [{'type': 'text', 'text': 'Result'}] +
-                                         ([{'type': 'tool'}] if fault == 'child-tool' else [])}]
+                                         ([{'type': 'tool', 'tool': 'bash'}] if fault == 'child-tool' else
+                                          [{'type': 'tool', 'tool': 'read', 'state': {'status': 'completed'}}]
+                                          if role == 'coder' and fault != 'coder-no-read' else [])}]
                         else:
                             result = [] if fault == 'no-task' else [{'parts': [{'type': 'tool', 'tool': 'task',
                                 'state': {'status': 'completed', 'input': {'subagent_type': role},

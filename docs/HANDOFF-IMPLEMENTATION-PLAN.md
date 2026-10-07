@@ -22,7 +22,8 @@ Open WebUI remains the general chat interface. Native Mac validation is pending.
    explicit user messages. A durable ledger reserves at most two attempts per
    turn; one same-role retry requires a concrete failure. Replays, concurrency,
    reconnects, process restarts and compaction do not grant a fresh budget.
-   Specialists cannot call tools or delegate. Task resumption and background
+   Analyst/document agents have no tools; the coder has bounded project tools
+   with native edit/command approvals and cannot delegate. Task resumption and background
    delegation are disabled. Input/result envelopes are bounded and native
    implicit `@file` expansion is escaped. Results retain visible clipping notices.
 4. **Memory and lifecycle.** All requests use the existing serial gateway.
@@ -35,7 +36,7 @@ Open WebUI remains the general chat interface. Native Mac validation is pending.
    and enabled only by successful plugin initialization. Startup inspects effective
    native agent permissions. The installer exercises each text preset, context
    rejection and cutoff behavior, then actual OpenCode analyst/coder handoffs and
-   parent resumption. It checks child model identity, no child tools and a final
+   parent resumption. It checks child model identity, no analyst tools, real coder file inspection and a final
    parent answer. These Mac checks have not been run in the authoring environment.
 6. **Packaging and authoring tests.** Policy, setup and role modules are included
    in the installer and acceptance fingerprint. Tests cover migration, permissions,
@@ -45,9 +46,11 @@ Open WebUI remains the general chat interface. Native Mac validation is pending.
 
 Routing currently uses the coordinator's native task selection and explicit
 commands. It is not a separately scored deterministic semantic classifier.
-Specialists return analysis/proposed code; the parent uses native file/shell
-approvals to apply work and execute tests. Direct specialist agents also have no
-tools. Thinking is off by default for predictable output budgets; changing that
+The coder can inspect, edit and test through native permissions, bounded to
+12 model steps and 24 tool attempts. Plan delegations are explicitly read-only;
+Build and direct `/code` edits/commands require native approval. Analyst/document
+agents remain text-only. Native edit denial, approval and test execution still
+need validation on the Mac. Thinking is off by default for predictable output budgets; changing that
 requires checking the exact model's native template and behavior.
 
 WebUI has no delegation adapter in this release. Its built-in delegate_task uses

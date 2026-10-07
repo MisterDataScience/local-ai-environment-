@@ -6,6 +6,8 @@ import { dirname } from 'node:path';
 
 const MAX_INPUT = 12000;
 const MAX_RESULT = 12000;
+const CODER_TOOLS = new Set(['read', 'glob', 'grep', 'edit', 'write', 'apply_patch', 'bash']);
+const READ_TOOLS = new Set(['read', 'glob', 'grep']);
 const fields = ['objective', 'constraints', 'evidence', 'completed', 'remaining', 'result'];
 const stores = new Map();
 const turnKey = (session, message) => createHash('sha256').update(session + '\0' + message).digest('hex');
@@ -48,6 +50,52 @@ export default async function LocalTeam({ client }, options = {}) {
   if (!ledgerPath || !roles?.coordinator || !roles?.analyst || !roles?.coder || !modeToken) fail('configuration missing');
   if (!stores.has(ledgerPath)) stores.set(ledgerPath, loadStore(ledgerPath));
   const { ledger, exclusive, save, active } = await stores.get(ledgerPath);
+
+  async function checkMode() {
+    const response = await fetch('http://127.0.0.1:8001/control/mode', {
+      headers: { Authorization: 'Bearer ' + process.env.LOCAL_AI_GATEWAY_KEY },
+      signal: AbortSignal.timeout(3000), redirect: 'error',
+    });
+    if (!response.ok) fail('gateway mode unavailable');
+    const status = await response.json();
+    if (status.transitioning || status.error || !['normal', 'max'].includes(status.mode)
+        || `${status.instance_id}:${status.epoch}:${status.mode}` !== modeToken) {
+      fail('gateway mode changed or restarted; restart the work agent');
+    }
+  }
+
+  async function coderTool(input, session, messages, assistant) {
+    if (!CODER_TOOLS.has(input.tool)) fail('coder tool is not allowed');
+    await checkMode();
+    let relevant = messages;
+    if (session.parentID) {
+      const parent = data(await client.session.get({ path: { id: session.parentID } }));
+      if (parent.parentID) fail('nested coder session');
+      const history = data(await client.session.messages({ path: { id: session.parentID } }));
+      const owner = history.find(m => m.info.role === 'assistant' && m.parts.some(p =>
+        p.type === 'tool' && p.tool === 'task' && p.state?.metadata?.sessionId === input.sessionID));
+      const task = owner?.parts.find(p => p.type === 'tool' && p.tool === 'task' &&
+        p.state?.metadata?.sessionId === input.sessionID);
+      if (!task || !['plan', 'build'].includes(owner.info.agent) || task.state.status !== 'running') {
+        fail('coder is not bound to an active coordinator task');
+      }
+      const { key } = await identity({ sessionID: session.parentID, callID: task.callID ?? task.id });
+      const reserved = ledger.turns[key].calls.some(c =>
+        [task.callID, task.id].includes(c.id) && c.role === 'coder' && c.status === 'reserved');
+      if (!reserved) fail('coder handoff has no reserved attempt');
+      if (owner.info.agent === 'plan' && !READ_TOOLS.has(input.tool)) fail('Plan coder is read-only; use Build for edits and tests');
+    } else {
+      const position = messages.findIndex(m => m.info.id === assistant.info.parentID);
+      const origin = messages.slice(0, position + 1).findLastIndex(m => m.info.role === 'user' &&
+        ledger.turns[turnKey(input.sessionID, m.info.id)]);
+      if (position < 0 || origin < 0) fail('coder needs an explicit user turn');
+      relevant = messages.slice(origin);
+    }
+    const attempts = relevant.flatMap(m => m.parts).filter(p => p.type === 'tool').length;
+    if (attempts > 24) fail('coder reached its 24-tool-attempt limit');
+    // Native tool execution follows this hook and still asks for edit/bash
+    // permissions. This hook never grants or bypasses an approval.
+  }
 
   async function identity(input) {
     const session = data(await client.session.get({ path: { id: input.sessionID } }));
@@ -121,20 +169,17 @@ export default async function LocalTeam({ client }, options = {}) {
     },
     async 'tool.execute.before'(input, output) {
       const session = data(await client.session.get({ path: { id: input.sessionID } }));
-      if (session.parentID) fail('specialists cannot use tools or delegate');
+      if (session.parentID || input.tool !== 'task') {
+        const messages = data(await client.session.messages({ path: { id: input.sessionID } }));
+        const assistant = messages.find(m => m.info.role === 'assistant' && m.parts.some(p =>
+          p.type === 'tool' && (p.callID === input.callID || p.id === input.callID)));
+        if (assistant?.info.agent === 'coder') return coderTool(input, session, messages, assistant);
+        if (session.parentID) fail('non-coder specialists cannot use tools or delegate');
+      }
       if (input.tool !== 'task') return;
       const value = envelope(output.args);
       await exclusive(async () => {
-        const response = await fetch('http://127.0.0.1:8001/control/mode', {
-          headers: { Authorization: 'Bearer ' + process.env.LOCAL_AI_GATEWAY_KEY },
-          signal: AbortSignal.timeout(3000), redirect: 'error',
-        });
-        if (!response.ok) fail('gateway mode unavailable');
-        const status = await response.json();
-        if (status.transitioning || status.error || !['normal', 'max'].includes(status.mode)
-            || `${status.instance_id}:${status.epoch}:${status.mode}` !== modeToken) {
-          fail('gateway mode changed or restarted; restart the work agent');
-        }
+        await checkMode();
         const { key, messages } = await identity(input);
         const turn = ledger.turns[key] ?? { calls: [] };
         if (turn.calls.some(c => c.id === input.callID)) fail('duplicate call already consumed its attempt');

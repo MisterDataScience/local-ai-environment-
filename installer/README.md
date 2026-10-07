@@ -214,8 +214,10 @@ Context protection now rejects oversized requests instead of silently discarding
 
 `Start Work Agent.command` starts Plan/Build with the 4B coordinator. Native
 foreground tasks can use analyst/coder, at most two attempts per explicit user
-turn including one concrete-failure retry. Specialists cannot use tools or
-delegate. The parent applies code and runs tests under OpenCode's own approvals.
+turn including one concrete-failure retry. The coder can inspect files, edit and
+run tests with native approval in Build or direct `/code`; Plan delegation is
+read-only. It is limited to 12 model steps and 24 tool attempts. Analyst/document
+agents have no tools and no specialist can delegate.
 Direct `/code`, `/analyse` and `/document` commands avoid the coordinator pass.
 Startup verifies the policy loaded. Mode changes or gateway restarts stop the
 work agent. The installer also requires actual native handoff acceptance before
