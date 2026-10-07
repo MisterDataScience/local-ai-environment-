@@ -53,7 +53,7 @@ The current daily launcher starts services in Terminal and opens Safari. Termina
 
 Remote access is now available as an optional installer stage. See [private access from your other devices](docs/REMOTE-ACCESS.md). Tailscale sign-in and macOS extension approval remain interactive setup steps.
 
-Web access is optional: [setup, commands and privacy boundaries](docs/WEB-ACCESS.md). Use `/search QUERY` or `/read URL QUESTION`. Reverse image search is separately opt-in, uses images explicitly selected from the encrypted workspace, strips metadata into a derivative, and fails closed unless the installer-managed VPN proxy is available. These gateway paths have no direct-internet fallback. A local Docker engine and Proton WireGuard key require one-time setup. This does not block all native WebUI URL-loader/plugin traffic.
+Web access is optional: [setup, commands and privacy boundaries](docs/WEB-ACCESS.md). Use `/search QUERY` or `/read URL QUESTION`. Use `/reverse Inbox/photo.jpg` for explicitly invoked reverse image search after setup. Reverse image search is separately opt-in, uses images explicitly selected from the encrypted workspace, strips metadata into a derivative, and fails closed unless the installer-managed VPN proxy is available. These gateway paths have no direct-internet fallback. A local Docker engine and Proton WireGuard key require one-time setup. This does not block all native WebUI URL-loader/plugin traffic.
 
 ## Install the current prototype
 
