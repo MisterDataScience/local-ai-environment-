@@ -90,6 +90,7 @@ Explain this Python function.        -> text
 /video A red car slowly driving.     -> video
 /search Python official tutorial    -> VPN search, if configured
 /read https://www.python.org/        -> VPN page summary, if configured
+/reverse Inbox/photo.jpg              -> VPN-only Yandex reverse image search, if configured
 ```
 
 Text presets default to Small: 120 seconds idle, Everyday: 300 seconds and Large: 60 seconds. No model loads merely from selecting it. A text request for a different model explicitly unloads the old model first. Use `AI Modes.command` for enforced Gaming/Normal/Max restrictions. Gaming permits only Qwen3 4B and blocks media. Normal permits small/everyday text and images. Max permits all configured models and media. Wait for Ready after switching. See RESOURCE-MODES.md in the ZIP.
