@@ -39,6 +39,7 @@ Gaming/Normal/Max profiles are enforced through the gateway; use `AI Modes.comma
 | [manual-setup/](manual-setup/) | Earlier manual setup source, retained for reference |
 | [docs/Mac-Local-AI-Setup-Guide.md](docs/Mac-Local-AI-Setup-Guide.md) | Original detailed manual guide |
 | [docs/PROJECT-REQUIREMENTS.md](docs/PROJECT-REQUIREMENTS.md) | Updated operating, privacy and resource requirements |
+| [docs/ESSAY-EDITING-SPECIFICATION.md](docs/ESSAY-EDITING-SPECIFICATION.md) | Optional essay-editing specification: voice preservation, rhythm analysis, masks, constrained randomisation and reordering; runtime mode not yet implemented |
 | [docs/ORCHESTRATOR-ASSESSMENT.md](docs/ORCHESTRATOR-ASSESSMENT.md) | Actual gateway capabilities and established-tool assessment |
 | [downloads/](downloads/) | Existing installer and manual setup ZIP bundles |
 
