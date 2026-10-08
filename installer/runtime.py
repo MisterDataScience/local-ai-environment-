@@ -29,6 +29,8 @@ def main():
             assert_private_ports(cli_json("serve", "status", "--json"), remote["hostname"])
         except subprocess.SubprocessError:
             logging.warning("Tailscale status is unavailable. Remote access may be offline.")
+    from discord_runtime import DiscordSupervisor
+    discord = DiscordSupervisor(root, config)
     processes = []
     def interrupted(signum, frame):
         raise KeyboardInterrupt
@@ -112,6 +114,11 @@ def main():
                 if not context_warning:
                     logging.warning('Context settings could not be refreshed; retrying. Oversized requests must still fail at the backend.')
                 context_warning = True
+            try:
+                discord.tick(http('http://127.0.0.1:8001/control/mode', key=config['api_key'], timeout=3))
+            except Exception:
+                discord.stop()
+                logging.warning('Discord waiting for the gateway.')
             time.sleep(2)
     except KeyboardInterrupt:
         print("\nShutting down. An active generation will finish or time out before memory is released.")
@@ -123,6 +130,7 @@ def main():
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        discord.stop()
         for name, process in reversed(processes):
             stop_process(process, timeout=4200 if name == "gateway" else 90)
         if config.get('vault', {}).get('enabled'):

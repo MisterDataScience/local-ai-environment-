@@ -1,0 +1,12 @@
+{
+  "name": "local-ai-discord",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=24.21.0"},
+  "dependencies": {
+    "discord.js": "14.27.0",
+    "@discordjs/voice": "0.19.2",
+    "opusscript": "0.1.1"
+  }
+}

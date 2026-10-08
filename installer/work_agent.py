@@ -6,11 +6,13 @@ import os
 from pathlib import Path
 import shutil
 import secrets
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
 import time
+import threading
 import uuid
 import zipfile
 
@@ -230,7 +232,13 @@ def main():
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--project', type=Path)
     parser.add_argument('--conversation', action='store_true')
+    parser.add_argument('--discord', action='store_true')
     args = parser.parse_args()
+    args.conversation = args.conversation or args.discord
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGHUP, interrupted)
     root = args.root.expanduser().resolve()
     config = json.loads((root / 'control/config.json').read_text())
     base, key = 'http://127.0.0.1:8001', config['api_key']
@@ -275,20 +283,38 @@ def main():
     git_env['OPENCODE_SERVER_PASSWORD'] = secrets.token_urlsafe(24)
     git_env['OPENCODE_SERVER_USERNAME'] = 'opencode'
     print('OpenCode: http://127.0.0.1:4096  Username: opencode', flush=True)
-    print('Session password:', git_env['OPENCODE_SERVER_PASSWORD'], flush=True)
-    process = subprocess.Popen([str(binary), 'web', '--hostname', '127.0.0.1', '--port', '4096'],
+    if not args.discord:
+        print('Session password:', git_env['OPENCODE_SERVER_PASSWORD'], flush=True)
+    process = subprocess.Popen([str(binary), 'serve' if args.discord else 'web', '--hostname', '127.0.0.1', '--port', '4096'],
                                cwd=project, env=git_env, start_new_session=True)
     conversation_server = None
+    discord_process = None
     try:
         from team_setup import verify_work_agent
         verify_work_agent(process, git_env, config.get('model_team', {}).get('enabled', False))
         if args.conversation:
             from conversation import launch
             conversation_server, url = launch(root, git_env['OPENCODE_SERVER_PASSWORD'], config)
-            print('Private conversation link:', url, flush=True)
-            subprocess.run(['open', url], check=True)
+            if args.discord:
+                from discord_setup import read_token, NODE_VERSION
+                settings = config.get('discord', {})
+                if not settings.get('enabled'):
+                    raise RuntimeError('Run Connect Discord.command first')
+                token = read_token(root, settings['application_id'])
+                discord_process = subprocess.Popen([str(root / 'tools/node' / NODE_VERSION / 'bin/node'),
+                    str(root / 'discord-engine/discord-adapter.mjs')], stdin=subprocess.PIPE, text=True,
+                    cwd=root / 'discord-engine', env={k:v for k,v in os.environ.items() if k in {'HOME','PATH','TMPDIR','LANG'}},
+                    start_new_session=True)
+                discord_process.stdin.write(json.dumps({'token':token, 'config':settings, 'bridgeKey':conversation_server.app.key}))
+                discord_process.stdin.close()
+                del token
+            else:
+                print('Private conversation link:', url, flush=True)
+                subprocess.run(['open', url], check=True)
         while process.poll() is None:
             time.sleep(1)
+            if discord_process and discord_process.poll() is not None:
+                raise RuntimeError('Discord adapter exited')
             status = http(base + '/control/mode', key=key, timeout=3)
             if (status['mode'] != initial_mode or status['transitioning'] or status['error']
                     or status.get('instance_id') != initial_instance or status.get('epoch') != initial_epoch):
@@ -297,15 +323,23 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        if discord_process:
+            stop_process(discord_process, timeout=10)
+        stop_process(process, timeout=10)
         if conversation_server:
             conversation_server.app.closed.set()
-            try:
-                conversation_server.app.stop()
-            except Exception:
-                pass  # Gateway lease expiry also releases speech after a lost connection.
+            def release_audio():
+                try:
+                    conversation_server.app.stop()
+                except Exception:
+                    pass  # Gateway lease expiry also releases speech after a lost connection.
+            cleanup = threading.Thread(target=release_audio, daemon=True)
+            cleanup.start()
+            cleanup.join(timeout=2)
             conversation_server.shutdown()
             conversation_server.server_close()
-        stop_process(process, timeout=10)
         print('Project preserved at:', project)
 
 

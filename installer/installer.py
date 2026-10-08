@@ -37,7 +37,8 @@ GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py", "context_policy.py", "model_team.py", "speech.py", "speech_worker.py")
 GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_worker.py')
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
-              'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
+              'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
+              'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -361,6 +362,9 @@ def verify_generation(root, configuration):
             ("text-after-video", "Reply with one sentence about reproducibility."),
         ]]
         report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": [], "media": "vault-direct" if configuration.get("vault", {}).get("enabled") else "local"}
+        if configuration.get('discord', {}).get('enabled'):
+            report['checks'].append({'name': 'discord-live-call', 'status': 'not_run',
+                'reason': 'Dependencies and account setup checked. Complete the live voice, interruption, permissions and Gaming-mode checks in DISCORD.md.'})
         if configuration.get('conversation', {}).get('enabled'):
             report['checks'].append({'name': 'interactive-conversation', 'status': 'not_run',
                 'reason': 'Audio workers load-checked during installation. Run Check Conversation.command, then the microphone, interruption, approvals and memory checks in REALTIME-CONVERSATION.md.'})
@@ -429,7 +433,7 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
-    for label, module in (("Check Conversation", "conversation_check.py"), ("Start Conversation", "work_agent.py --conversation"), ("Configure Voice", "voice_setup.py"), ("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
+    for label, module in (("Connect Discord", "discord_setup.py"), ("Check Conversation", "conversation_check.py"), ("Start Conversation", "work_agent.py --conversation"), ("Configure Voice", "voice_setup.py"), ("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
                          ("Restore AI Workspace", "vault_backup.py --restore"), ("Archive Existing AI Files", "vault_backup.py --migrate-legacy")):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
@@ -489,6 +493,10 @@ def main():
         install_work_agent(root, download, run)
         configuration['cryptomator_app'] = str(app)
         save_config(root, configuration)
+        from discord_setup import install as install_discord, configure as configure_discord
+        install_discord(root, download, run)
+        configure_discord(root)
+        configuration = json.loads((root / 'control/config.json').read_text())
         logging.info("Stage 6/8: hardware generation and memory handoff tests")
         fingerprint = acceptance_fingerprint(root)
         accepted_file = root / "accepted-fingerprint.txt"

@@ -1,3 +1,11 @@
+Discord update 2026-10-08 UTC: 93 installer tests, 100 gateway tests and
+43 JavaScript tests pass (236 checks). Includes an adapter-level simulated
+voice call, owner-scoped approval, interruption, PCM conversion, playback
+acknowledgements, capture bounds, Keychain command secrecy and runtime mode
+transitions/backoff. Actual pinned Opus codec and DAVE imports pass on the
+authoring host. Discord live voice, target-Mac Keychain/Node, GPU latency and
+32GB memory behavior are not verified here. See DISCORD.md for live acceptance.
+
 Conversation update 2026-10-08 UTC: 87 installer tests, 100 gateway tests and
 35 JavaScript endpoint/contract/policy tests passed locally (222 checks).
 Coverage includes real loopback incremental token delivery before backend

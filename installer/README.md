@@ -1,8 +1,14 @@
 # Update: Cryptomator workspace and GitHub
 
+Discord integration is included in the main installer. One-time setup connects
+an owner-only private voice channel and your saved voice. The bot starts with
+Local AI, routes speech through the existing coordinator, and presents tool
+approvals in Discord. See [Discord setup and live-call checks](../docs/DISCORD.md).
+Live calls on the target Mac remain unverified.
+
 Qwen3-TTS 1.7B Base is included as a locally downloaded MLX speech model.
-After installation, run Configure Voice.command with a WAV reference and its
-transcript. See VOICE-GENERATION.md in the ZIP for `/speak` and coordinator usage.
+Discord setup registers your default voice from a WAV reference and transcript
+if you have not already saved one. Configure Voice.command adds other voices. See VOICE-GENERATION.md in the ZIP for `/speak` and coordinator usage.
 
 Coordinator image/video tools now use the existing serial rendering backend,
 with native approval prompts, saved job records and resource-mode checks.

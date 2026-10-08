@@ -1,5 +1,11 @@
 # Local AI environment
 
+Discord integration is included in the main installer. One-time setup connects
+an owner-only private voice channel and your saved voice. The bot starts with
+Local AI, routes speech through the existing coordinator, and presents tool
+approvals in Discord. See [Discord setup and live-call checks](docs/DISCORD.md).
+Live calls on the target Mac remain unverified.
+
 Local conversation mode now connects microphone input, Parakeet transcription,
 streamed coordinator replies and Qwen3-TTS playback through the existing OpenCode
 harness. It includes interruption, native approvals and shared memory ownership.
