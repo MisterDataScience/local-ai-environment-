@@ -9,6 +9,8 @@ import shutil
 import time
 from urllib.parse import urlparse
 import uuid
+import queue
+from token_stream import Stream
 from web_tools_api import specification, execute as retrieve_tool
 import vault_tools
 import vault_media
@@ -152,6 +154,42 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorised():
             return
         path = urlparse(self.path).path
+        if path == '/conversation/audio':
+            sent = False
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 1_300_000:
+                    self.close_connection = True
+                    raise ValueError('Invalid audio request size')
+                data = json.loads(self.rfile.read(length))
+                action = data.get('action')
+                if action == 'start':
+                    return self.json_response(200, self.server.engine.start_conversation())
+                if action in {'stop', 'cancel', 'heartbeat'}:
+                    return self.json_response(200, self.server.engine.audio.control(action))
+                if action != 'speak':
+                    result = {}
+                    self.server.engine.audio.request(data, result.update)
+                    return self.json_response(200, result)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/x-ndjson')
+                self.send_header('Connection', 'close')
+                self.end_headers()
+                self.close_connection = sent = True
+                def emit(value):
+                    self.wfile.write((json.dumps(value) + '\n').encode())
+                    self.wfile.flush()
+                self.server.engine.audio.request(data, emit)
+                emit({'done': True})
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception as error:
+                if sent:
+                    self.wfile.write((json.dumps({'error': str(error), 'done': True,
+                                                  'paused': getattr(error, 'paused', False)}) + '\n').encode())
+                else:
+                    self.json_response(409, {'error': str(error)})
+            return
         if path == '/control/mode':
             try:
                 length = int(self.headers.get('Content-Length', '0'))
@@ -191,7 +229,9 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 2_000_000:
                 raise ValueError("Request must be between 1 byte and 2 MB.")
             body = json.loads(self.rfile.read(length))
-            future = self.server.engine.submit(body)
+            body.pop('_streamed', None)
+            stream = Stream() if body.get('stream') else None
+            future = self.server.engine.submit(body, stream=stream) if stream else self.server.engine.submit(body)
         except (ValueError, RuntimeError) as error:
             return self.json_response(400, {"error": {"message": str(error)}})
         identifier, created = "chatcmpl-" + uuid.uuid4().hex, int(time.time())
@@ -213,14 +253,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.close_connection = True
         try:
-            while not future.done():
+            while not future.done() or not stream.events.empty():
                 try:
-                    future.result(timeout=10)
-                except concurrent.futures.TimeoutError:
+                    delta = stream.events.get(timeout=1)
+                    chunk = {'id': identifier, 'object': 'chat.completion.chunk', 'created': created,
+                             'model': body['model'], 'choices': [{'index': 0, 'delta': delta, 'finish_reason': None}]}
+                    self.wfile.write(('data: ' + json.dumps(chunk) + '\n\n').encode())
+                    self.wfile.flush()
+                except queue.Empty:
                     self.wfile.write(b": waiting for local model\n\n")
                     self.wfile.flush()
-                except Exception:
-                    break
             try:
                 content = future.result()
             except Exception as error:
@@ -232,7 +274,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 return
             message, reason = completion_message(content, body.get('_finish_reason'))
-            for delta, finish in [(completion_delta(message), None), ({}, reason)]:
+            chunks = [({}, reason)] if body.get('_streamed') else [(completion_delta(message), None), ({}, reason)]
+            for delta, finish in chunks:
                 chunk = {"id": identifier, "object": "chat.completion.chunk", "created": created,
                          "model": body["model"], "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
                 if finish and body.get("_usage"):
@@ -241,8 +284,9 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
-            # The job still owns the executor until cleanup, even if the tab closes.
-            LOG.info("Client disconnected; job will finish and release model memory.")
+            stream.cancelled.set()
+            future.cancel()
+            LOG.info("Client disconnected; cancellation requested, executor retained until backend closes.")
 
 
 class MediaHandler(Handler):

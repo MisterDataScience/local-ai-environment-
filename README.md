@@ -1,6 +1,11 @@
 # Local AI environment
 
-Local speech and reference-voice cloning now use Qwen3-TTS 1.7B Base through
+Local conversation mode now connects microphone input, Parakeet transcription,
+streamed coordinator replies and Qwen3-TTS playback through the existing OpenCode
+harness. It includes interruption, native approvals and shared memory ownership.
+Use `Start Conversation.command`; see [setup and Mac acceptance](docs/REALTIME-CONVERSATION.md).
+
+Local speech and reference-voice cloning use Qwen3-TTS 1.7B Base through
 MLX-Audio. Use `/speak` or the coordinator's speech tool after registering a voice.
 See [voice setup and limits](docs/VOICE-GENERATION.md).
 
@@ -14,7 +19,7 @@ quotes, native test-execution evidence and recoverable full reports. See
 
 Personal local AI project for a **32 GB unified-memory Apple Silicon Mac mini**. This project is separate from OTHM coursework.
 
-**Status: prototype.** The included installer implements text, image and short video generation through a custom Python gateway. The previously established unit/mock suite passed in the authoring environment. New reverse-image unit/mock tests are included but have not been run by repository CI. Native Mac installation, Apple GPU inference and memory use have not been verified here. The installer performs acceptance checks on the target Mac.
+**Status: prototype.** The installer implements text, image, short video, speech and local conversation through a Python gateway and native OpenCode harness. Automated authoring tests cover logic and local HTTP with simulated model responses. Native Mac installation, Apple GPU inference, microphone behavior and memory use have not been verified here. The installer performs target-Mac checks; interactive conversation acceptance remains explicit.
 
 Gaming/Normal/Max profiles are enforced through the gateway; use `AI Modes.command`. Automatic background AI startup remains unimplemented. Optional Proton VPN search, HTML page reading and opt-in Yandex reverse image search are implemented; native tunnel-drop/DNS and live reverse-search validation remain pending.
 
@@ -82,7 +87,7 @@ This installs under `~/LocalAI-Automated`. Requirements: Apple Silicon, macOS 15
 ```bash
 python3 -m unittest discover -s installer/tests -v
 python3 -m unittest discover -s installer/payload/tests -v
-node --test installer/tests/test_opencode_team.mjs
+node --test installer/tests/test_opencode_team.mjs installer/tests/test_handoff_contract.mjs installer/tests/test_conversation.mjs
 bash -n 'installer/Install Local AI.command'
 ```
 

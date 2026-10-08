@@ -1,3 +1,17 @@
+Conversation update 2026-10-08 UTC: 87 installer tests, 100 gateway tests and
+35 JavaScript endpoint/contract/policy tests passed locally (222 checks).
+Coverage includes real loopback incremental token delivery before backend
+completion, native-session bridging with simulated responses, compaction
+continuations, scoped permission replies, played-versus-generated records,
+stale response rejection, worker cancellation, lease expiry and heavy-model
+exclusivity. Python compilation, JavaScript syntax and diff checks passed.
+The optional Playwright browser test is included but NOT run: its Chromium
+runtime was absent and the browser download returned an invalid archive.
+Microphone/AEC behavior, native MLX inference, latency, voice quality and
+32GB Mac memory pressure remain unverified. Installation load-checks all audio
+workers; Check Conversation.command provides a native audio round-trip/timing
+report. Interactive acceptance is explicitly not_run in the installer report.
+
 Qwen3-TTS update 2026-10-08 UTC: 81 installer tests, 93 gateway tests and
 32 JavaScript contract/policy/media tests passed locally (206 checks).
 Speech uses the pinned MLX Qwen3-TTS 1.7B Base checkpoint, a private one-shot

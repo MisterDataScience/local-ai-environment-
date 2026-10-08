@@ -60,7 +60,12 @@ class ContextProtocolTests(unittest.TestCase):
                                     'messages': [{'role': 'user', 'content': 'Write an essay'}]}
                             request = Request(f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
                                 data=json.dumps(body).encode(), headers={'Authorization': 'Bearer test-key'})
+                            def streaming(base, payload, sink):
+                                result = backend(base, '/api/chat', payload)
+                                sink.send({'content': result['message']['content']})
+                                return result
                             with patch.object(model_engine, 'api', side_effect=backend), \
+                                 patch.object(model_engine.token_stream, 'chat', side_effect=streaming), \
                                  patch.object(model_engine, 'port_open', return_value=False), \
                                  urlopen(request, timeout=2) as response:
                                 text = response.read().decode()
@@ -127,7 +132,7 @@ class ContextProtocolTests(unittest.TestCase):
             for failure in (None, RuntimeError('backend offline'), backend_http.ContextLengthError('too big')):
                 for stream in (False, True):
                     with self.subTest(failure=failure, stream=stream):
-                        def submit(body):
+                        def submit(body, stream=None):
                             future = concurrent.futures.Future()
                             if failure:
                                 future.set_exception(failure)

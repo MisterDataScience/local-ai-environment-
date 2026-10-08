@@ -35,7 +35,9 @@ OLLAMA_CONTEXT_SHA256 = '60dd339e77fdc8afe3286c51ff1fd8eb4f467ec178f33f4a85ec69d
 GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "model_engine.py", "http_api.py", "text_models.py", "web_client.py",
                  "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py", "context_policy.py", "model_team.py", "speech.py", "speech_worker.py")
-TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py')
+GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_worker.py')
+TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
+              'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -113,7 +115,7 @@ def acceptance_fingerprint(root):
     hashes = [digest(root / "control" / name) for name in
               GATEWAY_FILES + TEAM_FILES + ("workflows/image.json", "workflows/video.json", "config.json", "comfy_vault/__init__.py")]
     # Registering/changing the reference must invalidate an earlier not_run speech check.
-    for name in ('voices/default.json', 'voices/default.wav', 'installed.json'):
+    for name in ('voices/default.json', 'voices/default.wav', 'installed.json', 'conversation-installed.json'):
         path = root / 'voice-engine' / name
         hashes.append(digest(path) if path.is_file() else 'missing:' + name)
     return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
@@ -263,6 +265,8 @@ def install_environments(root, uv, state):
     upgraded = upgrade_team(upgrade_text_configuration(config))
     from voice_setup import install as install_voice
     upgraded['speech'] = install_voice(root, uv, run)
+    from conversation_setup import install as install_conversation
+    upgraded['conversation'] = install_conversation(root, uv, run)
     if upgraded != config:
         # Keep the old settings and secrets recoverable before migrating.
         backup = config_path.with_name("config.before-model-team-v1.json")
@@ -357,6 +361,9 @@ def verify_generation(root, configuration):
             ("text-after-video", "Reply with one sentence about reproducibility."),
         ]]
         report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": [], "media": "vault-direct" if configuration.get("vault", {}).get("enabled") else "local"}
+        if configuration.get('conversation', {}).get('enabled'):
+            report['checks'].append({'name': 'interactive-conversation', 'status': 'not_run',
+                'reason': 'Audio workers load-checked during installation. Run Check Conversation.command, then the microphone, interruption, approvals and memory checks in REALTIME-CONVERSATION.md.'})
         if configuration.get('speech', {}).get('enabled'):
             if (root / 'voice-engine/voices/default.json').exists():
                 checks += [('speech', '/speak This is a local speech generation acceptance test.', 'local-ai-small'),
@@ -422,7 +429,7 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
-    for label, module in (("Configure Voice", "voice_setup.py"), ("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
+    for label, module in (("Check Conversation", "conversation_check.py"), ("Start Conversation", "work_agent.py --conversation"), ("Configure Voice", "voice_setup.py"), ("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
                          ("Restore AI Workspace", "vault_backup.py --restore"), ("Archive Existing AI Files", "vault_backup.py --migrate-legacy")):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +

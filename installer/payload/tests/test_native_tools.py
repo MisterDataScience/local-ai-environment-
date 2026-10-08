@@ -121,7 +121,7 @@ class NativeToolsTests(unittest.TestCase):
         output = protocol.assistant_for_openai({"content": "", "tool_calls": [
             {"function": {"name": "view_note", "arguments": {"id": "note"}}}]}, [TOOL])
         engine = Mock(config={"api_key": "test-key"})
-        def submit(body):
+        def submit(body, stream=None):
             import concurrent.futures
             future = concurrent.futures.Future()
             future.set_result(output)
@@ -220,3 +220,4 @@ class WebBridgeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

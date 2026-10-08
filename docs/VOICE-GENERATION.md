@@ -69,9 +69,10 @@ automatically retried.
 - Debugging: `logs/speech.log`, `voice-engine/artifacts.json` and
   `voice-engine/dependencies.txt`. Existing remote media routes also serve WAVs.
 
-This adds text-to-speech and reference-voice cloning. It does not add microphone
-input, speech recognition, voice conversion of arbitrary recordings, automatic
-read-aloud for every response or a conversational audio-input model.
+The standalone `/speak` path provides text-to-speech and reference-voice cloning.
+For microphone input, local transcription, automatic response playback and
+interruption, use the separate [conversation mode](REALTIME-CONVERSATION.md).
+Arbitrary recording-to-recording voice conversion is not implemented.
 
 ## Pinned sources and validation
 

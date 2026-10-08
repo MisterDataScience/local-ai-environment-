@@ -266,7 +266,11 @@ class GatewayTests(unittest.TestCase):
                     backend.assert_not_called()
                 body = request("hello")
                 body["model"] = "local-ai-small"
+                def streaming(base, payload, sink):
+                    sink.send({'content': 'small answer'})
+                    return {'message': {'content': 'small answer'}}
                 with patch.object(model_engine, "port_open", return_value=False), \
+                     patch.object(model_engine.token_stream, 'chat', side_effect=streaming), \
                      patch.object(model_engine, "api", side_effect=lambda base, path, payload=None, timeout=30:
                          {"models": []} if path == "/api/ps" else {"message": {"content": "small answer"}}):
                     for stream in (False, True):

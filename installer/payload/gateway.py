@@ -37,6 +37,11 @@ def main():
     server.daemon_threads = True
     server.engine = Engine(config)
     server.engine.change_mode(server.engine.mode)  # Release any leftover weights before admitting work.
+    stopping = threading.Event()
+    def expire_audio():
+        while not stopping.wait(5):
+            server.engine.audio.expire()
+    threading.Thread(target=expire_audio, daemon=True).start()
     media_server = None
     if config.get("remote_access", {}).get("enabled"):
         try:
@@ -58,6 +63,8 @@ def main():
     except KeyboardInterrupt:
         LOG.info("Waiting for queued work before shutdown; do not force-close this window.")
     finally:
+        stopping.set()
+        server.engine.audio.control('stop')
         server.server_close()
         server.engine.executor.shutdown(wait=True)
         server.engine.stop_comfy()

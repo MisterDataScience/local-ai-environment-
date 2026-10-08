@@ -229,6 +229,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', type=Path, required=True)
     parser.add_argument('--project', type=Path)
+    parser.add_argument('--conversation', action='store_true')
     args = parser.parse_args()
     root = args.root.expanduser().resolve()
     config = json.loads((root / 'control/config.json').read_text())
@@ -238,6 +239,10 @@ def main():
         raise RuntimeError('Select Normal or Max in AI Modes and wait for Ready before starting work.')
     if port_open(4096):
         raise RuntimeError('Port 4096 is occupied. Close the other work agent first.')
+    if args.conversation and port_open(8003):
+        raise RuntimeError('Port 8003 is occupied. Close the other conversation launcher first.')
+    if args.conversation and not config.get('conversation', {}).get('enabled'):
+        raise RuntimeError('Conversation components missing. Rerun the installer.')
     models = http(base + '/v1/models', key=key)['data']
     initial_mode = status['mode']
     initial_instance, initial_epoch = status.get('instance_id'), status.get('epoch')
@@ -247,7 +252,7 @@ def main():
         raise RuntimeError('OpenCode is missing. Rerun the Local AI installer.')
     sessions = root / 'work-agent/projects'
     sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if not args.project:
+    if not args.project and not args.conversation:
         value = input('Project folder to COPY, or Enter for a new empty project: ').strip()
         args.project = Path(value).expanduser() if value else None
     project = sessions / uuid.uuid4().hex
@@ -273,9 +278,15 @@ def main():
     print('Session password:', git_env['OPENCODE_SERVER_PASSWORD'], flush=True)
     process = subprocess.Popen([str(binary), 'web', '--hostname', '127.0.0.1', '--port', '4096'],
                                cwd=project, env=git_env, start_new_session=True)
+    conversation_server = None
     try:
         from team_setup import verify_work_agent
         verify_work_agent(process, git_env, config.get('model_team', {}).get('enabled', False))
+        if args.conversation:
+            from conversation import launch
+            conversation_server, url = launch(root, git_env['OPENCODE_SERVER_PASSWORD'], config)
+            print('Private conversation link:', url, flush=True)
+            subprocess.run(['open', url], check=True)
         while process.poll() is None:
             time.sleep(1)
             status = http(base + '/control/mode', key=key, timeout=3)
@@ -286,6 +297,14 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if conversation_server:
+            conversation_server.app.closed.set()
+            try:
+                conversation_server.app.stop()
+            except Exception:
+                pass  # Gateway lease expiry also releases speech after a lost connection.
+            conversation_server.shutdown()
+            conversation_server.server_close()
         stop_process(process, timeout=10)
         print('Project preserved at:', project)
 

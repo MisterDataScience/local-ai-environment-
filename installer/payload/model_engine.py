@@ -26,6 +26,8 @@ import resource_modes
 import reverse_image
 import vault_media
 import speech
+import token_stream
+from conversation_audio import Audio
 from vault_tools import mounted_root, enabled as vault_enabled
 
 ROOT = Path(__file__).resolve().parent
@@ -68,6 +70,7 @@ class Engine:
         self.instance_id = uuid.uuid4().hex
         self.mode_transitioning = False
         self.mode_error = None
+        self.audio = Audio(self)
 
     def mode_status(self):
         with self.mode_lock:
@@ -108,6 +111,7 @@ class Engine:
         return self.mode_status()
 
     def finish_mode_change(self):
+        self.audio.control('stop')
         try:
             self.stop_comfy()
             if port_open(self.comfy_port):
@@ -121,7 +125,11 @@ class Engine:
                 self.mode_transitioning = False
                 self.state = 'idle'
 
-    def submit(self, body):
+    def submit(self, body, stream=None):
+        # Internal callbacks can only originate in the HTTP handler.
+        body.pop('_stream', None)
+        if stream is not None:
+            body['_stream'] = stream
         body.pop("_usage", None)
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
@@ -327,6 +335,29 @@ class Engine:
         return destination
 
     def run(self, messages, route, prompt, body):
+        from model_team import team_roles
+        roles = team_roles(self.config, self.text_models)
+        light = (route == 'text' and roles and body['model'] == roles['coordinator']
+                 and self.text_models[body['model']]['num_ctx'] <= 8192)
+        with self.audio.model_job(light=bool(light)):
+            try:
+                return self.run_inner(messages, route, prompt, body)
+            finally:
+                if not light and self.audio.enabled:
+                    # Audio may reload only after the large model is gone.
+                    self.unload_ollama()
+
+    def start_conversation(self):
+        def start():
+            with self.audio.model_job():
+                self.stop_comfy()
+                if port_open(self.comfy_port):
+                    raise RuntimeError('Stop unmanaged ComfyUI before conversation')
+                self.unload_ollama()
+                return self.audio.control('start')
+        return self.executor.submit(start).result(timeout=180)
+
+    def run_inner(self, messages, route, prompt, body):
         LOG.info("Starting %s request", route)
         try:
             self.check_policy(body, route)
@@ -375,7 +406,9 @@ class Engine:
                 payload["tools"] = tools
             # Exactly one inference call. Open WebUI executes/approves tools and
             # submits the next inference turn with their results.
-            response = api(self.ollama, '/api/chat', payload, timeout=1800)
+            stream = body.get('_stream') if route == 'text' else None
+            response = (token_stream.chat(self.ollama, payload, stream) if stream
+                        else api(self.ollama, '/api/chat', payload, timeout=1800))
             self.text_profile = profile
             message = response['message']
             counts = [response.get('prompt_eval_count'), response.get('eval_count')]
@@ -383,6 +416,13 @@ class Engine:
                 body['_usage'] = {'prompt_tokens': counts[0], 'completion_tokens': counts[1],
                                   'total_tokens': sum(counts)}
             answer = assistant_for_openai(message, tools)
+            if stream:
+                if isinstance(answer, dict) and answer.get('tool_calls'):
+                    delta = {'tool_calls': [dict(call, index=i) for i, call in enumerate(answer['tool_calls'])]}
+                    if answer.get('reasoning_content'):
+                        delta['reasoning_content'] = answer['reasoning_content']
+                    stream.send(delta)
+                body['_streamed'] = True
             # Preserve the backend's cutoff signal instead of calling every
             # non-tool response a normal stop. Counts alone cannot prove cutoff.
             body['_finish_reason'] = ('length' if response.get('done_reason') == 'length'
