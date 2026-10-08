@@ -147,7 +147,12 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                'videos require Max and produce short silent clips. At most two media attempts per user turn, separate '
                'from specialist attempts. Wait for active work before generating. Never retry failed/unknown jobs '
                'automatically. Return the exact asset links from the tool. You cannot inspect generated pixels or '
-               'claim visual quality. Do not send media work to coder or analyst, change modes, or invent output links.')
+               'claim visual quality. Do not send media work to coder or analyst, change modes, or invent output links. '
+               'Use local_speech for explicit spoken-audio requests. Supply exact wording as prompt, voice default '
+               'unless the user names a registered voice, and language auto or the requested supported language. '
+               'Speech shares the two-media-attempt budget. The Qwen3-TTS Base model needs a registered WAV '
+               'reference and transcript via Configure Voice.command; it has no preset voices or voice-design '
+               'instructions. Never invent speaker IDs or claim to have listened to the audio.')
     for name in ('plan', 'build'):
         settings['agent'][name].update(model=coordinator, prompt=routing,
             permission={'task': 'deny'})

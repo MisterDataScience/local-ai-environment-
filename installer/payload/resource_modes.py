@@ -5,14 +5,14 @@ import tempfile
 from model_team import valid_profile
 
 MODES = {'gaming': 'Coordinator/small text only; search and workspace/GitHub tools available.',
-         'normal': 'Model team and eligible legacy text plus images; video blocked.',
-         'max': 'All configured text models, images and video; sequential loading.'}
+         'normal': 'Model team and eligible legacy text plus images and speech; video blocked.',
+         'max': 'All configured text models, images, video and speech; sequential loading.'}
 
 
 def allowed(mode, identifier, preset, route='text'):
     if mode == 'max':
         return True
-    if route == 'video' or (mode == 'gaming' and route == 'image'):
+    if route == 'video' or (mode == 'gaming' and route in {'image', 'speak'}):
         return False
     if valid_profile(preset):
         return mode == 'normal' or preset['role'] == 'coordinator'
@@ -47,7 +47,7 @@ PAGE = '''<!doctype html><html><head><meta name="viewport" content="width=device
 <body><h1>Local AI modes</h1><p>This setting applies to every chat and device.</p>
 <select id="mode"><option value="gaming">Gaming</option><option value="normal">Normal</option><option value="max">Max</option></select>
 <button id="apply">Apply mode</button><p id="state">Connecting…</p>
-<p>Gaming: coordinator/small text, short context, no image or video generation.<br>Normal: model team and eligible text, plus images.<br>Max: all configured models and media.</p>
+<p>Gaming: coordinator/small text, short context, no image, video or speech generation.<br>Normal: model team and eligible text, plus images and speech.<br>Max: all configured models and media.</p>
 <p>Search, GitHub and workspace tools remain available. Existing text inference may finish before memory is released. Wait for Ready before starting your game.</p>
 <p>After changing modes, refresh Open WebUI and select an available model. Changing its model menu cannot override this setting.</p>
 <script>

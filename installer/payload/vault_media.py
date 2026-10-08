@@ -10,7 +10,7 @@ import uuid
 
 from vault_tools import mounted_root, directory, DIR_FLAGS
 
-MEDIA_NAME = re.compile(r'^[0-9a-f]{32}\.(png|webp|mp4|webm)$')
+MEDIA_NAME = re.compile(r'^[0-9a-f]{32}\.(png|webp|mp4|webm|wav)$')
 
 
 def same_mount(config, original_fd):
@@ -36,7 +36,7 @@ def output_directory(config, category='Media'):
 
 @contextmanager
 def atomic_output(config, suffix, category='Media'):
-    if suffix not in {'.png', '.mp4', '.webp', '.webm', '.zip'}:
+    if suffix not in {'.png', '.mp4', '.webp', '.webm', '.wav', '.zip'}:
         raise ValueError('Unsupported output type')
     name = uuid.uuid4().hex + suffix
     temporary = '.' + name + '.partial'
@@ -141,3 +141,4 @@ def encrypted_workflow(workflow, kind):
     if saves != 1:
         raise ValueError('Vault workflows require exactly one supported output node.')
     return result
+

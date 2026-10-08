@@ -1,5 +1,9 @@
 # Coordinator image and video generation
 
+Speech update: `local_speech` now shares this backend queue and media-attempt
+budget. See [VOICE-GENERATION.md](VOICE-GENERATION.md) for reference registration,
+the exact Qwen3-TTS model, privacy/storage and audio limits.
+
 Implemented 2026-10-08. The OpenCode Plan and Build coordinators expose
 `local_image` and `local_video`. Each takes one text `prompt` (1–4,000 characters).
 Example: "Write a short story and generate an illustration of its opening."

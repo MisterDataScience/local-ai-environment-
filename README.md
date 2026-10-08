@@ -1,5 +1,9 @@
 # Local AI environment
 
+Local speech and reference-voice cloning now use Qwen3-TTS 1.7B Base through
+MLX-Audio. Use `/speak` or the coordinator's speech tool after registering a voice.
+See [voice setup and limits](docs/VOICE-GENERATION.md).
+
 The OpenCode coordinator can now request local images and videos through the
 existing serial backend. Direct `/image` and `/video` commands remain available.
 See [coordinator media and model review](docs/COORDINATOR-MEDIA.md).

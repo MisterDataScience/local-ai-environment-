@@ -335,3 +335,18 @@ test('mode changes during approval prevent media submission', async t => {
   const turn = Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0];
   assert.equal(turn.media, undefined);
 });
+
+test('coordinator speech supplies only exact text and registered voice options', async t => {
+  const f = await fixture(t), { context } = mediaCall(f, 'speech');
+  f.messages.at(-1).parts[0].tool = 'local_speech';
+  let posted;
+  context.ask = async r => assert.equal(r.permission, 'local_speech');
+  globalThis.fetch = async (url, options) => url.endsWith('/control/mode')
+    ? { ok: true, json: async () => ({ instance_id: 'backend', epoch: 0, mode: 'normal' }) }
+    : { ok: true, json: async () => { posted = JSON.parse(options.body); return { choices: [{ message: { content: '[Speech](http://localhost/audio.wav)' } }] }; } };
+  const result = JSON.parse(await f.hooks.tool.local_speech.execute({ prompt: 'Hello there', voice: 'default', language: 'English' }, context));
+  assert.equal(posted.messages[0].content, '/speak Hello there');
+  assert.deepEqual(posted.speech, { voice: 'default', language: 'English' });
+  assert.equal(result.audibly_verified, false);
+  await assert.rejects(f.hooks.tool.local_speech.execute({ prompt: 'Hello', voice: '../file', language: 'English' }, context), /registered voice/);
+});

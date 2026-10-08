@@ -55,7 +55,7 @@ class Handler(BaseHTTPRequestHandler):
         headers_sent = False
         try:
             with vault_media.open_media(self.server.engine.config, name) as (source, size, root_fd):
-                types = {'.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm'}
+                types = {'.png': 'image/png', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm', '.wav': 'audio/wav'}
                 # Range requests are needed by mobile video players.
                 start, end, code = 0, size - 1, 200
                 requested = self.headers.get('Range')
@@ -123,7 +123,7 @@ class Handler(BaseHTTPRequestHandler):
             file = self.server.engine.root / "media" / name
             if not file.is_file():
                 return self.json_response(404, {"error": "Not found"})
-            types = {".png": "image/png", ".webp": "image/webp", ".mp4": "video/mp4", ".webm": "video/webm"}
+            types = {".png": "image/png", ".webp": "image/webp", ".mp4": "video/mp4", ".webm": "video/webm", ".wav": "audio/wav"}
             self.send_response(200)
             self.send_header("Content-Type", types.get(file.suffix, "application/octet-stream"))
             self.send_header("Content-Length", str(file.stat().st_size))

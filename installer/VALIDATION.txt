@@ -1,3 +1,11 @@
+Qwen3-TTS update 2026-10-08 UTC: 81 installer tests, 93 gateway tests and
+32 JavaScript contract/policy/media tests passed locally (206 checks).
+Speech uses the pinned MLX Qwen3-TTS 1.7B Base checkpoint, a private one-shot
+worker and the serial gateway. Tests mock synthesis; actual Mac model load,
+voice similarity, speed and peak memory remain unverified here. Installation
+checks native model loading, and generation acceptance requires a registered
+default voice sample/transcript. Without one, speech generation is not_run.
+
 Coordinator media update 2026-10-08 UTC: 79 installer tests, 87 gateway tests
 and 31 JavaScript contract/policy/media tests passed locally (197 checks).
 Media tools share the existing serial render queue. Tests cover approval denial,

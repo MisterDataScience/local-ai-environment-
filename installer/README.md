@@ -1,5 +1,9 @@
 # Update: Cryptomator workspace and GitHub
 
+Qwen3-TTS 1.7B Base is included as a locally downloaded MLX speech model.
+After installation, run Configure Voice.command with a WAV reference and its
+transcript. See VOICE-GENERATION.md in the ZIP for `/speak` and coordinator usage.
+
 Coordinator image/video tools now use the existing serial rendering backend,
 with native approval prompts, saved job records and resource-mode checks.
 See COORDINATOR-MEDIA.md in the ZIP for usage and the abliterated model review.

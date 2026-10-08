@@ -25,6 +25,7 @@ from workflows import fill_workflow, output_files
 import resource_modes
 import reverse_image
 import vault_media
+import speech
 from vault_tools import mounted_root, enabled as vault_enabled
 
 ROOT = Path(__file__).resolve().parent
@@ -125,11 +126,15 @@ class Engine:
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
+        if route == 'speak':
+            body['_speech_request'] = speech.request(self.config, self.root, prompt, body.get('speech'))
+        elif 'speech' in body:
+            raise ValueError('Speech options require the /speak route.')
         with self.mode_lock:
             self.check_policy(body, route)
             if 'media_mode_token' in body:
                 expected = f'{self.instance_id}:{self.mode_epoch}:{self.mode}'
-                if route not in {'image', 'video'} or body['media_mode_token'] != expected:
+                if route not in {'image', 'video', 'speak'} or body['media_mode_token'] != expected:
                     raise ValueError('Media work-agent mode changed. Restart the work agent.')
             epoch = self.mode_epoch
             if not self.pending.acquire(blocking=False):
@@ -330,6 +335,10 @@ class Engine:
                 raise RuntimeError("Stop manually started ComfyUI. The gateway must own it.")
             if route in {"image", "video"}:
                 return self.render(route, prompt)
+            if route == 'speak':
+                self.unload_ollama()
+                self.state = 'generating-speech'
+                return speech.generate(self.config, self.root, body['_speech_request'])
             if route == "reverse":
                 self.state = "retrieving-reverse-image"
                 return reverse_image.format_result(reverse_image.search_tool(self.config, prompt))

@@ -129,7 +129,7 @@ class TeamTests(unittest.TestCase):
                 team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
             for agent in agents[2:]:
                 agent['permission'].extend({'permission': 'task', 'pattern': r, 'action': 'allow'} for r in ('analyst', 'coder'))
-                agent['permission'].extend({'permission': r, 'pattern': '*', 'action': 'ask'} for r in ('local_image', 'local_video'))
+                agent['permission'].extend({'permission': r, 'pattern': '*', 'action': 'ask'} for r in ('local_image', 'local_video', 'local_speech'))
             response.read.return_value = json.dumps(agents).encode()
             team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
             agents[1]['permission'].append({'permission': 'edit', 'pattern': '*', 'action': 'allow'})
