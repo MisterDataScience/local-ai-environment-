@@ -1,5 +1,9 @@
 # Local AI environment
 
+Reverse essay scaffolding is available through **Scaffold Essay.command**, with
+separate stages, explicit author approvals and empty answer templates.
+See [workflow usage and limits](docs/REVERSE-ESSAY-SCAFFOLDING.md).
+
 Optional essay editing is implemented through the existing document profile.
 Use **Edit Essay.command**; originals and editorial notes stay separate.
 See [usage, limits and author-review requirements](docs/ESSAY-EDITING.md).

@@ -164,6 +164,15 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                 'For ordinary requests do not activate essay mode. Tell the user to use Edit Essay.command or an ESSAY_EDIT text message with JSON '
                 'containing draft and optional author_request, constraints, source_material, reorder and randomiser. '
                 'Long essays need a separately scoped user continuation, not silent truncation or extra calls.')
+    routing += (' An explicit REVERSE_SCAFFOLD user message activates reverse essay scaffolding only. '
+        'For model stages call task document with prompt {} and description Reverse scaffold stage. '
+        'The host supplies the exact stage, sources and approvals. Never add stages, answers or editing. '
+        'If a synthetic host result is supplied, report it without any tool call. '
+        'Report the artifact, status and approval hash. Stop at author review; never approve an artifact yourself. '
+        'One retry may repair a concrete failure in the same stage, not process another chunk or stage. '
+        'Stage 7A produces a research plan. Source acquisition is a separately authorised client/coordinator operation. '
+        'Never claim to have searched, downloaded or checked absent source passages. '
+        'For ordinary requests do not enable this workflow; use Scaffold Essay.command or the documented explicit text request.')
     for name in ('plan', 'build'):
         settings['agent'][name].update(model=coordinator, prompt=routing,
             permission={'task': 'deny'})
@@ -185,6 +194,9 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
     essay_prompt = (root / 'control/essay-edit-prompt.txt').read_text()
     settings['agent']['document']['prompt'] += ('\nOnly when a delegated handoff contains essay_mode=copyedit-v1, apply the following installed instructions. '
         'For ordinary /document requests retain the normal read/summarise behaviour.\n' + essay_prompt)
+    scaffold_prompt = (root / 'control/reverse-scaffold-prompt.txt').read_text()
+    settings['agent']['document']['prompt'] += ('\nOnly for a delegated scaffold_mode=reverse-v1 handoff, use this reverse-scaffolding prompt instead of essay editing. '
+        'Normal document and essay-edit tasks must not run this workflow.\n' + scaffold_prompt)
     settings['agent']['coder'].update(steps=12,
         permission={'*': 'deny', 'read': {'*': 'allow', '*.env': 'deny', '*.env.*': 'deny'},
                     'glob': 'allow', 'grep': 'allow', 'edit': 'ask', 'bash': 'ask',
@@ -246,8 +258,9 @@ def main():
     parser.add_argument('--conversation', action='store_true')
     parser.add_argument('--discord', action='store_true')
     parser.add_argument('--essay', action='store_true')
+    parser.add_argument('--scaffold', action='store_true')
     args = parser.parse_args()
-    if args.essay and (args.conversation or args.discord):
+    if (args.essay or args.scaffold) and (args.conversation or args.discord) or (args.essay and args.scaffold):
         parser.error('Essay launcher cannot be combined with a voice launcher')
     args.conversation = args.conversation or args.discord
     def interrupted(signum, frame):
@@ -261,15 +274,19 @@ def main():
     if status['mode'] == 'gaming' or status['transitioning'] or status['error']:
         raise RuntimeError('Select Normal or Max in AI Modes and wait for Ready before starting work.')
     essay_request = None
-    if args.essay:
+    if args.essay or args.scaffold:
         if not config.get('model_team', {}).get('enabled'):
             raise RuntimeError('Essay editing requires the configured local model team')
         from essay_setup import read_draft, attach
-        essay_request = read_draft(input('Essay draft (.md or .txt) path: ').strip())
+        if args.scaffold:
+            from scaffold_setup import prepare
+            essay_request = prepare(root)
+        else:
+            essay_request = read_draft(input('Essay draft (.md or .txt) path: ').strip())
         if port_open(4096):
-            session_id = attach(root, essay_request)
-            print('Essay submitted to the running harness. Session:', session_id, flush=True)
-            print('Outputs: work-agent/projects/*/.local-ai-essays. Keep Local AI running; review the separate notes.', flush=True)
+            session_id = attach(root, essay_request, workflow='scaffold' if args.scaffold else 'essay')
+            print('Document workflow submitted to the running harness. Session:', session_id, flush=True)
+            print('Keep Local AI running. Essay outputs are in the project; scaffolding outputs are in work-agent/state/reverse-scaffolds.', flush=True)
             return
     if port_open(4096):
         raise RuntimeError('Port 4096 is occupied. Close the other work agent first.')
@@ -286,7 +303,7 @@ def main():
         raise RuntimeError('OpenCode is missing. Rerun the Local AI installer.')
     sessions = root / 'work-agent/projects'
     sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if not args.project and not args.conversation and not args.essay:
+    if not args.project and not args.conversation and not args.essay and not args.scaffold:
         value = input('Project folder to COPY, or Enter for a new empty project: ').strip()
         args.project = Path(value).expanduser() if value else None
     project = sessions / uuid.uuid4().hex
@@ -324,8 +341,8 @@ def main():
         publish_connection(root, git_env['OPENCODE_SERVER_PASSWORD'])
         if essay_request is not None:
             from essay_setup import submit
-            session_id = submit(git_env['OPENCODE_SERVER_PASSWORD'], essay_request)
-            print('Essay session:', session_id, 'Open its entry in OpenCode. Outputs require author review.', flush=True)
+            session_id = submit(git_env['OPENCODE_SERVER_PASSWORD'], essay_request, workflow='scaffold' if args.scaffold else 'essay')
+            print('Document workflow session:', session_id, 'Open its entry in OpenCode. Outputs require author review.', flush=True)
         if args.conversation:
             from conversation import launch
             conversation_server, url = launch(root, git_env['OPENCODE_SERVER_PASSWORD'], config)

@@ -191,3 +191,7 @@ remain planned.
 ## Optional essay-edit route
 
 The existing document profile is now available as a tool-free native subagent only for an explicit current-turn essay-edit request. It shares the two-attempt budget, 12,000-character bound envelope and serial model execution. Host code supplies the preserved draft and handles separate output persistence. See [ESSAY-EDITING.md](ESSAY-EDITING.md).
+
+## Reverse essay scaffolding
+
+The existing document profile also accepts explicitly activated REVERSE_SCAFFOLD requests. Host code binds one stage and its source packet, persists approvals and validates outputs. It shares the two-attempt budget and 12,000-character handoff limit. Stage 8 templates and Stage 9 measurements run in host code. Editing remains separate. See [REVERSE-ESSAY-SCAFFOLDING.md](REVERSE-ESSAY-SCAFFOLDING.md).

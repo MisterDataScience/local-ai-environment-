@@ -71,6 +71,7 @@ class TeamTests(unittest.TestCase):
                 work_agent.configuration(cfg, cfg['text_models'], root=root)
             (root / 'control/opencode-team.mjs').write_text('// test')
             (root / 'control/essay-edit-prompt.txt').write_text('Essay prompt')
+            (root / 'control/reverse-scaffold-prompt.txt').write_text('Scaffold prompt')
             settings = work_agent.configuration(cfg, cfg['text_models'], root=root)
             self.assertEqual(settings['agent']['build']['permission']['task'], 'deny')
             self.assertFalse(settings['tools']['task'])
@@ -150,6 +151,7 @@ class TeamTests(unittest.TestCase):
                 (root / 'logs').mkdir()
                 (root / 'control/opencode-team.mjs').write_text('// test')
                 (root / 'control/essay-edit-prompt.txt').write_text('Essay prompt')
+                (root / 'control/reverse-scaffold-prompt.txt').write_text('Scaffold prompt')
                 cfg = config()
                 state = {'number': 0}
                 def native(request, **kwargs):

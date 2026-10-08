@@ -1,3 +1,15 @@
+Reverse-scaffold update 2026-10-08 UTC: 99 installer tests, 100 gateway tests
+and 70 JavaScript tests passed (269 checks). The affected 41 JavaScript tests
+also passed after the native synthetic-message ID fix. Coverage includes
+staged execution, imported architecture audits, explicit hash approvals,
+stale dependencies, exact word budgets, source mapping, source preservation,
+input limits and the shared two-attempt budget. Source acquisition is handled
+by the client; the document specialist receives supplied passages and cannot
+browse. Native Mac launch, local-model scaffold quality and 32GB memory/latency
+acceptance remain untested. Host checks cannot prove substantive coverage or
+source entailment; each stage requires author review. See
+REVERSE-ESSAY-SCAFFOLDING.md for implementation boundaries and usage.
+
 Essay-edit update 2026-10-08 UTC: 96 installer tests, 100 gateway tests and
 57 JavaScript tests passed (253 checks). New coverage includes explicit turn
 activation, original integrity, API submission without command expansion,

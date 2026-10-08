@@ -7,6 +7,8 @@ import { hash, validateContract, bindContract, assessResult, saveArtifact, RESUL
 
 import {parseRequest, preserve, loadRequest, makeContract, persistResult, RETURN_INSTRUCTION as ESSAY_RETURN} from './essay-edit.mjs';
 
+import {parseScaffold, beginScaffold, loadScaffold, scaffoldContract, finishScaffold, SCAFFOLD_RETURN} from './reverse-scaffold.mjs';
+
 const MAX_INPUT = 12000;
 const CODER_TOOLS = new Set(['read', 'glob', 'grep', 'edit', 'write', 'apply_patch', 'bash']);
 const READ_TOOLS = new Set(['read', 'glob', 'grep']);
@@ -243,7 +245,10 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         if (Object.keys(ledger.turns).length >= 10000) fail('ledger capacity reached; archive this work-agent state');
         const request = parseRequest(output.parts);
         const essay = request ? await preserve(directory, key, request) : undefined;
-        ledger.turns[key] = { calls: [], ...(essay ? {essay} : {}) };
+        const scaffoldRequest = parseScaffold(output.parts);
+        const scaffold = scaffoldRequest ? await beginScaffold(dirname(ledgerPath), key, scaffoldRequest) : undefined;
+        ledger.turns[key] = { calls: [], ...(essay ? {essay} : {}), ...(scaffold ? {scaffold} : {}) };
+        if (scaffold?.result) output.parts.push({id:'prt_'+hash(key+'host-result').slice(0,28),messageID:output.message.id,sessionID:input.sessionID,type:'text',synthetic:true,text:'Host reverse-scaffold result (no specialist call): '+JSON.stringify(scaffold.result)});
         await save();
         if (request) {
           const estimate = bindContract(makeContract(request), []);
@@ -270,6 +275,10 @@ export default async function LocalTeam({ client, directory }, options = {}) {
           p.type === 'tool' && (p.callID === input.callID || p.id === input.callID)));
         if (assistant?.info.agent === 'coder') return coderTool(input, session, messages, assistant);
         if (session.parentID) fail('non-coder specialists cannot use tools or delegate');
+        if (assistant && ['plan','build'].includes(assistant.info.agent) && input.tool !== 'task') {
+          const {key} = await identity(input);
+          if (ledger.turns[key]?.scaffold && input.tool !== 'read') fail('reverse-scaffold turns cannot execute tools except reading saved reports; source acquisition and editing require a separate explicit request');
+        }
       }
       if (input.tool !== 'task') return;
       await exclusive(async () => {
@@ -277,17 +286,19 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         const { key, messages, sourceMessages } = await identity(input);
         const turn = ledger.turns[key] ?? { calls: [] };
         if (turn.calls.some(c => c.id === input.callID)) fail('duplicate call already consumed its attempt');
-        if (turn.essay && output.args.subagent_type !== 'document') fail('essay turns use the tool-free document specialist only');
-        let essayRequest;
+        if ((turn.essay || turn.scaffold) && output.args.subagent_type !== 'document') fail('essay turns use the tool-free document specialist only');
+        let essayRequest, scaffoldRequest;
+        if (turn.scaffold?.result) fail('this scaffold step is already completed by the host; do not delegate or advance stages');
         if (output.args.subagent_type === 'document') {
-          if (!roles.document || !turn.essay) fail('document editing requires an explicit ESSAY_EDIT request in this user turn');
-          essayRequest = await loadRequest(turn.essay);
+          if (!roles.document || (!turn.essay && !turn.scaffold)) fail('document tasks require an explicit ESSAY_EDIT or REVERSE_SCAFFOLD request in this user turn');
+          if (turn.essay) essayRequest = await loadRequest(turn.essay);
+          if (turn.scaffold) scaffoldRequest = await loadScaffold(turn.scaffold);
           let supplied;
           try { supplied = JSON.parse(output.args.prompt); } catch { fail('document prompt must be JSON; use {} on the first attempt'); }
           if (!supplied || Array.isArray(supplied) || Object.keys(supplied).some(k => k !== 'retry_failure')) fail('document draft and permissions come only from the saved user request');
-          output.args.prompt = JSON.stringify(makeContract(essayRequest, supplied.retry_failure));
+          output.args.prompt = JSON.stringify(essayRequest ? makeContract(essayRequest, supplied.retry_failure) : scaffoldContract(scaffoldRequest,turn.calls.length+1,supplied.retry_failure));
           if (output.args.prompt.length > MAX_INPUT) {
-            turn.essay.status = 'incomplete_input_limit'; await save();
+            (turn.essay || turn.scaffold).status = 'incomplete_input_limit'; await save();
             fail('essay does not fit the handoff; original preserved. Submit a separately scoped section, no silent truncation.');
           }
         }
@@ -314,6 +325,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
           contract.essay_mode = 'copyedit-v1';
           contract.return_format += ESSAY_RETURN;
         }
+        if (scaffoldRequest) {contract.scaffold_mode = 'reverse-v1';contract.return_format += SCAFFOLD_RETURN;}
         const packet = JSON.stringify(contract).replaceAll('@', '\\u0040');
         if (packet.length > MAX_INPUT) {
           if (essayRequest) {turn.essay.status = 'incomplete_input_limit'; await save();}
@@ -352,13 +364,19 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         if (!final || final.info.error || final.info.finish === 'length') sourceIssues.push('Specialist response missing, failed or cut off.');
       }
       const report = assessResult(contract, raw, tools, sourceIssues);
-      if (call.role === 'document') {
+      if (call.role === 'document' && ledger.turns[key].essay) {
         const record = ledger.turns[key].essay;
         const request = await loadRequest(record);
         report.essay = await persistResult(record, input.callID, request, raw, report.issues.concat(
           report.acceptance.filter(c => c.status !== 'met').map(c => 'Unmet or unverified acceptance item: ' + c.id)));
         report.status = report.essay.status;
         report.issues.push(...report.essay.issues);
+      }
+      if (call.role === 'document' && ledger.turns[key].scaffold) {
+        const record = ledger.turns[key].scaffold;
+        report.scaffold = await exclusive(() => finishScaffold(record,input.callID,raw,report.issues.concat(
+          report.acceptance.filter(c=>c.status!=='met').map(c=>'Unmet acceptance item: '+c.id)),ledger.turns[key].calls.indexOf(call)+1));
+        report.status = report.scaffold.status;report.issues.push(...report.scaffold.issues);
       }
       const artifact = await saveArtifact(join(resolve(directory), '.local-ai-handoffs'),
         hash(key + input.callID + JSON.stringify(report)) + '.json', report);
@@ -369,7 +387,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         await save();
         active.delete(input.sessionID);
       });
-      output.output = JSON.stringify({ status: report.status, ...(report.essay ? {essay:report.essay} : {}),
+      output.output = JSON.stringify({ status: report.status, ...(report.essay ? {essay:report.essay} : {}), ...(report.scaffold ? {scaffold:report.scaffold} : {}),
         summary_excerpt: report.summary.slice(0, 1600), summary_shortened: report.summary.length > 1600,
         acceptance: report.acceptance.map(c => ({ id: c.id, status: c.status, basis: c.basis })),
         issues: report.issues.slice(0, 12), full_report: artifact.path, sha256: artifact.sha256,
@@ -379,7 +397,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
     },
     async 'tool.definition'(input, output) {
       if (input.toolID !== 'task') return;
-      output.description += '\nLocal team: at most two foreground attempts per user turn. Analyst or coder; document only for an explicit ESSAY_EDIT user request. For document, prompt is {} or {retry_failure:concrete failure}; host supplies the preserved draft, permissions and contract. Do not construct or change its evidence. Other roles: '
+      output.description += '\nLocal team: at most two foreground attempts per user turn. Analyst or coder; document only for an explicit ESSAY_EDIT or REVERSE_SCAFFOLD user request. For document, prompt is {} or {retry_failure:concrete failure}; host supplies the preserved draft, permissions and contract. Do not construct or change its evidence. Other roles: '
         + 'prompt must be JSON with string fields objective, constraints, evidence, completed, remaining, result. '
         + 'Also require string lists facts, assumptions, unknowns; references:[{path:relative project path,symbol:string}]; '
         + 'acceptance:[{id:A1 through A8,requirement:string,source_quote:exact user quote or empty for derived criteria,'

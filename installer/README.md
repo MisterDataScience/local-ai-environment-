@@ -1,3 +1,9 @@
+# Reverse essay scaffolding
+
+Use Scaffold Essay.command to turn a supplied assignment brief into a staged,
+question-led plan. Each stage requires author review and exact-version approval.
+It does not write answers or activate editing. See REVERSE-ESSAY-SCAFFOLDING.md.
+
 # Optional essay editing
 
 After updating, use Edit Essay.command with a UTF-8 .md or .txt draft. It reuses

@@ -18,7 +18,7 @@ def read_draft(path):
             'constraints': '', 'source_material': '', 'reorder': 'none', 'randomiser': False}
 
 
-def submit(password, request):
+def submit(password, request, workflow='essay'):
     token = base64.b64encode(('opencode:' + password).encode()).decode()
     def native(path, body):
         req = Request('http://127.0.0.1:4096' + path, data=json.dumps(body).encode(),
@@ -26,9 +26,13 @@ def submit(password, request):
         with urlopen(req, timeout=15) as response:
             raw = response.read()
             return json.loads(raw) if raw else None
-    session = native('/session', {'title': 'Essay copyedit: author review required'})['id']
+    if workflow not in {'essay','scaffold'}:
+        raise ValueError('Unknown document workflow')
+    title = 'Reverse scaffold: author review required' if workflow == 'scaffold' else 'Essay copyedit: author review required'
+    marker = 'REVERSE_SCAFFOLD\n' if workflow == 'scaffold' else 'ESSAY_EDIT\n'
+    session = native('/session', {'title': title})['id']
     native('/session/' + session + '/prompt_async', {'agent': 'plan', 'parts': [
-        {'type': 'text', 'text': 'ESSAY_EDIT\n' + json.dumps(request, ensure_ascii=False)}]})
+        {'type': 'text', 'text': marker + json.dumps(request, ensure_ascii=False)}]})
     return session
 
 
@@ -54,7 +58,7 @@ def clear_connection(root, password):
         pass
 
 
-def attach(root, request):
+def attach(root, request, workflow='essay'):
     import os
     import stat
     path = connection_file(root)
@@ -67,4 +71,6 @@ def attach(root, request):
     os.kill(value['pid'], 0)
     if not isinstance(value.get('password'), str) or not value['password']:
         raise RuntimeError('Invalid work-agent credential')
-    return submit(value['password'], request)
+    if workflow == 'essay':
+        return submit(value['password'], request)
+    return submit(value['password'], request, workflow=workflow)

@@ -389,3 +389,34 @@ test('native essay result is recovered, checked and saved separately with review
   assert.equal(review.status,'review_required');assert.equal(await readFile(review.essay.edited,'utf8'),'The result may improve by 10%.\n');
   assert.equal(await readFile(review.essay.original,'utf8'),'The result may improve by 10%.');
 });
+
+async function scaffoldTurn(f,id='scaffold-user'){
+ const value={run_id:'test',stage:'1',brief_sufficient:true,word_count:240,referencing_style:'Harvard',sources:[{id:'B',kind:'brief',title:'Official brief',anchors:[{id:'B:AC1.1',kind:'criterion',text:'Explain distributions with examples.'}]}]};
+ const m={info:{role:'user',id},parts:[{type:'text',text:'REVERSE_SCAFFOLD\n'+JSON.stringify(value)}]};f.messages.push(m);
+ await f.hooks['chat.message']({sessionID:'session1'},{message:m.info,parts:m.parts});
+ const args=f.call('scaffold-'+id,'document',{},id);args[1].args.prompt='{}';return args;
+}
+test('reverse scaffolding binds one stage and shares the two-attempt native budget',async t=>{
+ const f=await fixture(t),args=await scaffoldTurn(f);await f.before(args);
+ const packet=JSON.parse(args[1].args.prompt),evidence=JSON.parse(packet.evidence);
+ assert.equal(packet.scaffold_mode,'reverse-v1');assert.equal(packet.essay_mode,undefined);
+ assert.equal(evidence.control.requested_stage,'1');assert.equal(evidence.control.attempt,1);
+ await f.after(args);
+ const retry=f.call('scaffold-retry','document',{},'scaffold-user');retry[1].args.prompt=JSON.stringify({retry_failure:'Missing structured stage result'});await f.before(retry);await f.after(retry);
+ const third=f.call('scaffold-third','document',{},'scaffold-user');third[1].args.prompt=JSON.stringify({retry_failure:'Still invalid'});await assert.rejects(f.before(third),/two specialist attempts/);
+ const wrong=f.call('scaffold-coder','coder',{},'scaffold-user');await assert.rejects(f.before(wrong),/tool-free document/);
+});
+test('native scaffold artifact is checked and never self-approved',async t=>{
+ const f=await fixture(t),args=await scaffoldTurn(f);await f.before(args);
+ const result={summary:'Stage 1 proposal.',acceptance:['A1','A2'].map(id=>({id,status:'met',evidence:'Model analysis, not independent verification',tool_call_ids:[]})),changed_files:[],tests:[],assumptions:[],unresolved:[],scaffold:{stage:'1',status:'AWAITING AUTHOR REVIEW',processed_anchors:['B:AC1.1'],omissions:[],gaps:[],proposals:[],quotes:[],requirements:[{id:'R1',kind:'criterion',class:'SOURCE STATEMENT',anchors:['B:AC1.1'],source_text:'Explain distributions with examples.',command_word:'Explain'}]}};
+ const get=f.client.session.get,msg=f.client.session.messages;
+ f.client.session.get=async a=>a.path.id==='scaffold-child'?{data:{parentID:'session1'}}:get(a);
+ f.client.session.messages=async a=>a.path.id==='scaffold-child'?{data:[{info:{role:'assistant',finish:'stop'},parts:[{type:'text',text:JSON.stringify(result)}]}]}:msg(a);
+ const output={output:'native summary',metadata:{sessionId:'scaffold-child'}};await f.hooks['tool.execute.after'](args[0],output);
+ const review=JSON.parse(output.output);assert.equal(review.status,'AWAITING AUTHOR REVIEW');assert.equal(review.essay,undefined);assert.ok(review.scaffold.approval_sha);
+ const manifest=JSON.parse(await readFile(join(f.directory,'reverse-scaffolds/test/manifest.json')));assert.deepEqual(manifest.approved,{});
+  const approval={info:{role:'user',id:'scaffold-approval'},parts:[{type:'text',text:'REVERSE_SCAFFOLD\n'+JSON.stringify({run_id:'test',stage:'approve',approve:[review.scaffold.approval_sha]})}]};
+  f.messages.push(approval);await f.hooks['chat.message']({sessionID:'session1'},{message:approval.info,parts:approval.parts});
+  const host=approval.parts.at(-1);assert.equal(host.synthetic,true);assert.equal(host.messageID,'scaffold-approval');assert.equal(host.sessionID,'session1');assert.match(host.id,/^prt_/);
+  const forbidden=f.call('approval-cannot-delegate','document',{},'scaffold-approval');forbidden[1].args.prompt='{}';await assert.rejects(f.before(forbidden),/already completed by the host/);
+});

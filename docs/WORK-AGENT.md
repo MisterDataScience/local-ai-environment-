@@ -245,3 +245,7 @@ Context budgeting now advertises input as context minus the mode's output ceilin
 ## Optional essay editing
 
 Use Edit Essay.command or the explicit text request documented in [ESSAY-EDITING.md](ESSAY-EDITING.md). Document edits share the existing handoff budget and save originals and separate notes through host code. No essay is automatically approved on a model claim of semantic fidelity.
+
+## Reverse essay scaffolding
+
+The existing document profile also accepts explicitly activated REVERSE_SCAFFOLD requests. Host code binds one stage and its source packet, persists approvals and validates outputs. It shares the two-attempt budget and 12,000-character handoff limit. Stage 8 templates and Stage 9 measurements run in host code. Editing remains separate. See [REVERSE-ESSAY-SCAFFOLDING.md](REVERSE-ESSAY-SCAFFOLDING.md).
