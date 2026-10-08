@@ -138,7 +138,7 @@ this file when reopening sessions. Archive the whole work-agent state together
 when retiring old sessions; deleting only the ledger is not a supported reset.
 
 The base configuration denies task. Successful plugin initialization enables
-only analyst/coder on the coordinator. Startup reads OpenCode's effective agents
+analyst/coder and the explicitly gated document-edit route on the coordinator. Startup reads OpenCode's effective agents
 and refuses to continue if these permissions did not load. Set
 `model_team.enabled` to `false` in `control/config.json` with services stopped to
 disable delegation. This leaves installed presets selectable and restores the
@@ -191,7 +191,7 @@ GitHub automatically; review and transfer the patch through your existing workfl
 
 Read/glob/grep are allowed within the project; edits and shell commands ask.
 External-directory tools, web fetching and web search are denied. Only the
-allowlisted analyst/coder subagents can be called by Plan or Build. The analyst/document agents have no tools. The coder can use read/glob/grep,
+allowlisted analyst/coder subagents can be called by Plan or Build. The document subagent is additionally available only for an explicit current-turn ESSAY_EDIT request. The analyst/document agents have no tools. The coder can use read/glob/grep,
 plus edit/write/apply_patch and bash with native approval. It cannot delegate,
 use account/network tools, or expand its directory permissions. General and
 Explore agents are disabled.
@@ -241,3 +241,7 @@ Sources:
 
 
 Context budgeting now advertises input as context minus the mode's output ceiling. Native compaction then subtracts its reserve (up to 2,048 tokens, reduced for small contexts), leaving room for instructions and tool work. Gateway requests disable Ollama truncation and context shifting; oversized input returns context_length_exceeded instead of silently losing history. See [context management](CONTEXT-MANAGEMENT.md) for mode budgets and native acceptance.
+
+## Optional essay editing
+
+Use Edit Essay.command or the explicit text request documented in [ESSAY-EDITING.md](ESSAY-EDITING.md). Document edits share the existing handoff budget and save originals and separate notes through host code. No essay is automatically approved on a model claim of semantic fidelity.

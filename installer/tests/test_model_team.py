@@ -70,6 +70,7 @@ class TeamTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 work_agent.configuration(cfg, cfg['text_models'], root=root)
             (root / 'control/opencode-team.mjs').write_text('// test')
+            (root / 'control/essay-edit-prompt.txt').write_text('Essay prompt')
             settings = work_agent.configuration(cfg, cfg['text_models'], root=root)
             self.assertEqual(settings['agent']['build']['permission']['task'], 'deny')
             self.assertFalse(settings['tools']['task'])
@@ -80,6 +81,9 @@ class TeamTests(unittest.TestCase):
             self.assertEqual(settings['agent']['coder']['permission']['task'], 'deny')
             self.assertEqual(settings['subagent_depth'], 1)
             self.assertFalse(settings['command']['code']['subtask'])
+            self.assertEqual(settings['agent']['document']['permission'], {'*':'deny'})
+            self.assertEqual(settings['agent']['document']['mode'], 'all')
+            self.assertNotIn('essay-edit', settings['command'])
             self.assertEqual(settings['provider']['local-ai-gateway']['models']['local-ai-large']['limit']['context'], 32768)
             work_agent.environment(root, cfg, settings)
             ledger = root / 'work-agent/state/team-budget.json'
@@ -123,12 +127,13 @@ class TeamTests(unittest.TestCase):
         response = Mock()
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
+        agents.append({'name':'document','permission':[{'permission':'*','pattern':'*','action':'deny'}]})
         response.read.return_value = json.dumps(agents).encode()
         with patch.object(team_setup, 'urlopen', return_value=response):
             with self.assertRaisesRegex(RuntimeError, 'policy did not load'):
                 team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
-            for agent in agents[2:]:
-                agent['permission'].extend({'permission': 'task', 'pattern': r, 'action': 'allow'} for r in ('analyst', 'coder'))
+            for agent in agents[2:4]:
+                agent['permission'].extend({'permission': 'task', 'pattern': r, 'action': 'allow'} for r in ('analyst', 'coder', 'document'))
                 agent['permission'].extend({'permission': r, 'pattern': '*', 'action': 'ask'} for r in ('local_image', 'local_video', 'local_speech'))
             response.read.return_value = json.dumps(agents).encode()
             team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
@@ -144,6 +149,7 @@ class TeamTests(unittest.TestCase):
                 (root / 'control').mkdir()
                 (root / 'logs').mkdir()
                 (root / 'control/opencode-team.mjs').write_text('// test')
+                (root / 'control/essay-edit-prompt.txt').write_text('Essay prompt')
                 cfg = config()
                 state = {'number': 0}
                 def native(request, **kwargs):

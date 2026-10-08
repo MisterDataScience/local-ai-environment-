@@ -1,5 +1,9 @@
 # Local AI environment
 
+Optional essay editing is implemented through the existing document profile.
+Use **Edit Essay.command**; originals and editorial notes stay separate.
+See [usage, limits and author-review requirements](docs/ESSAY-EDITING.md).
+
 Discord integration is included in the main installer. One-time setup connects
 an owner-only private voice channel and your saved voice. The bot starts with
 Local AI, routes speech through the existing coordinator, and presents tool

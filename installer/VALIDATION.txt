@@ -1,3 +1,14 @@
+Essay-edit update 2026-10-08 UTC: 96 installer tests, 100 gateway tests and
+57 JavaScript tests passed (253 checks). New coverage includes explicit turn
+activation, original integrity, API submission without command expansion,
+private existing-harness attachment, immutable request binding, input/attempt
+limits, native result recovery, separate outputs, omission/protected-text guards
+and permission-scoped moves. Responses are simulated; no local-model essay
+quality, native launcher or Mac memory/latency acceptance has run here. Host
+checks cannot prove semantic equivalence. Passing candidates require author
+review. Random selection is not implemented; requested alternatives stay in
+notes. See ESSAY-EDITING.md and ESSAY-EDITING-SPECIFICATION.md.
+
 Discord update 2026-10-08 UTC: 93 installer tests, 100 gateway tests and
 43 JavaScript tests pass (236 checks). Includes an adapter-level simulated
 voice call, owner-scoped approval, interruption, PCM conversion, playback

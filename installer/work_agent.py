@@ -155,6 +155,15 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                'Speech shares the two-media-attempt budget. The Qwen3-TTS Base model needs a registered WAV '
                'reference and transcript via Configure Voice.command; it has no preset voices or voice-design '
                'instructions. Never invent speaker IDs or claim to have listened to the audio.')
+    routing += (' When the explicit current user message starts with ESSAY_EDIT, call task with subagent_type document, '
+                'description Essay copyedit, prompt {}. The host supplies the exact original and permissions. '
+                'Do not edit it yourself, send it to coder, split it across new turns or relax acceptance. '
+                'Only a concrete failed attempt permits one retry with prompt {\"retry_failure\":\"reason\"}. '
+                'Return the saved original, edited and notes paths and actual review status. review_required '
+                'needs author review; needs_attention or incomplete is not a finished edit. No automatic research. '
+                'For ordinary requests do not activate essay mode. Tell the user to use Edit Essay.command or an ESSAY_EDIT text message with JSON '
+                'containing draft and optional author_request, constraints, source_material, reorder and randomiser. '
+                'Long essays need a separately scoped user continuation, not silent truncation or extra calls.')
     for name in ('plan', 'build'):
         settings['agent'][name].update(model=coordinator, prompt=routing,
             permission={'task': 'deny'})
@@ -165,7 +174,7 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
     for role in ('analyst', 'coder', 'document'):
         settings['agent'][role] = {
             'description': descriptions[role],
-            'mode': 'primary' if role == 'document' else 'all',
+            'mode': 'all',
             'model': 'local-ai-gateway/' + roles[role], 'steps': 1,
             'permission': {'*': 'deny'},
             'prompt': ('Work only on the supplied objective and evidence. You have no tools or delegation. '
@@ -173,6 +182,9 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                        'issues and validation actually performed. Proposed tests are not executed tests. '
                        'For delegated work follow the supplied return_format exactly, addressing every acceptance ID. '
                        'Keep delegated results within 10000 characters; preserve essential code and caveats.')}
+    essay_prompt = (root / 'control/essay-edit-prompt.txt').read_text()
+    settings['agent']['document']['prompt'] += ('\nOnly when a delegated handoff contains essay_mode=copyedit-v1, apply the following installed instructions. '
+        'For ordinary /document requests retain the normal read/summarise behaviour.\n' + essay_prompt)
     settings['agent']['coder'].update(steps=12,
         permission={'*': 'deny', 'read': {'*': 'allow', '*.env': 'deny', '*.env.*': 'deny'},
                     'glob': 'allow', 'grep': 'allow', 'edit': 'ask', 'bash': 'ask',
@@ -233,7 +245,10 @@ def main():
     parser.add_argument('--project', type=Path)
     parser.add_argument('--conversation', action='store_true')
     parser.add_argument('--discord', action='store_true')
+    parser.add_argument('--essay', action='store_true')
     args = parser.parse_args()
+    if args.essay and (args.conversation or args.discord):
+        parser.error('Essay launcher cannot be combined with a voice launcher')
     args.conversation = args.conversation or args.discord
     def interrupted(signum, frame):
         raise KeyboardInterrupt
@@ -245,6 +260,17 @@ def main():
     status = http(base + '/control/mode', key=key)
     if status['mode'] == 'gaming' or status['transitioning'] or status['error']:
         raise RuntimeError('Select Normal or Max in AI Modes and wait for Ready before starting work.')
+    essay_request = None
+    if args.essay:
+        if not config.get('model_team', {}).get('enabled'):
+            raise RuntimeError('Essay editing requires the configured local model team')
+        from essay_setup import read_draft, attach
+        essay_request = read_draft(input('Essay draft (.md or .txt) path: ').strip())
+        if port_open(4096):
+            session_id = attach(root, essay_request)
+            print('Essay submitted to the running harness. Session:', session_id, flush=True)
+            print('Outputs: work-agent/projects/*/.local-ai-essays. Keep Local AI running; review the separate notes.', flush=True)
+            return
     if port_open(4096):
         raise RuntimeError('Port 4096 is occupied. Close the other work agent first.')
     if args.conversation and port_open(8003):
@@ -260,7 +286,7 @@ def main():
         raise RuntimeError('OpenCode is missing. Rerun the Local AI installer.')
     sessions = root / 'work-agent/projects'
     sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if not args.project and not args.conversation:
+    if not args.project and not args.conversation and not args.essay:
         value = input('Project folder to COPY, or Enter for a new empty project: ').strip()
         args.project = Path(value).expanduser() if value else None
     project = sessions / uuid.uuid4().hex
@@ -292,6 +318,14 @@ def main():
     try:
         from team_setup import verify_work_agent
         verify_work_agent(process, git_env, config.get('model_team', {}).get('enabled', False))
+        from essay_setup import publish_connection, connection_file
+        # With port 4096 verified free before startup, a prior record can only be stale.
+        connection_file(root).unlink(missing_ok=True)
+        publish_connection(root, git_env['OPENCODE_SERVER_PASSWORD'])
+        if essay_request is not None:
+            from essay_setup import submit
+            session_id = submit(git_env['OPENCODE_SERVER_PASSWORD'], essay_request)
+            print('Essay session:', session_id, 'Open its entry in OpenCode. Outputs require author review.', flush=True)
         if args.conversation:
             from conversation import launch
             conversation_server, url = launch(root, git_env['OPENCODE_SERVER_PASSWORD'], config)
@@ -328,6 +362,8 @@ def main():
         if discord_process:
             stop_process(discord_process, timeout=10)
         stop_process(process, timeout=10)
+        from essay_setup import clear_connection
+        clear_connection(root, git_env['OPENCODE_SERVER_PASSWORD'])
         if conversation_server:
             conversation_server.app.closed.set()
             def release_audio():

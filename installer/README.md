@@ -1,3 +1,9 @@
+# Optional essay editing
+
+After updating, use Edit Essay.command with a UTF-8 .md or .txt draft. It reuses
+the document model, preserves the original and saves separate editing notes.
+See ESSAY-EDITING.md in the bundle for usage, limits and required author review.
+
 # Update: Cryptomator workspace and GitHub
 
 Discord integration is included in the main installer. One-time setup connects

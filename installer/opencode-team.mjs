@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { hash, validateContract, bindContract, assessResult, saveArtifact, RESULT_INSTRUCTION } from './handoff-contract.mjs';
 
+import {parseRequest, preserve, loadRequest, makeContract, persistResult, RETURN_INSTRUCTION as ESSAY_RETURN} from './essay-edit.mjs';
+
 const MAX_INPUT = 12000;
 const CODER_TOOLS = new Set(['read', 'glob', 'grep', 'edit', 'write', 'apply_patch', 'bash']);
 const READ_TOOLS = new Set(['read', 'glob', 'grep']);
@@ -191,7 +193,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
   }
 
   function envelope(args) {
-    if (!['analyst', 'coder'].includes(args.subagent_type)) fail('specialist must be analyst or coder');
+    if (!['analyst', 'coder', 'document'].includes(args.subagent_type)) fail('specialist must be analyst, coder or an explicitly authorised document edit');
     if (args.task_id || args.background || args.command) fail('resuming, commands and background delegation are disabled');
     if (typeof args.description !== 'string' || args.description.length > 160) fail('description exceeds 160 characters');
     if (typeof args.prompt !== 'string' || args.prompt.length > MAX_INPUT) fail('handoff exceeds 12000 characters');
@@ -221,7 +223,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       config.tools.local_video = true;
       config.tools.local_speech = true;
       for (const name of ['plan', 'build']) {
-        config.agent[name].permission.task = { '*': 'deny', analyst: 'allow', coder: 'allow' };
+        config.agent[name].permission.task = { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow' };
         config.agent[name].permission.local_image = 'ask';
         config.agent[name].permission.local_video = 'ask';
         config.agent[name].permission.local_speech = 'ask';
@@ -239,8 +241,19 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         const key = turnKey(input.sessionID, output.message.id);
         if (ledger.turns[key]) return;
         if (Object.keys(ledger.turns).length >= 10000) fail('ledger capacity reached; archive this work-agent state');
-        ledger.turns[key] = { calls: [] };
+        const request = parseRequest(output.parts);
+        const essay = request ? await preserve(directory, key, request) : undefined;
+        ledger.turns[key] = { calls: [], ...(essay ? {essay} : {}) };
         await save();
+        if (request) {
+          const estimate = bindContract(makeContract(request), []);
+          estimate.essay_mode = 'copyedit-v1';
+          estimate.return_format = RESULT_INSTRUCTION + ESSAY_RETURN;
+          if (JSON.stringify(estimate).replaceAll('@', '\\u0040').length > MAX_INPUT) {
+            essay.status = 'incomplete_input_limit'; await save();
+            fail('essay does not fit the 12000-character bound handoff. Original preserved; submit a separately scoped section.');
+          }
+        }
       });
     },
     async 'chat.params'(input) {
@@ -264,6 +277,20 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         const { key, messages, sourceMessages } = await identity(input);
         const turn = ledger.turns[key] ?? { calls: [] };
         if (turn.calls.some(c => c.id === input.callID)) fail('duplicate call already consumed its attempt');
+        if (turn.essay && output.args.subagent_type !== 'document') fail('essay turns use the tool-free document specialist only');
+        let essayRequest;
+        if (output.args.subagent_type === 'document') {
+          if (!roles.document || !turn.essay) fail('document editing requires an explicit ESSAY_EDIT request in this user turn');
+          essayRequest = await loadRequest(turn.essay);
+          let supplied;
+          try { supplied = JSON.parse(output.args.prompt); } catch { fail('document prompt must be JSON; use {} on the first attempt'); }
+          if (!supplied || Array.isArray(supplied) || Object.keys(supplied).some(k => k !== 'retry_failure')) fail('document draft and permissions come only from the saved user request');
+          output.args.prompt = JSON.stringify(makeContract(essayRequest, supplied.retry_failure));
+          if (output.args.prompt.length > MAX_INPUT) {
+            turn.essay.status = 'incomplete_input_limit'; await save();
+            fail('essay does not fit the handoff; original preserved. Submit a separately scoped section, no silent truncation.');
+          }
+        }
         const value = envelope(output.args);
         if (turn.calls.length >= 2) fail('two specialist attempts already used for this user turn');
         if (active.has(input.sessionID)) {
@@ -283,8 +310,15 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         const prior = turn.calls.find(c => c.role === output.args.subagent_type);
         if (prior && prior.acceptance_hash !== acceptanceHash) fail('retry must preserve the original acceptance checklist');
         contract.return_format = RESULT_INSTRUCTION;
+        if (essayRequest) {
+          contract.essay_mode = 'copyedit-v1';
+          contract.return_format += ESSAY_RETURN;
+        }
         const packet = JSON.stringify(contract).replaceAll('@', '\\u0040');
-        if (packet.length > MAX_INPUT) fail('bound handoff exceeds 12000 characters; use file references and a smaller brief');
+        if (packet.length > MAX_INPUT) {
+          if (essayRequest) {turn.essay.status = 'incomplete_input_limit'; await save();}
+          fail('bound handoff exceeds 12000 characters; use a smaller explicitly scoped brief. The document agent cannot read file references.');
+        }
         const saved = await saveArtifact(join(dirname(ledgerPath), 'handoff-contracts'),
           hash(key + input.callID) + '.json', contract);
         output.args.prompt = packet;
@@ -318,6 +352,14 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         if (!final || final.info.error || final.info.finish === 'length') sourceIssues.push('Specialist response missing, failed or cut off.');
       }
       const report = assessResult(contract, raw, tools, sourceIssues);
+      if (call.role === 'document') {
+        const record = ledger.turns[key].essay;
+        const request = await loadRequest(record);
+        report.essay = await persistResult(record, input.callID, request, raw, report.issues.concat(
+          report.acceptance.filter(c => c.status !== 'met').map(c => 'Unmet or unverified acceptance item: ' + c.id)));
+        report.status = report.essay.status;
+        report.issues.push(...report.essay.issues);
+      }
       const artifact = await saveArtifact(join(resolve(directory), '.local-ai-handoffs'),
         hash(key + input.callID + JSON.stringify(report)) + '.json', report);
       await exclusive(async () => {
@@ -327,7 +369,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         await save();
         active.delete(input.sessionID);
       });
-      output.output = JSON.stringify({ status: report.status,
+      output.output = JSON.stringify({ status: report.status, ...(report.essay ? {essay:report.essay} : {}),
         summary_excerpt: report.summary.slice(0, 1600), summary_shortened: report.summary.length > 1600,
         acceptance: report.acceptance.map(c => ({ id: c.id, status: c.status, basis: c.basis })),
         issues: report.issues.slice(0, 12), full_report: artifact.path, sha256: artifact.sha256,
@@ -337,7 +379,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
     },
     async 'tool.definition'(input, output) {
       if (input.toolID !== 'task') return;
-      output.description += '\nLocal team: at most two foreground attempts per user turn. Only analyst or coder. '
+      output.description += '\nLocal team: at most two foreground attempts per user turn. Analyst or coder; document only for an explicit ESSAY_EDIT user request. For document, prompt is {} or {retry_failure:concrete failure}; host supplies the preserved draft, permissions and contract. Do not construct or change its evidence. Other roles: '
         + 'prompt must be JSON with string fields objective, constraints, evidence, completed, remaining, result. '
         + 'Also require string lists facts, assumptions, unknowns; references:[{path:relative project path,symbol:string}]; '
         + 'acceptance:[{id:A1 through A8,requirement:string,source_quote:exact user quote or empty for derived criteria,'

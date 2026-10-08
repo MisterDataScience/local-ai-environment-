@@ -18,7 +18,7 @@ async function fixture(t) {
   const client = { session: {
     get: async () => ({ data: session }), messages: async () => ({ data: messages }),
   }};
-  const options = { ledgerPath, modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code' } };
+  const options = { ledgerPath, modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code', document: 'doc' } };
   const hooks = await LocalTeam({ client, directory: root }, options);
   await hooks['chat.message']({ sessionID: 'session1' }, { message: messages[0].info, parts: messages[0].parts });
   function call(id, role = 'analyst', extra = {}, parent = 'user1') {
@@ -118,7 +118,7 @@ test('nested delegation, child tools and implicit attachments are blocked', asyn
 
 test('role, resume, background, unknown identity and malformed envelopes fail', async t => {
   const f = await fixture(t);
-  await assert.rejects(f.before(f.call('unknown', 'general')), /analyst or coder/);
+  await assert.rejects(f.before(f.call('unknown', 'general')), /analyst, coder/);
   for (const extra of [{ task_id: 'session-other' }, { background: true }, { command: 'shell' }]) {
     const args = f.call('bad'); Object.assign(args[1].args, extra);
     await assert.rejects(f.before(args), /disabled/);
@@ -136,7 +136,7 @@ test('configuration enables only named specialists and rejects role model change
   const config = { tools: { task: false }, agent: { plan: { permission: {} }, build: { permission: {} } } };
   await f.hooks.config(config);
   assert.equal(config.tools.task, true);
-  assert.deepEqual(config.agent.plan.permission.task, { '*': 'deny', analyst: 'allow', coder: 'allow' });
+  assert.deepEqual(config.agent.plan.permission.task, { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow' });
   await f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'local-ai-gateway', id: 'code' } });
   await assert.rejects(f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'cloud', id: 'code' } }), /model changed/);
 });
@@ -349,4 +349,43 @@ test('coordinator speech supplies only exact text and registered voice options',
   assert.deepEqual(posted.speech, { voice: 'default', language: 'English' });
   assert.equal(result.audibly_verified, false);
   await assert.rejects(f.hooks.tool.local_speech.execute({ prompt: 'Hello', voice: '../file', language: 'English' }, context), /registered voice/);
+});
+
+async function essayTurn(f,id='essay-user',draft='The result may improve by 10%.') {
+  const message={info:{role:'user',id},parts:[{type:'text',text:'ESSAY_EDIT\n'+JSON.stringify({draft})}]};
+  f.messages.push(message);await f.hooks['chat.message']({sessionID:'session1'},{message:message.info,parts:message.parts});
+  const args=f.call('essay-call-'+id,'document',{},id);args[1].args.prompt='{}';return args;
+}
+
+test('essay delegation requires explicit current-turn activation and immutable supplied evidence',async t=>{
+  const f=await fixture(t);const blocked=f.call('blocked','document');blocked[1].args.prompt='{}';
+  await assert.rejects(f.before(blocked),/explicit ESSAY_EDIT/);
+  const args=await essayTurn(f);await f.before(args);
+  const packet=JSON.parse(args[1].args.prompt);assert.equal(packet.essay_mode,'copyedit-v1');
+  assert.equal(JSON.parse(packet.evidence).draft[0].text,'The result may improve by 10%.');
+  assert.equal(JSON.parse(packet.constraints).reorder,'none');assert.ok(args[1].args.prompt.length<=12000);
+  await f.after(args);
+  const retry=f.call('essay-retry','document',{},'essay-user');retry[1].args.prompt=JSON.stringify({retry_failure:'Missing essay payload'});await f.before(retry);await f.after(retry);
+  const third=f.call('essay-third','document',{},'essay-user');third[1].args.prompt='{}';await assert.rejects(f.before(third),/two specialist attempts/);
+  const normal={info:{role:'user',id:'normal'},parts:[{type:'text',text:'Now explain regression.'}]};f.messages.push(normal);
+  await f.hooks['chat.message']({sessionID:'session1'},{message:normal.info,parts:normal.parts});
+  const next=f.call('unrelated','document',{},'normal');next[1].args.prompt='{}';await assert.rejects(f.before(next),/explicit ESSAY_EDIT/);
+});
+test('essay envelope limit preserves original and makes no specialist reservation',async t=>{
+  const f=await fixture(t),draft='An unchanged paragraph. '.repeat(650);
+  await assert.rejects(essayTurn(f,'long',draft),/does not fit/);
+  const ledger=JSON.parse(await readFile(f.ledgerPath));const record=Object.values(ledger.turns).find(x=>x.essay);
+  assert.equal(record.calls.length,0);assert.equal(record.essay.status,'incomplete_input_limit');
+  assert.equal(await readFile(join(record.essay.folder,'essay.original.md'),'utf8'),draft);
+});
+test('native essay result is recovered, checked and saved separately with review status',async t=>{
+  const f=await fixture(t),args=await essayTurn(f);await f.before(args);
+  const native={summary:'Copyedited essay for author review.',acceptance:['A1','A2'].map(id=>({id,status:'met',evidence:'Model review only',tool_call_ids:[]})),changed_files:[],tests:[],assumptions:[],unresolved:[],essay:{paragraphs:[{id:'P1',text:'The result may improve by 10%.',removed_notes:[],beats:'A+C'}],editorial_notes:'Uncertain quotations: None identified. Unsupported claims: not verified. Meaning or structure concerns: None identified. Drafting notes and placeholders: None identified. Rhythm findings: no change warranted.',moves:[]}};
+  const get=f.client.session.get,messages=f.client.session.messages;
+  f.client.session.get=async a=>a.path.id==='essay-child'?{data:{parentID:'session1'}}:get(a);
+  f.client.session.messages=async a=>a.path.id==='essay-child'?{data:[{info:{role:'assistant',finish:'stop'},parts:[{type:'text',text:JSON.stringify(native)}]}]}:messages(a);
+  const output={output:'native clipped summary',metadata:{sessionId:'essay-child'}};
+  await f.hooks['tool.execute.after'](args[0],output);const review=JSON.parse(output.output);
+  assert.equal(review.status,'review_required');assert.equal(await readFile(review.essay.edited,'utf8'),'The result may improve by 10%.\n');
+  assert.equal(await readFile(review.essay.original,'utf8'),'The result may improve by 10%.');
 });

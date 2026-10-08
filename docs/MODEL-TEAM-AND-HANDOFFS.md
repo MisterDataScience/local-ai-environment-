@@ -187,3 +187,7 @@ available. Existing 155 passing authoring tests predate this design and do not
 validate handoffs. Existing native context protection and output handling remain
 implemented; delegation, semantic routing, this model migration and image input
 remain planned.
+
+## Optional essay-edit route
+
+The existing document profile is now available as a tool-free native subagent only for an explicit current-turn essay-edit request. It shares the two-attempt budget, 12,000-character bound envelope and serial model execution. Host code supplies the preserved draft and handles separate output persistence. See [ESSAY-EDITING.md](ESSAY-EDITING.md).
