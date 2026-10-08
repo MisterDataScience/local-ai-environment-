@@ -1,4 +1,4 @@
-"""Install and launch upstream OpenCode; no custom agent loop or agent tools."""
+"""Install and launch upstream OpenCode with bounded local team/media tools."""
 import argparse
 import hashlib
 import json
@@ -19,7 +19,7 @@ from common import http, stop_process, port_open
 VERSION = '1.18.34'
 URL = f'https://github.com/anomalyco/opencode/releases/download/v{VERSION}/opencode-darwin-arm64.zip'
 SHA256 = '8522b70f545184b3a8d97c5ca4f814093b2476d72aebfda8c48bcd072ec31d1b'
-SKIP = {'.git', '.opencode', '.claude', '.agents', '.local-ai-handoffs', '.venv', 'venv', 'node_modules',
+SKIP = {'.git', '.opencode', '.claude', '.agents', '.local-ai-handoffs', '.local-ai-media', '.venv', 'venv', 'node_modules',
         '__pycache__', '.ssh', '.aws', 'secrets', 'opencode.json', 'opencode.jsonc',
         'AGENTS.md', 'CLAUDE.md', '.mcp.json'}
 
@@ -141,7 +141,13 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                'For coding work give the coder file references, acceptance criteria and a bounded scope; '
                'let it inspect, implement and test instead of rewriting its code yourself. '
                'Wait for its result before changing the same files. Never claim a proposed test was executed. '
-               'After delegation, use the result without unnecessary additional specialist review.')
+               'After delegation, use the result without unnecessary additional specialist review. '
+               'For explicit image/video requests, call local_image/local_video with a focused text prompt. '
+               'These use the existing serial media backend and native permission prompts. Images require Normal or Max; '
+               'videos require Max and produce short silent clips. At most two media attempts per user turn, separate '
+               'from specialist attempts. Wait for active work before generating. Never retry failed/unknown jobs '
+               'automatically. Return the exact asset links from the tool. You cannot inspect generated pixels or '
+               'claim visual quality. Do not send media work to coder or analyst, change modes, or invent output links.')
     for name in ('plan', 'build'):
         settings['agent'][name].update(model=coordinator, prompt=routing,
             permission={'task': 'deny'})

@@ -95,6 +95,10 @@ Context overflow still fails explicitly.
 
 ### Acceptance contracts
 
+The coordinator also has `local_image` and `local_video` tools, separate from
+specialist delegation. They share the original media backend, preserve direct
+commands and save job records. See [COORDINATOR-MEDIA.md](COORDINATOR-MEDIA.md).
+
 Each packet additionally requires `facts`, `assumptions`, `unknowns` (string lists),
 `references` (`{path, symbol}` with relative project paths), and 1–8 `acceptance`
 items: `{id, requirement, source_quote, verification: {kind, command}}`.

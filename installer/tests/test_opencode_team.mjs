@@ -257,3 +257,81 @@ test('direct coder uses explicit user turn with tools but cannot delegate', asyn
   call[0].tool = 'webfetch';
   await assert.rejects(f.before(call), /not allowed/);
 });
+
+function mediaCall(f, id, kind = 'image') {
+  const call = f.call(id);
+  call[0].tool = 'local_' + kind;
+  f.messages.at(-1).parts[0].tool = call[0].tool;
+  return { call, context: { sessionID: 'session1', callID: id, ask: async () => {} } };
+}
+
+test('coordinator media asks approval, uses existing route and saves exact result', async t => {
+  const f = await fixture(t), { context } = mediaCall(f, 'image1');
+  let approved = false, posted;
+  context.ask = async request => { assert.equal(request.permission, 'local_image'); approved = true; };
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith('/control/mode')) return { ok: true, json: async () => ({ instance_id: 'backend', epoch: 0, mode: 'normal' }) };
+    assert(approved); posted = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '![Image](http://localhost/asset.png)' } }] }) };
+  };
+  const r = JSON.parse(await f.hooks.tool.local_image.execute({ prompt: 'A landscape' }, context));
+  assert.equal(posted.messages[0].content, '/image A landscape');
+  assert.equal(posted.media_mode_token, 'backend:0:normal');
+  assert.equal(r.visually_verified, false);
+  assert.equal(JSON.parse(await readFile(r.full_report)).prompt, 'A landscape');
+  await assert.rejects(f.hooks.tool.local_image.execute({ prompt: 'Again' }, context), /duplicate media/);
+});
+
+test('media blocks specialist calls, invalid prompts, normal-mode video and denied approval', async t => {
+  const f = await fixture(t), { context } = mediaCall(f, 'media1');
+  await assert.rejects(f.hooks.tool.local_image.execute({ prompt: '' }, context), /prompt/);
+  await assert.rejects(f.hooks.tool.local_video.execute({ prompt: 'Scene' }, context), /Max mode/);
+  context.ask = async () => { throw Error('Denied'); };
+  await assert.rejects(f.hooks.tool.local_image.execute({ prompt: 'Scene' }, context), /Denied/);
+  f.messages.at(-1).info.agent = 'coder';
+  await assert.rejects(f.hooks.tool.local_image.execute({ prompt: 'Scene' }, context), /only the coordinator/);
+  f.session.parentID = 'parent';
+  await assert.rejects(f.hooks.tool.local_image.execute({ prompt: 'Scene' }, context), /specialists/);
+});
+
+test('failed media is logged, counts against its own budget and is never auto-retried', async t => {
+  const f = await fixture(t); let posts = 0;
+  globalThis.fetch = async url => {
+    if (url.endsWith('/control/mode')) return { ok: true, json: async () => ({ instance_id: 'backend', epoch: 0, mode: 'normal' }) };
+    posts++; throw Error('Connection lost');
+  };
+  for (const id of ['one', 'two']) {
+    const { context } = mediaCall(f, id);
+    const r = JSON.parse(await f.hooks.tool.local_image.execute({ prompt: 'Scene' }, context));
+    assert.equal(r.status, 'failed_or_unknown');
+  }
+  await assert.rejects(f.hooks.tool.local_image.execute({ prompt: 'Scene' }, mediaCall(f, 'three').context), /two media attempts/);
+  assert.equal(posts, 2);
+  const turn = Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0];
+  assert.equal(turn.calls.length, 0); assert.equal(turn.media.length, 2);
+});
+
+test('Max video works and media waits for an active specialist', async t => {
+  const f = await fixture(t);
+  let posted;
+  globalThis.fetch = async (url, options) => url.endsWith('/control/mode')
+    ? { ok: true, json: async () => ({ instance_id: 'backend', epoch: 0, mode: 'max' }) }
+    : { ok: true, json: async () => { posted = JSON.parse(options.body); return { choices: [{ message: { content: '[Video](http://localhost/video.mp4)' } }] }; } };
+  const hooks = await LocalTeam({ client: f.client, directory: f.directory }, { ...f.options, modeToken: 'backend:0:max' });
+  const task = f.call('task'); await hooks['tool.execute.before'](...task);
+  const { context } = mediaCall(f, 'video', 'video');
+  await assert.rejects(hooks.tool.local_video.execute({ prompt: 'A wave' }, context), /active work/);
+  await hooks['tool.execute.after'](task[0], { output: 'Result', metadata: {} });
+  assert.equal(JSON.parse(await hooks.tool.local_video.execute({ prompt: 'A wave' }, context)).status, 'completed');
+  assert.equal(posted.messages[0].content, '/video A wave');
+});
+
+test('mode changes during approval prevent media submission', async t => {
+  const f = await fixture(t), { context } = mediaCall(f, 'one');
+  context.ask = async () => {
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ instance_id: 'backend', epoch: 1, mode: 'normal' }) });
+  };
+  await assert.rejects(f.hooks.tool.local_image.execute({ prompt: 'Scene' }, context), /mode changed/);
+  const turn = Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0];
+  assert.equal(turn.media, undefined);
+});

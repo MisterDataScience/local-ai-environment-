@@ -87,6 +87,10 @@ def verify_work_agent(process, env, enabled, timeout=90):
                     matches = [r for r in rules if r['permission'] in ('*', 'task') and r['pattern'] in ('*', role)]
                     if not matches or matches[-1]['action'] != 'allow':
                         raise RuntimeError('OpenCode model team policy did not load; delegation remains disabled')
+                for name in ('local_image', 'local_video'):
+                    matches = [r for r in rules if r['permission'] in ('*', name) and r['pattern'] == '*']
+                    if not matches or matches[-1]['action'] != 'ask':
+                        raise RuntimeError('Coordinator media approval permissions were not loaded')
             return
         except (URLError, TimeoutError, ConnectionError):
             time.sleep(0.25)

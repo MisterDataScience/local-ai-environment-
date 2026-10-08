@@ -61,6 +61,24 @@ class ModeTests(unittest.TestCase):
         self.assertEqual(len(self.engine.visible_models()), 3)
         self.engine.check_policy(self.body('local-ai-large'), 'video')
 
+    def test_coordinator_media_uses_serial_route_and_rejects_stale_mode(self):
+        self.switch('normal')
+        token = f'{self.engine.instance_id}:{self.engine.mode_epoch}:normal'
+        with patch.object(self.engine, 'render', return_value='asset-link') as render:
+            body = self.body(prompt='/image landscape')
+            body['media_mode_token'] = token
+            self.assertEqual(self.engine.submit(body).result(timeout=2), 'asset-link')
+            render.assert_called_once_with('image', 'landscape')
+            for prompt, supplied in [('/image landscape', 'stale'), ('Hello', token), ('/video scene', token)]:
+                body = self.body(prompt=prompt)
+                body['media_mode_token'] = supplied
+                with self.assertRaises(ValueError): self.engine.submit(body)
+            self.assertEqual(render.call_count, 1)
+        self.switch('max')
+        body = self.body(prompt='/image landscape')
+        body['media_mode_token'] = token
+        with self.assertRaisesRegex(ValueError, 'mode changed'): self.engine.submit(body)
+
     def test_preset_name_cannot_disguise_heavy_model(self):
         self.engine.text_models['local-ai-small']['model'] = 'qwen3:30b-a3b'
         with self.assertRaises(ValueError):

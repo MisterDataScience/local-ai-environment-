@@ -1,5 +1,9 @@
 # Local AI environment
 
+The OpenCode coordinator can now request local images and videos through the
+existing serial backend. Direct `/image` and `/video` commands remain available.
+See [coordinator media and model review](docs/COORDINATOR-MEDIA.md).
+
 Handoff reliability now includes immutable acceptance checklists, source-bound
 quotes, native test-execution evidence and recoverable full reports. See
 [work-agent contracts](docs/WORK-AGENT.md#acceptance-contracts).

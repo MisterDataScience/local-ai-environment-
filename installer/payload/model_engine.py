@@ -127,6 +127,10 @@ class Engine:
         messages, route, prompt = messages_and_route(body, self.text_models)
         with self.mode_lock:
             self.check_policy(body, route)
+            if 'media_mode_token' in body:
+                expected = f'{self.instance_id}:{self.mode_epoch}:{self.mode}'
+                if route not in {'image', 'video'} or body['media_mode_token'] != expected:
+                    raise ValueError('Media work-agent mode changed. Restart the work agent.')
             epoch = self.mode_epoch
             if not self.pending.acquire(blocking=False):
                 raise RuntimeError('Four requests are already queued. Wait for them to finish.')

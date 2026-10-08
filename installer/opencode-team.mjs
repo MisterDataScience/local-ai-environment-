@@ -40,6 +40,8 @@ async function loadStore(ledgerPath) {
   for (const turn of Object.values(ledger.turns)) {
     if (!Array.isArray(turn.calls) || turn.calls.length > 2) fail('invalid turn ledger');
     for (const call of turn.calls) if (call.status === 'reserved') call.status = 'interrupted';
+    if (turn.media !== undefined && (!Array.isArray(turn.media) || turn.media.length > 2)) fail('invalid media ledger');
+    for (const call of turn.media ?? []) if (call.status === 'reserved') call.status = 'interrupted';
   }
   await save();
   return { ledger, exclusive, save, active: new Map() };
@@ -62,6 +64,69 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         || `${status.instance_id}:${status.epoch}:${status.mode}` !== modeToken) {
       fail('gateway mode changed or restarted; restart the work agent');
     }
+    return status;
+  }
+
+  function mediaTool(kind) {
+    const name = 'local_' + kind;
+    return {
+      description: `Generate one ${kind} using the local media backend. ${kind === 'video' ? 'Requires Max mode; short silent clip.' : 'Normal or Max mode.'} Only for explicit user requests. Returns asset links, not a visual assessment.`,
+      // v1.18.34 registry supports legacy JSON Schema args; validate again below.
+      args: { prompt: { type: 'string', minLength: 1, maxLength: 4000 } },
+      async execute(args, context) {
+        if (!args || Object.keys(args).some(k => k !== 'prompt') || typeof args.prompt !== 'string' ||
+            !args.prompt.trim() || args.prompt.length > 4000) fail('media requires a prompt of 1–4000 characters');
+        const input = { sessionID: context.sessionID, callID: context.callID };
+        await identity(input);
+        let status = await checkMode();
+        if (kind === 'video' && status.mode !== 'max') fail('video requires Max mode; change modes and restart the work agent');
+        await context.ask({ permission: name, patterns: ['*'], always: ['*'], metadata: { kind, prompt: args.prompt } });
+        const started = new Date().toISOString();
+        let record, key;
+        await exclusive(async () => {
+          await checkMode();
+          ({ key } = await identity(input));
+          const turn = ledger.turns[key];
+          turn.media ??= [];
+          if (turn.media.some(c => c.id === input.callID)) fail('duplicate media call; inspect its saved record');
+          if (turn.media.length >= 2) fail('two media attempts already used for this user turn');
+          if (active.has(input.sessionID)) fail('wait for active work before generating media');
+          record = { id: input.callID, kind, prompt: args.prompt, started, status: 'reserved' };
+          turn.media.push(record);
+          await save();
+          active.set(input.sessionID, input.callID);
+        });
+        let result;
+        try {
+          context.abort?.throwIfAborted();
+          const response = await fetch('http://127.0.0.1:8001/v1/chat/completions', {
+            method: 'POST', redirect: 'error',
+            headers: { Authorization: 'Bearer ' + process.env.LOCAL_AI_GATEWAY_KEY, 'Content-Type': 'application/json' },
+            signal: AbortSignal.any([AbortSignal.timeout(4200000), ...(context.abort ? [context.abort] : [])]),
+            body: JSON.stringify({ model: roles.coordinator, stream: false, media_mode_token: modeToken,
+              messages: [{ role: 'user', content: '/' + kind + ' ' + args.prompt.trim() }] }),
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error?.message ?? body.error ?? 'Media request failed');
+          const content = body.choices?.[0]?.message?.content;
+          if (typeof content !== 'string' || !content.trim()) throw new Error('Media response contained no asset links');
+          result = { status: 'completed', output: content, visually_verified: false };
+        } catch (error) {
+          result = { status: 'failed_or_unknown', error: String(error.message),
+            instruction: 'Do not retry automatically. A disconnected or cancelled client does not prove the backend stopped. Check backend status and generated media first.' };
+        }
+        const finished = new Date().toISOString();
+        const report = await saveArtifact(join(resolve(directory), '.local-ai-media'),
+          hash(key + input.callID) + '.json', { ...record, ...result, finished,
+            elapsed_seconds: (Date.parse(finished) - Date.parse(started)) / 1000 });
+        await exclusive(async () => {
+          Object.assign(record, { status: result.status, finished, report: report.path });
+          await save();
+          active.delete(input.sessionID);
+        });
+        return JSON.stringify({ ...result, full_report: report.path });
+      },
+    };
   }
 
   async function coderTool(input, session, messages, assistant) {
@@ -140,12 +205,17 @@ export default async function LocalTeam({ client, directory }, options = {}) {
   }
 
   return {
+    tool: { local_image: mediaTool('image'), local_video: mediaTool('video') },
     async config(config) {
       // Base configuration denies task. Only successful plugin initialization
       // enables it, so a missing/broken policy file cannot allow unbounded work.
       config.tools.task = true;
+      config.tools.local_image = true;
+      config.tools.local_video = true;
       for (const name of ['plan', 'build']) {
         config.agent[name].permission.task = { '*': 'deny', analyst: 'allow', coder: 'allow' };
+        config.agent[name].permission.local_image = 'ask';
+        config.agent[name].permission.local_video = 'ask';
       }
     },
     async 'chat.message'(input, output) {

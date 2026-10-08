@@ -1,5 +1,9 @@
 # Update: Cryptomator workspace and GitHub
 
+Coordinator image/video tools now use the existing serial rendering backend,
+with native approval prompts, saved job records and resource-mode checks.
+See COORDINATOR-MEDIA.md in the ZIP for usage and the abliterated model review.
+
 Team handoffs now use acceptance contracts and recoverable full reports, with
 deterministic checks against native test/inspection records and no extra model
 judge. See WORK-AGENT.md in the ZIP for the schema and plaintext storage caveats.
