@@ -253,3 +253,13 @@ Startup verifies the policy loaded. Mode changes or gateway restarts stop the
 work agent. The installer also requires actual native handoff acceptance before
 recording installation success. WebUI delegation and image input remain deferred.
 Read WORK-AGENT.md for details, local storage, limits and native validation.
+
+
+## Office documents
+
+The installer automatically adds AIOffice 1.27.2 for DOCX, XLSX and PPTX. Use the
+coordinator in Start Work Agent.command; Plan reads, Build requests approval to
+create or edit. Files stay in the project copy. Check Office.command repeats the
+real format checks and records memory samples. No Office suite or extra model is
+installed. Read OFFICE-TOOLS.md in this bundle for snapshots, network isolation,
+rendering dependencies and the remaining Mac validation.

@@ -420,3 +420,37 @@ test('native scaffold artifact is checked and never self-approved',async t=>{
   const host=approval.parts.at(-1);assert.equal(host.synthetic,true);assert.equal(host.messageID,'scaffold-approval');assert.equal(host.sessionID,'session1');assert.match(host.id,/^prt_/);
   const forbidden=f.call('approval-cannot-delegate','document',{},'scaffold-approval');forbidden[1].args.prompt='{}';await assert.rejects(f.before(forbidden),/already completed by the host/);
 });
+
+test('Office uses coordinator, native Build approvals and compact MCP result shape', async t => {
+  const f = await fixture(t);
+  function officeCall(id, agent, tool = 'aioffice_office_read') {
+    f.messages.push({info: {id:'a-'+id,role:'assistant',parentID:'user1',agent},parts:[
+      {type:'tool',callID:id,state:{status:'running'}}]});
+    return [{tool,sessionID:'session1',callID:id},{args:{file:'report.docx',max_bytes:999999}}];
+  }
+  await assert.rejects(f.before(officeCall('coder-office','coder')), /coordinator only/);
+  await assert.rejects(f.before(officeCall('plan-write','plan','aioffice_office_edit')), /require Build/);
+  const read = officeCall('read-office','plan');
+  await f.before(read);
+  assert.equal(read[1].args.max_bytes,8000);
+  await assert.rejects(f.before(officeCall('parallel-office','build')), /wait for active/);
+  const result = {content:[{type:'text',text:'x'.repeat(15000)},{type:'image',data:'not-for-model',mimeType:'image/png'}]};
+  await f.hooks['tool.execute.after'](read[0],result);
+  const brief = JSON.parse(result.content[0].text);
+  assert.equal(brief.truncated,true);
+  assert.equal(JSON.parse(await readFile(brief.full_report,'utf8')).output.length,15000);
+  assert(result.content.every(c=>c.type==='text'));
+  await f.before(officeCall('build-edit','build','aioffice_office_edit'));
+});
+
+test('Office cannot bypass essay workflow restrictions', async t => {
+  const f = await fixture(t);
+  const id = 'essay-user';
+  const user = {info:{id,role:'user'},parts:[{type:'text',text:'ESSAY_EDIT\n'+JSON.stringify({draft:'Original text.'})}]};
+  f.messages.push(user);
+  await f.hooks['chat.message']({sessionID:'session1'},{message:user.info,parts:user.parts});
+  f.messages.push({info:{id:'essay-assistant',role:'assistant',parentID:id,agent:'build'},parts:[
+    {type:'tool',callID:'essay-office',state:{status:'running'}}]});
+  await assert.rejects(f.before([{tool:'aioffice_office_edit',sessionID:'session1',callID:'essay-office'},
+    {args:{file:'essay.docx',ops:[]}}]), /separate request/);
+});

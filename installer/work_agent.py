@@ -21,7 +21,7 @@ from common import http, stop_process, port_open
 VERSION = '1.18.34'
 URL = f'https://github.com/anomalyco/opencode/releases/download/v{VERSION}/opencode-darwin-arm64.zip'
 SHA256 = '8522b70f545184b3a8d97c5ca4f814093b2476d72aebfda8c48bcd072ec31d1b'
-SKIP = {'.git', '.opencode', '.claude', '.agents', '.local-ai-handoffs', '.local-ai-media', '.venv', 'venv', 'node_modules',
+SKIP = {'.git', '.opencode', '.claude', '.agents', '.local-ai-handoffs', '.local-ai-media', '.local-ai-office', '.venv', 'venv', 'node_modules',
         '__pycache__', '.ssh', '.aws', 'secrets', 'opencode.json', 'opencode.jsonc',
         'AGENTS.md', 'CLAUDE.md', '.mcp.json'}
 
@@ -311,6 +311,8 @@ def main():
         copy_project(args.project.absolute(), project)
     else:
         project.mkdir(mode=0o700)
+    from office_setup import configure as configure_office
+    configure_office(root, project, settings, config)
     env = environment(root, config, settings)
     # A new repository has no source hooks, remotes or credential helpers.
     git_env = dict(env, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null')
@@ -335,6 +337,8 @@ def main():
     try:
         from team_setup import verify_work_agent
         verify_work_agent(process, git_env, config.get('model_team', {}).get('enabled', False))
+        from office_setup import verify_connection as verify_office
+        verify_office(process, git_env)
         from essay_setup import publish_connection, connection_file
         # With port 4096 verified free before startup, a prior record can only be stale.
         connection_file(root).unlink(missing_ok=True)
