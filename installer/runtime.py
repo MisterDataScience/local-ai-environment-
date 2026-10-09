@@ -98,6 +98,8 @@ def main():
             print('Vault media saves to Outputs/Media. Local chat data is backed up to the vault on clean shutdown.')
         else:
             print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")
+        if config.get("browser", {}).get("enabled"):
+            print("Browser: Playwright MCP over Proton VPN. Enable its integration in chat.")
         if config.get("web", {}).get("enabled"):
             print("Web: /search QUERY or /read https://example.org QUESTION. VPN required; no fallback.")
         print("Leave this Terminal open. Press Control+C here to shut down.")

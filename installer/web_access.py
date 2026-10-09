@@ -51,9 +51,9 @@ def compose(root, *args, capture=False, timeout=300):
                capture_output=capture, text=True, timeout=timeout)
 
 
-def specification(images):
+def specification(images, browser_enabled=False):
     network = "service:vpn"
-    return {"services": {
+    services = {
         "vpn": {"image": images["vpn"], "cap_add": ["NET_ADMIN"],
                 "devices": ["/dev/net/tun:/dev/net/tun"], "env_file": ["vpn.env"],
                 "environment": {"VPN_SERVICE_PROVIDER": "protonvpn", "VPN_TYPE": "wireguard",
@@ -76,8 +76,27 @@ def specification(images):
                    "env_file": ["reader.env"], "volumes": ["./service.py:/app/service.py:ro",
                                                             "./resolv.conf:/etc/resolv.conf:ro"],
                    "read_only": True, "cap_drop": ["ALL"], "security_opt": ["no-new-privileges:true"],
-                   "mem_limit": "128m", "cpus": 0.5}},
-        "networks": {"default": {"enable_ipv6": False}}}
+                   "mem_limit": "128m", "cpus": 0.5}}
+    if browser_enabled:
+        if not images.get("browser"):
+            raise ValueError("Browser image must be pinned before activation.")
+        services["browser"] = {
+            "image": images["browser"], "network_mode": network,
+            "depends_on": {"vpn": {"condition": "service_healthy"}},
+            "entrypoint": ["node"],
+            "command": ["/app/cli.js", "--headless", "--browser", "chromium",
+                        "--no-sandbox", "--port", "8931", "--host", "0.0.0.0",
+                        "--allowed-hosts", "127.0.0.1,localhost",
+                        "--user-data-dir", "/browser/profile", "--output-dir", "/browser/outputs",
+                        "--output-max-size", "52428800"],
+            "volumes": ["./browser-profile:/browser/profile", "./browser-outputs:/browser/outputs",
+                        "./resolv.conf:/etc/resolv.conf:ro"],
+            "init": True, "security_opt": ["no-new-privileges:true"],
+            "cap_drop": ["ALL"], "mem_limit": "768m", "cpus": 1}
+    if browser_enabled:
+        services["vpn"]["ports"].append("127.0.0.1:8931:8931")
+        services["vpn"]["environment"]["FIREWALL_INPUT_PORTS"] = "8090,8888,8931"
+    return {"services": services, "networks": {"default": {"enable_ipv6": False}}}
 
 
 def status(root):
@@ -90,7 +109,8 @@ def status(root):
 
 def start(root):
     # Recreate namespace-sharing clients whenever the VPN container is recreated.
-    compose(root, "up", "--detach", "--force-recreate", "--pull", "never", timeout=180)
+    config = json.loads((root / "control/config.json").read_text())
+    compose(root, "up", "--detach", "--force-recreate", "--remove-orphans", "--pull", "never", timeout=180)
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         try:
@@ -159,7 +179,7 @@ def configure(root):
                     raise RuntimeError("Cannot record immutable container digest: " + image)
                 images[name] = digests[0]
             save(lock_path, images)
-        save(web / "compose.json", specification(images))
+        save(web / "compose.json", specification(images, browser_enabled=config.get("browser", {}).get("enabled", False)))
         backup = root / "control/config.before-web-access.json"
         if not backup.exists():
             save(backup, config)

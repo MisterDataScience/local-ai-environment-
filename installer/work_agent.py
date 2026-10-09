@@ -313,6 +313,8 @@ def main():
         project.mkdir(mode=0o700)
     from office_setup import configure as configure_office
     configure_office(root, project, settings, config)
+    from browser_agent import configure as configure_browser
+    configure_browser(settings, config)
     env = environment(root, config, settings)
     # A new repository has no source hooks, remotes or credential helpers.
     git_env = dict(env, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null')
