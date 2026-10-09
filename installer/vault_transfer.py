@@ -9,10 +9,17 @@ import stat
 import uuid
 
 from vault_tools import mounted_root, directory, parts
-from file_transfer import EXTENSIONS, MAX_BYTES, contained
+from file_transfer import EXTENSIONS, MAX_BYTES, contained, project_path, open_source, audit
 
 
-def copy_new(source_fd, dest_fd, name):
+def same_mount(config, original_fd):
+    with mounted_root(config) as current:
+        before, after = os.fstat(original_fd), os.fstat(current)
+        if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+            raise RuntimeError('Vault mount changed during transfer; no fallback used')
+
+
+def copy_new(source_fd, dest_fd, name, check_mount=None):
     name = str(name)
     if not name or '/' in name or name in {'.', '..'} or Path(name).suffix.lower() not in EXTENSIONS:
         raise ValueError("Unsupported transfer filename")
@@ -23,10 +30,16 @@ def copy_new(source_fd, dest_fd, name):
     new_file = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dest_fd)
     try:
         with os.fdopen(new_file, 'wb') as target:
+            copied = 0
             while True:
+                if check_mount:
+                    check_mount()
                 data = os.read(source_fd, 1_048_576)
                 if not data:
                     break
+                copied += len(data)
+                if copied > MAX_BYTES:
+                    raise ValueError('Source grew beyond the transfer budget')
                 target.write(data)
             target.flush()
             os.fsync(target.fileno())
@@ -35,6 +48,8 @@ def copy_new(source_fd, dest_fd, name):
                 original.st_ino, original.st_dev, original.st_size, original.st_mtime_ns):
             raise ValueError("Source changed during transfer")
         # Atomic link means create-only; an existing target is NEVER replaced.
+        if check_mount:
+            check_mount()
         os.link(temp, name, src_dir_fd=dest_fd, dst_dir_fd=dest_fd, follow_symlinks=False)
     finally:
         os.unlink(temp, dir_fd=dest_fd)
@@ -42,7 +57,21 @@ def copy_new(source_fd, dest_fd, name):
 
 def transfer_vault(config, root, project_id, name, direction):
     root = Path(root).resolve(strict=True)
-    project = root / 'work-agent/projects' / project_id
+    project_path(root, project_id)
+    operation = uuid.uuid4().hex
+    audit(root, {'id': operation, 'project': project_id, 'direction': direction, 'status': 'started'})
+    try:
+        result = _transfer_vault(config, root, project_id, name, direction)
+        audit(root, {'id': operation, 'project': project_id, 'direction': direction, 'status': 'completed'})
+        return result
+    except Exception:
+        audit(root, {'id': operation, 'project': project_id, 'direction': direction, 'status': 'failed-or-needs-review'})
+        raise
+
+
+def _transfer_vault(config, root, project_id, name, direction):
+    root = Path(root).resolve(strict=True)
+    project = project_path(root, project_id)
     if (not isinstance(project_id, str) or len(project_id) != 32 or
         any(x not in '0123456789abcdef' for x in project_id) or
         not project.is_dir() or project.is_symlink()):
@@ -63,7 +92,7 @@ def transfer_vault(config, root, project_id, name, direction):
                 source_fd = os.open(source_parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                                     dir_fd=folder)
                 try:
-                    copy_new(source_fd, destination_fd, source_parts[-1])
+                    copy_new(source_fd, destination_fd, source_parts[-1], lambda: same_mount(config, vault))
                 finally:
                     os.close(source_fd)
         finally:
@@ -73,10 +102,11 @@ def transfer_vault(config, root, project_id, name, direction):
     source = contained(project, name)
     if source.suffix.lower() not in EXTENSIONS or not source.is_file():
         raise ValueError("Unsupported local project file")
-    source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    source_fd = open_source(project, name)
     try:
         with mounted_root(config) as vault, directory(vault, ['Outputs']) as destination_fd:
-            copy_new(source_fd, destination_fd, source.name)
+            copy_new(source_fd, destination_fd, source.name, lambda: same_mount(config, vault))
     finally:
         os.close(source_fd)
     return 'Outputs/' + source.name + ' (encrypted workspace)'
+

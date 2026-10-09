@@ -1,62 +1,75 @@
-# Required LOCAL AI capabilities: vision, PDFs, automatic operation and connected files
+# Required LOCAL AI capabilities
 
-These four capabilities are **mandatory**, not optional extensions. This branch introduces the initial runtime paths; do not classify the project as complete until the acceptance conditions below pass on the target Mac.
+Status: integrated implementation under review in draft PR #4. Not deployed or accepted on the owner's Mac. Keep this distinction when describing completion.
 
-## 1. Vision and image input
+## Vision
 
-The existing gateway now accepts OpenAI-format user `image_url` message parts containing a **base64 inline data URL**, with JPEG/PNG/WebP only. Pillow decodes locally, applies EXIF orientation, flattens transparencies, strips image metadata and bounds output to 1536 pixels and 1 MB. There are limits of 2 images/message and 4/request. The gateway passes normalized Ollama `images` fields to an eligible Qwen3.5/Gemma4 local model. No new resident model or image-downloading proxy is added.
+Ordinary WebUI image inputs resolve owned upload IDs or local file URLs through the installed global attachment filter. Inline and uploaded PNG, JPEG and WebP are normalized locally: metadata removed, EXIF orientation applied, image dimensions bounded, maximum 12 MB source and 1 MB normalized image. The gateway allows two images per message and four per request. External image URLs are rejected.
 
-**Not yet supported:** remote image URLs, URL attachments, multi-frame/video inputs, native Open WebUI upload transformations that do not send inline image parts, agent introspection of saved generated images, or a proof that each installed model tag accepts visual input. The earlier blanket text-only gateway rejection is removed for valid inline images. No claim of a working chat upload on the Mac until tested.
+Pinned WebUI 0.11.1 converts image URLs before inlet filters. A verified, idempotent patch disables that pre-filter conversion so a remote URL cannot trigger a direct fetch before gateway validation. Installer/startup refuse an unknown upstream resolver. The filter converts owned local references instead; no network fallback exists.
 
-Acceptance: upload a picture through Open WebUI and check the actual backend request and accurate interpretation; test multiple images, corrupted data, oversized images, non-vision presets and Gaming mode. Confirm the current UI really sends inline data URL parts.
+The gateway checks Ollama's actual `/api/show` vision capability before inference. Model names alone do not establish support. Vision is blocked in Gaming Mode. Existing Qwen3.5 artifacts are reused; no additional resident model is installed. Browser tool image parts preserve their call IDs and reach the multimodal backend.
 
-## 2. PDF and scanned documents
+The Work Agent advertises image input for Qwen3.5 and exposes `projectvision_inspect_image`. This reads only the active project and performs inference through the existing serial gateway. Import browser screenshots, chat attachments or generated images first if they are outside the project. Generated vault images use explicit `vault-import` from `Outputs/Media/...`, with plaintext disclosure and approval.
 
-`installer/pdf_reader.py` reads local project PDFs through macOS PDFKit. Pass `--ocr` to attempt on-device Apple Vision OCR for pages without readable embedded text. It limits source size to 35 MB, page count to at most 40 per request, and text returned per page to 12,000 characters. Use:
+## PDF and OCR
 
-```bash
-"$HOME/LocalAI-Automated/Read PDF.command" "Inbox/document.pdf" --root "$HOME/LocalAI-Automated/work-agent/projects/PROJECT_ID" --ocr
-```
+The existing Apple PDFKit/Vision reader is integrated into both ordinary WebUI upload processing and the chat attachment filter, plus `projectpdf_read_pdf` in the Work Agent. The native WebUI PDF loader adapter replaces only the pinned local PDF branch; other native format loaders remain intact. No document cloud service or OCR model is added.
 
-The extractor is now also available as a **first-class scoped Work Agent MCP tool**, `projectpdf_read_pdf`. It is not a PDF editor, an indexed retrieval engine or a standalone Open WebUI PDF tool. The Work Agent is told about the scoped command and still requires native approval for shell invocation. PDFKit/Swift compiler availability, scanned-page rasterization, language accuracy and resource use must be tested on the Mac.
+OCR runs on mixed pages as well as image-only pages, preserving embedded text and adding recognized text absent from it. Extraction reports page numbers, method, empty pages, OCR errors and per-page truncation. Results are bounded to 35 MB source, at most 40 pages for the underlying reader, and a bounded overall text response. MCP/OpenAPI reads limit batches to 20 pages. Chat uses a smaller initial batch to protect coordinator context.
 
-Acceptance: embedded-text PDF, image-only scanned PDF, multipage mixed PDF, corrupt/password-protected PDF, huge-page rejection, symlink escape rejection and offline operation. Compare OCR text against known references. No silent export of PDF data to cloud endpoints.
+Use `start_page=next_page` to continue a long document. `limited=false` only means the requested page range reached the end; it does not erase a page's `truncated`, `empty` or `ocr_error` flag. Truncated page text is explicitly incomplete. Password-locked/corrupt files, subprocess timeouts and invalid ranges return errors rather than invented evidence.
 
-## 3. Automatic operation
+Chat exposes `read_attachment_pdf` for subsequent page ranges. Chat imports preserve an immutable upload reference, which can be transferred into the Work Agent for further PDF reads and AIOffice work. Source descriptors refuse symlink ancestors and hard links; extraction does not expose arbitrary host paths.
 
-`Enable Login Startup.command` registers an owner-only macOS LaunchAgent to start the **existing** Local AI.app after user login. `Disable Login Startup.command` removes it. The heavyweight model still loads only on demand. This is **login-time startup**, not a silent headless daemon, boot-before-login service or automatic computer wake. The existing interactive Terminal supervisor remains part of startup.
+## Connected file workflows
 
-Acceptance: cold login, repeat login, two simultaneous starts, VPN unavailable, Docker unavailable, sleep/wake, app crash, device restart, Gaming mode and shutdown. Inspect actual launchctl status. A throttled crash-restart policy is now configured through launchd; scheduled autonomous jobs remain **unimplemented** and must be handled as an additional milestone; do not mistake login automation for full automatic operation.
+The existing authenticated gateway exposes a file-workflow OpenAPI connection to WebUI. `list_workflow_files` discovers bounded references; `transfer_workflow_file` requires native user approval and uses the running Work Agent's published project. An arbitrary project ID is never accepted from chat. Stale/missing agent connections fail.
 
-## 4. Connected browser-to-project file handoff
+Work Agent tools: `projectfiles_list_files` and approval-required `projectfiles_transfer_file`.
 
-`installer/file_transfer.py` explicitly imports files from the Playwright browser-output directory into an active Work Agent project's `Inbox`, or exports a project file to browser `Export`. The transfer allows only known formats, rejects traversal and symlinks, limits files to 50 MB, and refuses to overwrite existing output files. Example:
+| Direction | Source | Destination |
+| --- | --- | --- |
+| browser-import | `web/browser-outputs` | Active project `Inbox` |
+| browser-export | Active project | Browser `Export` |
+| chat-import | Owned staged chat upload | Active project `Inbox`, upload ID in filename |
+| media-import | Generated local `control/media` | Active project `Inbox` |
+| vault-import | Manually unlocked vault | Active project `Inbox`, explicit PLAINTEXT copy |
+| vault-export | Active project, including AIOffice outputs | Vault `Outputs` |
 
-```bash
-"$HOME/LocalAI-Automated/File Transfer.command" --root "$HOME/LocalAI-Automated" --project PROJECT_ID --file downloaded.pdf --direction import
-```
+AIOffice and PDF tools share the existing project. A document can be imported, read/OCRed, used to create DOCX/XLSX/PPTX, validated/read back with AIOffice and exported to the vault without manual copying. Permissions still apply to each operation. Plan cannot write Office outputs; switch to Build.
 
-This command moves **a copy** of the file, with no unrestricted agent access to filesystem roots. No implicit write into the Cryptomator vault, iCloud, other agent sessions or chat history is permitted.
+Copies are create-only and capped at 50 MB. Source modification, growth, path traversal, link escapes and overwrites fail. Vault mount identity is rechecked during transfer. A private append-only transfer ledger records operation IDs, direction, project, completion/failure and output metadata, never document content. A failed-or-needs-review operation must be inspected before retrying; an output may already exist if bookkeeping failed after copying.
 
-Acceptance: import/export, filename collisions, symlink escape, no overwrite, 50 MB budget, concurrent source modification and user-scoped permissions. Browser container output mount location must be confirmed: the file must exist in `web/browser-outputs` before import. Vault-to-project transfers are now implemented as explicit create-only copies using the Cryptomator mount-checked file boundary, with plaintext disclosure; integration with WebUI chat uploads is still missing. No silent copying of encrypted data into plaintext agent sessions.
+## Automatic operation
 
-## Implementation and validation boundary
+`Enable Login Startup.command` registers a per-user LaunchAgent running `runtime.py --background`. Background startup opens no Safari window and requires no Terminal window. Abnormal exits restart with a 60-second throttle. A clean `Stop Local AI.command` exits without triggering a crash restart. `Disable Login Startup.command` removes the startup job.
 
-The branch includes source and regression-test cases but there is no executed native Mac acceptance evidence. Existing browser network/approval hardening remains necessary. For the complete requirement, the following must also be delivered after these initial building blocks:
+The runtime uses its existing process lock to prevent duplicates. It tracks private child process identities and only signals orphan groups whose command/start fingerprint still matches this installation. PID reuse or unrelated occupied ports never authorize a kill. Core health failures cause cleanup and a supervised restart. VPN recovery retries through the existing Docker/Gluetun stack; web remains unavailable while the VPN is down. Wake resumes readiness checks without changing resource mode or loading a model.
 
-- Safe model-aware direct image inspection by the Work Agent and review of generated images.
-- PDF tool exposure as first-class functionality instead of CLI/bash only.
-- Login/restart/sleep-wake supervisory reliability and recurring scheduled user-approved tasks.
-- Consent-based transfers across **all** storage boundaries, including encrypted vault and Open WebUI uploads, with plaintext disclosures and audited copies.
+Scheduled tasks use native per-user launchd jobs, not another scheduler daemon. `Schedule AI Task.command` displays the exact prompt/model/schedule and requires an explicit authorization phrase. Supported schedules: daily local time or interval of at least 15 minutes. `Remove Scheduled Task.command` unregisters a job; `Scheduled Task Status.command` and chat's `scheduled_task_status` report actual results.
 
-These improvements must avoid new cloud inference providers and preserve the serial model queue and strict resource modes.
+Unattended tasks are bounded **text inference only** through the existing gateway with `tool_choice=none`. Tool/browsing/file actions require the existing interactive approval workflow and are reported as needing approval. This is not unattended authorization for arbitrary agent work. Tasks do not change modes, wake a sleeping Mac, unlock the vault or bypass approvals. Gaming, a locked configured vault and offline services block execution. Unknown/failed results are not silently retried within the same slot. Concurrent/duplicate runs are prevented with file locks and persistent slot records.
 
-## Tested progress in the second pass (2026-10-09)
+Task definitions are local plaintext, disclosed by the configuration UI. Results go to the configured vault or, without a vault, the local scheduled-output directory. Protected results never fall back to plaintext when the vault locks.
 
-- Linux GitHub Actions smoke/protocol regression suites now execute on pull requests. New file-transfer tests exercise browser/project and a mock-mounted vault, including create-only output and refusal to overwrite existing files.
-- **Actual macOS GitHub runner:** an embedded-text PDF and a raster-only scanned PDF were generated and extracted using the Apple PDFKit and Vision OCR implementation; assertions passed. This is real macOS execution on a runner, **not** validation on the user's Mac hardware.
-- First-class Work Agent tools `projectpdf_read_pdf` and `projectfiles_transfer_file` use stdio MCP; the former is a bounded read tool and the latter requests native approval before moving any file.
-- The login LaunchAgent now supervises the existing Python runtime directly rather than opening a Terminal app, and uses a throttled crash-restart policy. It does not install a new inference backend.
-- Vision integration tests exercise OpenAI image message parts through the gateway to the mocked Ollama API and reject external image URL fetching. Actual Qwen3.5 image recognition on the user's Mac and Open WebUI's current attachment representation are still outstanding.
-- **Unfinished:** integrated chat file uploads to Work Agent project files; scheduled autonomous jobs with tested permissions; sleep/wake and real-GPU/VRAM performance; UI permission denial and actual Mac installation tests.
+## Verification and rollout
 
+Run the updated installer from this branch on the Mac to deploy the adapters, helper commands and dependency patches. Existing installation files do not update merely because this PR changes. Start LOCAL AI in Normal or Max and start the Work Agent when testing connected document workflows.
+
+`Check Required Capabilities.command` uploads randomized synthetic visual and raster-PDF fixtures through the real WebUI API and checks actual model answers. It does not use a mocked inference backend, change modes, unlock a vault or auto-approve agent actions. It writes `required-capabilities-acceptance.json`. Unperformed physical/UI journeys remain pending and keep the overall project incomplete.
+
+Automated regression coverage includes real gateway HTTP authentication/handoff, owned-upload normalization/staging, real stdio MCP initialization/tool discovery, page continuation, vision capability rejection, Gaming restrictions, protected scheduled-output failure, duplicate scheduled execution, source boundaries and the pinned WebUI resolver/loader patch.
+
+CI runs complete Python installer/gateway suites. The macOS job executes PDFKit/Vision against text, raster-only, mixed-content, multipage, corrupt and password-locked PDFs, including the chat inlet path. macOS runner evidence is not owner-hardware acceptance.
+
+The following checks still require the running owner installation and must never be marked passed from mocks or source inspection:
+
+- Ordinary UI image and scanned-PDF uploads with accurate actual model responses.
+- OpenCode tool selection, live MCP connections and real approval/denial behavior.
+- Real Playwright download to PDF/OCR to AIOffice XLSX to live Cryptomator output.
+- Cold login, crash, duplicate starts, Docker/VPN failure, sleep/wake and safe shutdown.
+- Actual launchd scheduled execution and failures surfaced to the user.
+- Target memory use, model unload and VPN-drop behavior.
+
+All four original acceptance journeys must succeed before claiming end-to-end completion or merging as finished.

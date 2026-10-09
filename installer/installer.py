@@ -39,6 +39,7 @@ GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_work
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
               'office_setup.py', 'office_mcp.py', 'office_check.py', 'browser_agent.py', 'browser_setup.py',
                'pdf_reader.py', 'pdf_mcp.py', 'transfer_mcp.py', 'file_transfer.py', 'vault_transfer.py', 'login_startup.py',
+               'vision_mcp.py', 'chat_attachments.py', 'webui_attachments_filter.py', 'attachment_setup.py', 'file_workflows.py', 'scheduled_tasks.py', 'service_lifecycle.py', 'webui_local_images.py', 'required_tools_setup.py', 'native_pdf_loader.py', 'capability_acceptance.py',
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
@@ -256,6 +257,9 @@ def install_environments(root, uv, state):
     if webui_missing or not completed(state, "webui-dependencies"):
         run([uv, "pip", "install", "--python", webui / ".venv/bin/python", f"open-webui=={WEBUI_RELEASE}"])
         checkpoint(state, "webui-dependencies")
+    from webui_local_images import harden, harden_pdf
+    harden(root)
+    harden_pdf(root)
     config_path = control / "config.json"
     if not config_path.exists():
         config = {"comfy_dir": str(root / "ComfyUI"), "text_model": "qwen3:14b",
@@ -445,11 +449,24 @@ def make_launcher(root):
         helper.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
                           "\nexec .venv/bin/python " + module + " \"$@\"\n")
         helper.chmod(0o755)
+    helper = root / 'Stop Local AI.command'
+    helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
+                      '\nexec .venv/bin/python service_lifecycle.py --root ' + shlex.quote(str(root)) + '\n')
+    helper.chmod(0o755)
     for label, argument in (("Enable Login Startup", ""), ("Disable Login Startup", " --disable")):
         helper = root / (label + ".command")
         helper.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
                           "\nexec .venv/bin/python login_startup.py --root " + shlex.quote(str(root)) + argument + "\n")
         helper.chmod(0o755)
+    for label, argument in (('Schedule AI Task', '--configure'), ('Scheduled Task Status', '--status'), ('Remove Scheduled Task', '--remove')):
+        helper = root / (label + '.command')
+        helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
+                          '\nexec .venv/bin/python scheduled_tasks.py --root ' + shlex.quote(str(root)) + ' ' + argument + '\n')
+        helper.chmod(0o755)
+    helper = root / 'Check Required Capabilities.command'
+    helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
+                      '\nexec .venv/bin/python capability_acceptance.py --root ' + shlex.quote(str(root)) + '\n')
+    helper.chmod(0o755)
     for label, argument in (("Enable Remote Access", ""), ("Disable Remote Access", " --disable")):
         remote_command = root / (label + ".command")
         remote_command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
@@ -569,4 +586,5 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
 

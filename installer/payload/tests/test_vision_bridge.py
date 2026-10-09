@@ -37,6 +37,8 @@ class VisionGatewayTests(unittest.TestCase):
                 seen.append((route, data))
                 if route == "/api/ps":
                     return {"models": []}
+                if route == "/api/show":
+                    return {"capabilities": ["completion", "vision"]}
                 if route == "/api/chat":
                     return {"message": {"role": "assistant", "content": "Image received"}}
                 return {}
@@ -69,3 +71,4 @@ class VisionGatewayTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

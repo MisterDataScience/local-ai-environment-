@@ -8,22 +8,25 @@ import json
 from pathlib import Path
 import sys
 
-from file_transfer import transfer
+from file_transfer import transfer_local, audit
 from vault_transfer import transfer_vault
 
 TOOLS = [{"name": "transfer_file",
           "description": ("Copy a file into/out of the active project from the Playwright "
-                          "browser download directory or manually unlocked encrypted vault. "
+                          "browser downloads, chat uploads, generated media or manually unlocked encrypted vault. "
                           "Requires native user approval. Vault import creates plaintext "
                           "data in the project. Refuses overwrites and traversal."),
           "inputSchema": {
               "type": "object",
               "properties": {
                   "direction": {"type": "string", "enum": [
-                      "browser-import", "browser-export", "vault-import", "vault-export"]},
+                      "browser-import", "browser-export", "vault-import", "vault-export", "chat-import", "media-import"]},
                   "path": {"type": "string", "minLength": 1,
                            "description": "Relative path inside source root. Vault import starts with Inbox/, Projects/, Outputs/ or Archive/."}},
               "required": ["direction", "path"], "additionalProperties": False}}]
+TOOLS.append({'name': 'list_files', 'description': 'List bounded file references in browser downloads, chat attachments, generated media or this active project.',
+              'inputSchema': {'type': 'object', 'properties': {'source': {'type': 'string', 'enum': ['browser', 'chat', 'media', 'project']}},
+                              'required': ['source'], 'additionalProperties': False}})
 
 
 def dispatch(message, root, project):
@@ -40,6 +43,14 @@ def dispatch(message, root, project):
     elif method == "tools/call":
         params = message.get("params", {})
         arguments = params.get("arguments", {}) if isinstance(params, dict) else {}
+        if isinstance(params, dict) and params.get('name') == 'list_files':
+            try:
+                from file_workflows import execute
+                output = execute(root, {}, 'list_workflow_files', arguments)
+                result = {'content': [{'type': 'text', 'text': json.dumps(output)}]}
+            except (ValueError, RuntimeError, OSError) as error:
+                result = {'isError': True, 'content': [{'type': 'text', 'text': str(error)[:600]}]}
+            return {'jsonrpc': '2.0', 'id': rid, 'result': result}
         if (not isinstance(params, dict) or params.get("name") != "transfer_file"
                 or not isinstance(arguments, dict) or set(arguments) != {"path", "direction"}):
             return _error(rid, -32602, "Invalid file transfer request")
@@ -47,9 +58,8 @@ def dispatch(message, root, project):
         if not isinstance(direction, str) or not isinstance(path, str) or not 0 < len(path) <= 2048:
             return _error(rid, -32602, "Invalid transfer parameters")
         try:
-            if direction in {"browser-import", "browser-export"}:
-                output = transfer(root, project.name, path,
-                                  direction=direction.removeprefix("browser-"))
+            if direction in {"browser-import", "browser-export", "chat-import", "media-import"}:
+                output = transfer_local(root, project.name, path, direction)
             elif direction in {"vault-import", "vault-export"}:
                 config = json.loads((root / "control/config.json").read_text())
                 output = transfer_vault(config, root, project.name, path, direction)
@@ -92,3 +102,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

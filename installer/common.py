@@ -104,6 +104,8 @@ def webui_environment(root, configuration):
         "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "true",
         "CUDA_VISIBLE_DEVICES": "", "RAG_EMBEDDING_MODEL_DEVICE": "cpu",
         "WHISPER_MODEL_DEVICE": "cpu",
+        "LOCAL_AI_ROOT": str(root), "ENABLE_PLUGINS": "True",
+        "PDF_EXTRACT_IMAGES": "False",
     })
     # Server-side OpenAPI connection: the browser never calls Mac loopback itself.
     if configuration.get("web", {}).get("enabled"):
@@ -113,6 +115,11 @@ def webui_environment(root, configuration):
             "key": configuration["api_key"], "config": {"enable": True},
             "info": {"id": "local-ai-vpn", "name": "Local AI VPN retrieval", "description": "VPN search and page reading"}}])
     connections = json.loads(env.get('TOOL_SERVER_CONNECTIONS', '[]'))
+    connections.append({'type': 'openapi', 'url': 'http://127.0.0.1:8001',
+        'spec_type': 'url', 'spec': '', 'path': 'files/openapi.json',
+        'auth_type': 'bearer', 'key': configuration['api_key'], 'config': {'enable': True},
+        'info': {'id': 'local-ai-files', 'name': 'Local AI file workflows',
+                 'description': 'Local PDF/OCR, chat uploads and approved active-project transfers'}})
     if configuration.get('vault', {}).get('enabled'):
         connections.append({'type': 'openapi', 'url': 'http://127.0.0.1:8001',
             'spec_type': 'url', 'spec': '', 'path': 'workspace/openapi.json',
@@ -134,4 +141,5 @@ def webui_environment(root, configuration):
 
 def ollama_binary(root):
     return root / "tools/Ollama.app/Contents/Resources/ollama"
+
 

@@ -19,11 +19,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install --disable-pip-version-check "Pillow>=11,<13" "requests>=2.32,<3"
+      - run: python -m pip install --disable-pip-version-check "Pillow>=11,<13" "requests>=2.32,<3" imageio-ffmpeg==0.6.0
+      - run: python -m pip install --disable-pip-version-check --no-deps open-webui==0.11.1
       - run: python -m compileall -q installer
-      - run: python -m unittest discover -s installer/tests -p "test_required_features.py" -v
-      - run: python -m unittest discover -s installer/payload/tests -p "test_context_protocol.py" -v
-      - run: python -m unittest discover -s installer/payload/tests -p "test_vision_bridge.py" -v
+      - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -v
+      - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/payload/tests -v
 
 
   apple-native-pdf:
@@ -35,6 +35,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m pip install --disable-pip-version-check reportlab Pillow
+      - name: Native multipage, mixed OCR, chat attachment and encrypted PDF integration
+        run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -p test_pdf_native.py -v
       - name: Create known local text PDF and extract with PDFKit
         run: |
           mkdir -p "$RUNNER_TEMP/pdfproject/Inbox"
@@ -83,3 +85,4 @@ jobs:
           assert "SCANNED" in text and "SAMPLE" in text, result
           print("Apple Vision OCR recognized the raster-only PDF.")
           PY
+

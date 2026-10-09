@@ -9,7 +9,7 @@ from io import BytesIO
 import re
 
 DATA_URL = re.compile(r"^data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$")
-MAX_IMAGE_TEXT = 1_500_000
+MAX_IMAGE_TEXT = 16_000_000
 MAX_IMAGE_PIXELS = 16_000_000
 MAX_EDGE = 1536
 MAX_IMAGES_PER_MESSAGE = 2
@@ -26,8 +26,8 @@ def normalize_data_image(url):
         data = base64.b64decode(matched[2], validate=True)
     except (ValueError, binascii.Error):
         raise ValueError("Invalid base64-encoded image") from None
-    if not 0 < len(data) <= 1_000_000:
-        raise ValueError("Image exceeds 1 MB decoded")
+    if not 0 < len(data) <= 12_000_000:
+        raise ValueError("Image exceeds 12 MB decoded")
     try:
         from PIL import Image, ImageOps, UnidentifiedImageError
         with Image.open(BytesIO(data)) as opened:
@@ -66,7 +66,7 @@ def parts_to_message(content, role):
             raise ValueError("Invalid content part")
         if part.get("type") == "text" and isinstance(part.get("text"), str):
             parts.append(part["text"])
-        elif part.get("type") == "image_url" and role == "user":
+        elif part.get("type") == "image_url" and role in {"user", "tool"}:
             raw = part.get("image_url")
             if not isinstance(raw, dict) or set(raw) - {"url", "detail"}:
                 raise ValueError("Invalid image_url structure")
@@ -80,3 +80,4 @@ def parts_to_message(content, role):
     if not parts and not images:
         raise ValueError("Empty content parts")
     return "\n".join(parts), images
+

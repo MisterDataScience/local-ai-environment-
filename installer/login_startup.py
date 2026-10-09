@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import plistlib
 import subprocess
+import tempfile
 
 LABEL = "local.local-ai.start-at-login"
 
@@ -19,7 +20,7 @@ def launch_agent(root):
     supervisor = root / "control/runtime.py"
     if not python.is_file() or not supervisor.is_file():
         raise RuntimeError("LOCAL AI installation is incomplete; rerun installer")
-    return {"Label": LABEL, "ProgramArguments": [str(python), str(supervisor)],
+    return {"Label": LABEL, "ProgramArguments": [str(python), str(supervisor), '--background'],
             "WorkingDirectory": str(root / "control"),
             "RunAtLoad": True, "KeepAlive": {"SuccessfulExit": False}, "ThrottleInterval": 60,
             "StandardOutPath": str(root / "logs/login-start.log"),
@@ -36,16 +37,29 @@ def configure(root, enabled):
         raise RuntimeError("LaunchAgent symlink refused")
     if enabled:
         payload = launch_agent(root)
+        changed = False
         if path.exists():
-            if plistlib.loads(path.read_bytes()) != payload:
-                raise RuntimeError("Existing LaunchAgent differs; do not overwrite")
-        else:
+            existing = plistlib.loads(path.read_bytes())
+            previous = dict(payload, ProgramArguments=payload['ProgramArguments'][:-1])
+            if existing not in (payload, previous):
+                raise RuntimeError('Existing LaunchAgent differs from this installation; do not overwrite')
+            changed = existing != payload
+        if not path.exists() or changed:
             data = plistlib.dumps(payload, sort_keys=True)
-            temporary = path.with_suffix(".tmp")
-            with temporary.open("xb") as file:
-                file.write(data)
-            temporary.chmod(0o600)
-            temporary.replace(path)
+            fd, name = tempfile.mkstemp(prefix='.local-ai-login-', dir=agent_dir)
+            temporary = Path(name)
+            try:
+                with os.fdopen(fd, 'wb') as file:
+                    file.write(data)
+                temporary.replace(path)
+            finally:
+                temporary.unlink(missing_ok=True)
+        loaded = subprocess.run(['/bin/launchctl', 'print', f'gui/{uid}/{LABEL}'], capture_output=True, text=True)
+        if loaded.returncode == 0:
+            if not changed:
+                print('Login-time starter is already registered.')
+                return
+            subprocess.run(['/bin/launchctl', 'bootout', f'gui/{uid}/{LABEL}'], capture_output=True, check=True)
         result = subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{uid}", str(path)],
                                 capture_output=True, text=True)
         if result.returncode and "already bootstrapped" not in result.stderr.lower() and "service already loaded" not in result.stderr.lower():
@@ -73,3 +87,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

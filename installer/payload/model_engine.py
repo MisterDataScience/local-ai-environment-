@@ -135,12 +135,13 @@ class Engine:
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
         if any(m.get("images") for m in messages):
-            from model_team import PROFILES
             model = self.text_models[body["model"]]["model"].lower()
             if not ("qwen3.5" in model or "gemma4" in model):
                 raise ValueError("Selected model does not have verified vision support; select Qwen3.5.")
             if route != "text":
                 raise ValueError("Image input is supported only for text questions.")
+            if self.mode == 'gaming':
+                raise ValueError("Visual inference requires Normal or Max mode.")
         if route == 'speak':
             body['_speech_request'] = speech.request(self.config, self.root, prompt, body.get('speech'))
         elif 'speech' in body:
@@ -397,6 +398,10 @@ class Engine:
                 self.unload_ollama()
             self.check_policy(body, route)
             self.state = "generating-text"
+            if any(m.get('images') for m in messages):
+                capabilities = api(self.ollama, '/api/show', {'model': preset['model']}).get('capabilities', [])
+                if 'vision' not in capabilities:
+                    raise ValueError('The installed model has no vision capability. Use an installed Qwen3.5 vision artifact.')
             options = {"num_ctx": preset["num_ctx"], "num_predict": output_limit(body, self.mode, preset)}
             if isinstance(body.get("temperature"), (int, float)):
                 options["temperature"] = body["temperature"]
@@ -439,4 +444,5 @@ class Engine:
         finally:
             self.state = "idle"
             LOG.info("Finished %s request", route)
+
 
