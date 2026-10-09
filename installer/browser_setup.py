@@ -91,7 +91,6 @@ def configure(root, *, disable=False):
         old_compose = (web / "compose.json").read_text()
         old_images = lock_path.read_text()
         old_config = config_path.read_text()
-        old_enabled = bool(config.get("browser", {}).get("enabled"))
         if not disable and not images.get("browser"):
             images["browser"] = image_digest(docker_command())
         if not disable:

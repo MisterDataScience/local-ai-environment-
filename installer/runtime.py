@@ -7,12 +7,14 @@ from pathlib import Path
 import signal
 import subprocess
 import time
+import argparse
+import threading
 
 from common import PORTS, http, launch, ollama_binary, ollama_environment, port_open, stop_process, wait_ready, webui_environment
 from context_settings import ContextSettings
 
 
-def main():
+def main(background=False):
     root = Path(__file__).resolve().parent.parent
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     lock = (root / ".runtime.lock").open("w")
@@ -37,6 +39,9 @@ def main():
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGHUP, interrupted)
     try:
+        from service_lifecycle import recover, record, publish_runtime
+        recover(root)
+        publish_runtime(root)
         for service, port in PORTS.items():
             if port_open(port):
                 raise RuntimeError(f"{service} port {port} is already occupied. No existing process was stopped.")
@@ -56,14 +61,20 @@ def main():
                 logging.warning('Encrypted backup unavailable. Unlock the vault and use Back Up AI Workspace after stopping Local AI.')
         ollama = launch([ollama_binary(root), "serve"], root, root / "logs/ollama.log", ollama_environment(root))
         processes.append(("ollama", ollama))
+        record(root, processes)
         wait_ready("http://127.0.0.1:11435/api/version", ollama)
         gateway = launch([root / "control/.venv/bin/python", root / "control/gateway.py"],
                          root / "control", root / "logs/gateway.log", os.environ.copy())
         processes.append(("gateway", gateway))
+        record(root, processes)
         wait_ready("http://127.0.0.1:8001/health", gateway)
+        from webui_local_images import harden, harden_pdf
+        harden(root)
+        harden_pdf(root)
         webui = launch([root / "webui/.venv/bin/open-webui", "serve", "--host", "127.0.0.1", "--port", "8081"],
                        root / "webui", root / "logs/webui.log", webui_environment(root, config))
         processes.append(("webui", webui))
+        record(root, processes)
         wait_ready("http://127.0.0.1:8081/health", webui, timeout=600)
         # Verify the gateway model list is available before presenting the chat UI.
         models = http("http://127.0.0.1:8001/v1/models", key=config["api_key"])
@@ -81,7 +92,10 @@ def main():
                 from remote_access import atomic_json
                 atomic_json(root / "remote-acceptance-report.json",
                             {"status": "failed", "error": str(error), "other_device_browser_test": "pending"})
-        subprocess.run(["/usr/bin/open", "-a", "Safari", "http://127.0.0.1:8081"], check=True)
+        if not background:
+            subprocess.run(["/usr/bin/open", "-a", "Safari", "http://127.0.0.1:8081"], check=True)
+        from attachment_setup import configure as configure_attachments
+        configure_attachments(root)
         print("\nLocal AI is running at http://127.0.0.1:8081")
         if remote.get("enabled"):
             print("Private remote chat:", remote["ui_url"])
@@ -102,11 +116,40 @@ def main():
             print("Browser: Playwright MCP over Proton VPN. Enable its integration in chat.")
         if config.get("web", {}).get("enabled"):
             print("Web: /search QUERY or /read https://example.org QUESTION. VPN required; no fallback.")
-        print("Leave this Terminal open. Press Control+C here to shut down.")
+        print('Background operation active.' if background else 'Press Control+C here to shut down.')
+        health_failures = 0
+        last_tick = time.monotonic()
+        retry_web = 0
+        web_thread = None
+        def recover_web():
+            try:
+                from web_access import status, start
+                if status(root).get('status') != 'ready':
+                    start(root)
+            except Exception:
+                logging.warning('VPN service unavailable; web access remains blocked.')
         while True:
             for name, process in processes:
                 if process.poll() is not None:
                     raise RuntimeError(f"{name} exited. Read {root / 'logs' / (name + '.log')}")
+            now = time.monotonic()
+            # After sleep, allow readiness to settle before restarting anything.
+            if now - last_tick > 30:
+                health_failures = 0
+                logging.info('Resuming service readiness checks after suspension.')
+            last_tick = now
+            if config.get('web', {}).get('enabled') and now >= retry_web and (web_thread is None or not web_thread.is_alive()):
+                web_thread = threading.Thread(target=recover_web, daemon=True)
+                web_thread.start()
+                retry_web = now + 60
+            try:
+                http('http://127.0.0.1:11435/api/version', timeout=3)
+                http('http://127.0.0.1:8081/health', timeout=3)
+                health_failures = 0
+            except Exception:
+                health_failures += 1
+                if health_failures >= 10:
+                    raise RuntimeError('Local service remained unresponsive; background LaunchAgent will restart after cleanup.')
             try:
                 policy = http('http://127.0.0.1:8001/control/context', key=config['api_key'], timeout=2)
                 if context_settings.sync(policy):
@@ -135,6 +178,9 @@ def main():
         discord.stop()
         for name, process in reversed(processes):
             stop_process(process, timeout=4200 if name == "gateway" else 90)
+        if processes:
+            (root / 'control/runtime-services.json').unlink(missing_ok=True)
+        (root / 'control/runtime-owner.json').unlink(missing_ok=True)
         if config.get('vault', {}).get('enabled'):
             from vault_backup import snapshot
             try:
@@ -148,5 +194,8 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--background', action='store_true')
+    raise SystemExit(main(parser.parse_args().background))
+
 

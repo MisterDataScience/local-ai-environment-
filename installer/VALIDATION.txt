@@ -1,3 +1,16 @@
+Integrated release 2026-10-09-integrated-1:
+162 installer Python checks: 158 passed, four Apple-only tests skipped on Linux.
+104 payload Python tests passed. 74 JavaScript checks passed. The pinned WebUI
+0.11.1 compatibility check passed. Release builder integrity/staleness and
+reproducibility checks passed. See docs/RELEASE-VALIDATION.md for exact scope.
+Both feature updates are combined. Scheduled requests now prohibit effectful
+command/tool routes, preserve length cutoffs as incomplete, and malformed JSON
+gets structured HTTP errors. Scoped mode disables the newly integrated MCPs.
+The ZIP is rebuilt and verified against source. Owner-Mac acceptance is NOT RUN.
+The optional voice browser UI test is NOT RUN because Chromium is unavailable.
+
+Earlier feature validation below is historical, not certification of this release.
+
 Office update 2026-10-09 UTC: 106 installer tests and 32 affected JavaScript
 policy tests pass. Real AIOffice 1.27.2 MCP acceptance passes for DOCX/XLSX/PPTX,
 directly and through the compact relay: creation, reading, editing, formula

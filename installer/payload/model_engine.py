@@ -93,6 +93,8 @@ class Engine:
                 raise RuntimeError('Mode switch is not ready. Check AI Modes before submitting another request.')
             if not resource_modes.allowed(self.mode, body['model'], self.text_models[body['model']], route):
                 raise ValueError('Blocked by ' + self.mode + ' mode. Select an eligible model or change AI Modes on the Mac.')
+            if body.get('_vision') and self.mode == 'gaming':
+                raise ValueError('Visual inference requires Normal or Max mode.')
 
     def change_mode(self, mode):
         if mode not in resource_modes.MODES:
@@ -126,6 +128,10 @@ class Engine:
                 self.state = 'idle'
 
     def submit(self, body, stream=None):
+        if not isinstance(body, dict):
+            raise ValueError('The request body must be a JSON object.')
+        if type(body.get('inference_only', False)) is not bool:
+            raise ValueError('inference_only must be a boolean.')
         # Internal callbacks can only originate in the HTTP handler.
         body.pop('_stream', None)
         if stream is not None:
@@ -134,6 +140,17 @@ class Engine:
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
+        if body.get('inference_only') and (route != 'text' or body.get('tools')):
+            raise ValueError('This request permits text inference only; commands and tools are prohibited.')
+        body['_vision'] = any(m.get('images') for m in messages)
+        if any(m.get("images") for m in messages):
+            model = self.text_models[body["model"]]["model"].lower()
+            if not ("qwen3.5" in model or "gemma4" in model):
+                raise ValueError("Selected model does not have verified vision support; select Qwen3.5.")
+            if route != "text":
+                raise ValueError("Image input is supported only for text questions.")
+            if self.mode == 'gaming':
+                raise ValueError("Visual inference requires Normal or Max mode.")
         if route == 'speak':
             body['_speech_request'] = speech.request(self.config, self.root, prompt, body.get('speech'))
         elif 'speech' in body:
@@ -390,6 +407,10 @@ class Engine:
                 self.unload_ollama()
             self.check_policy(body, route)
             self.state = "generating-text"
+            if any(m.get('images') for m in messages):
+                capabilities = api(self.ollama, '/api/show', {'model': preset['model']}).get('capabilities', [])
+                if 'vision' not in capabilities:
+                    raise ValueError('The installed model has no vision capability. Use an installed Qwen3.5 vision artifact.')
             options = {"num_ctx": preset["num_ctx"], "num_predict": output_limit(body, self.mode, preset)}
             if isinstance(body.get("temperature"), (int, float)):
                 options["temperature"] = body["temperature"]
@@ -432,4 +453,5 @@ class Engine:
         finally:
             self.state = "idle"
             LOG.info("Finished %s request", route)
+
 

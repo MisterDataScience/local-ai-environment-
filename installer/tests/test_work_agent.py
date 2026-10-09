@@ -111,8 +111,9 @@ class WorkAgentTests(unittest.TestCase):
                          {'data': [{'id': 'local-ai'}]},
                          {'mode': 'gaming', 'transitioning': False, 'error': None}]
             process = Mock()
+            process.pid = os.getpid()
             process.poll.return_value = None
-            with patch.object(sys, 'argv', ['work_agent', '--root', d]), patch('builtins.input', return_value=''), patch('builtins.print'), patch.object(w, 'http', side_effect=responses), patch.object(w, 'port_open', return_value=False), patch.object(w.subprocess, 'run'), patch.object(w.subprocess, 'Popen', return_value=process) as launch, patch.object(w, 'stop_process') as stop, patch.object(w.time, 'sleep'):
+            with patch.object(sys, 'argv', ['work_agent', '--root', d]), patch('required_tools_setup.verify'), patch('builtins.input', return_value=''), patch('builtins.print'), patch.object(w, 'http', side_effect=responses), patch.object(w, 'port_open', return_value=False), patch.object(w.subprocess, 'run'), patch.object(w.subprocess, 'Popen', return_value=process) as launch, patch.object(w, 'stop_process') as stop, patch.object(w.time, 'sleep'):
                 w.main()
                 self.assertEqual(launch.call_args.args[0][1:], ['web', '--hostname', '127.0.0.1', '--port', '4096'])
                 self.assertIn('OPENCODE_SERVER_PASSWORD', launch.call_args.kwargs['env'])
@@ -129,4 +130,5 @@ class WorkAgentTests(unittest.TestCase):
             run.assert_not_called()
 
 if __name__ == '__main__': unittest.main()
+
 

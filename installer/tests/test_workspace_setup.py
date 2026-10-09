@@ -46,7 +46,7 @@ class WorkspaceSetupTests(unittest.TestCase):
             self.assertEqual(result['url'], 'https://api.githubcopilot.com/mcp/')
             self.assertNotIn('delete_file', result['headers']['X-MCP-Tools'])
 
-    def test_three_tool_connections_coexist(self):
+    def test_workflow_and_existing_tool_connections_coexist(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             config = {'api_key': 'local-key', 'webui_secret': 'web-key', 'web': {'enabled': True},
@@ -54,8 +54,9 @@ class WorkspaceSetupTests(unittest.TestCase):
             with patch.object(account_tools, 'connection', return_value={'type': 'mcp', 'url': account_tools.URL}):
                 env = common.webui_environment(root, config)
             servers = json.loads(env['TOOL_SERVER_CONNECTIONS'])
-            self.assertEqual(len(servers), 3)
-            self.assertEqual(servers[1]['path'], 'workspace/openapi.json')
+            self.assertEqual(len(servers), 4)
+            self.assertIn('workspace/openapi.json', [s.get('path') for s in servers])
+            self.assertIn('files/openapi.json', [s.get('path') for s in servers])
             self.assertEqual(json.loads(env['DEFAULT_MODEL_PARAMS'])['tool_approval_mode'], 'ask')
 
     def test_existing_cryptomator_is_verified_and_preserved(self):
@@ -73,3 +74,4 @@ class WorkspaceSetupTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

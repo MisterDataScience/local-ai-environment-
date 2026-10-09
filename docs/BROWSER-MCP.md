@@ -4,7 +4,7 @@ This is an **opt-in** addition to the existing SearxNG + reader stack. It uses M
 
 ## Install / activation on the Mac
 
-1. Update your local installer source from this branch and rerun the normal installation so the new helper files are copied into `~/LocalAI-Automated/control`. The project is **not** deployed to the Mac merely by committing GitHub code.
+1. Update your local installer source from main and rerun the normal installation so the new helper files are copied into `~/LocalAI-Automated/control`. The project is **not** deployed to the Mac merely by committing GitHub code.
 2. Stop Local AI, keep Docker Desktop running, and make sure VPN web access is enabled via `Enable Web Access.command`. Proton WireGuard credentials remain local.
 3. Run `~/LocalAI-Automated/Enable Browser.command`. The helper downloads Microsoft's official MCP container, records its immutable digest alongside existing Docker image locks, adds the browser to the VPN Compose configuration, starts the services and verifies a JSON-RPC MCP initialize exchange.
 4. Restart LOCAL AI. Enable **Playwright browser** in the chat's Integrations menu. For the Work Agent, use `Start Work Agent.command`; the tool is included in its MCP connections when both VPN web and browser are enabled.

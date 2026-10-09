@@ -1,0 +1,100 @@
+name: Integrated release checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "installer/**"
+      - "scripts/**"
+      - "docs/**"
+      - "downloads/Mac-Local-AI-Automated-Installer.zip"
+      - ".github/workflows/required-features.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  required-features:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: python -m pip install --disable-pip-version-check "Pillow>=11,<13" "requests>=2.32,<3" imageio-ffmpeg==0.6.0
+      - run: python -m pip install --disable-pip-version-check --no-deps open-webui==0.11.1
+      - run: python -m compileall -q installer
+      - run: python scripts/build_installer.py --check
+      - run: python -m unittest discover -s scripts -p 'test_*.py' -v
+      - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -v
+      - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/payload/tests -v
+      - name: JavaScript policy and workflow checks
+        run: node --test $(find installer/tests -name '*.mjs' ! -name 'test_conversation_browser.mjs')
+
+
+  apple-native-pdf:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --disable-pip-version-check reportlab Pillow
+      - name: Native multipage, mixed OCR, chat attachment and encrypted PDF integration
+        run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -p test_pdf_native.py -v
+      - name: Create known local text PDF and extract with PDFKit
+        run: |
+          mkdir -p "$RUNNER_TEMP/pdfproject/Inbox"
+          PDF_PATH="$RUNNER_TEMP/pdfproject/Inbox/sample.pdf" python - <<'PY'
+          import os
+          from reportlab.pdfgen import canvas
+          c = canvas.Canvas(os.environ["PDF_PATH"])
+          c.drawString(72, 740, "Local AI PDFKit verified text extraction")
+          c.showPage()
+          c.save()
+          PY
+          python installer/pdf_reader.py Inbox/sample.pdf --root "$RUNNER_TEMP/pdfproject" > "$RUNNER_TEMP/extracted.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "extracted.json").read_text())
+          assert result["page_count"] == 1, result
+          assert "PDFKit verified text extraction" in result["pages"][0]["text"], result
+          print("PDFKit extraction verified on macOS runner.")
+          PY
+      - name: Recognize raster-only PDF using Apple Vision OCR
+        run: |
+          PDF_PATH="$RUNNER_TEMP/pdfproject/Inbox/scanned.pdf" python - <<'PY'
+          import io, os
+          from PIL import Image, ImageDraw, ImageFont
+          from reportlab.pdfgen import canvas
+          from reportlab.lib.utils import ImageReader
+          img = Image.new("RGB", (1000, 240), "white")
+          draw = ImageDraw.Draw(img)
+          draw.text((40, 60), "SCANNED OCR SAMPLE 6789", fill="black",
+                    font=ImageFont.load_default(size=62))
+          raw = io.BytesIO()
+          img.save(raw, format="PNG")
+          raw.seek(0)
+          c = canvas.Canvas(os.environ["PDF_PATH"])
+          c.drawImage(ImageReader(raw), 36, 510, width=540, height=130)
+          c.showPage()
+          c.save()
+          PY
+          python installer/pdf_reader.py Inbox/scanned.pdf --root "$RUNNER_TEMP/pdfproject" --ocr > "$RUNNER_TEMP/scanned.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "scanned.json").read_text())
+          text = result["pages"][0]["text"].upper()
+          assert "SCANNED" in text and "SAMPLE" in text, result
+          print("Apple Vision OCR recognized the raster-only PDF.")
+          PY
+

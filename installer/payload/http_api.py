@@ -34,6 +34,9 @@ def completion_delta(message):
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(15)
     def log_message(self, message, *args):
         LOG.info(message, *args)
 
@@ -148,12 +151,27 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(200, vault_tools.specification())
         if path == "/tools/openapi.json":
             return self.json_response(200, specification())
+        if path == '/files/openapi.json':
+            from file_workflows import specification as file_specification
+            return self.json_response(200, file_specification())
         self.json_response(404, {"error": "Not found"})
 
     def do_POST(self):
         if not self.authorised():
             return
         path = urlparse(self.path).path
+        if path.startswith('/files/'):
+            try:
+                from file_workflows import execute
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 8192:
+                    self.close_connection = True
+                    raise ValueError('Invalid workflow request size')
+                body = json.loads(self.rfile.read(length))
+                return self.json_response(200, execute(self.server.engine.root.parent,
+                    self.server.engine.config, path.rsplit('/', 1)[1], body))
+            except (ValueError, RuntimeError, OSError) as error:
+                return self.json_response(409, {'error': str(error)[:400]})
         if path == '/conversation/audio':
             sent = False
             try:
@@ -162,6 +180,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.close_connection = True
                     raise ValueError('Invalid audio request size')
                 data = json.loads(self.rfile.read(length))
+                if not isinstance(data, dict):
+                    raise ValueError('The request body must be a JSON object.')
                 action = data.get('action')
                 if action == 'start':
                     return self.json_response(200, self.server.engine.start_conversation())
@@ -217,6 +237,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 if not 0 < length <= 8192:
+                    self.close_connection = True
                     raise ValueError("Invalid retrieval request size")
                 body = json.loads(self.rfile.read(length))
                 return self.json_response(200, retrieve_tool(self.server.engine.config, path.rsplit("/", 1)[1], body))
@@ -226,13 +247,18 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(404, {"error": "Not found"})
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 2_000_000:
-                raise ValueError("Request must be between 1 byte and 2 MB.")
+            if not 0 < length <= 7_000_000:
+                self.close_connection = True
+                raise ValueError("Request must be between 1 byte and 7 MB.")
             body = json.loads(self.rfile.read(length))
+            if not isinstance(body, dict):
+                raise ValueError('The request body must be a JSON object.')
             body.pop('_streamed', None)
             stream = Stream() if body.get('stream') else None
             future = self.server.engine.submit(body, stream=stream) if stream else self.server.engine.submit(body)
-        except (ValueError, RuntimeError) as error:
+        except (ValueError, RuntimeError, TimeoutError) as error:
+            if isinstance(error, TimeoutError):
+                self.close_connection = True
             return self.json_response(400, {"error": {"message": str(error)}})
         identifier, created = "chatcmpl-" + uuid.uuid4().hex, int(time.time())
         if not body.get("stream"):
@@ -299,4 +325,5 @@ class MediaHandler(Handler):
     def do_POST(self):
         self.close_connection = True
         return self.json_response(404, {"error": "Not found"})
+
 
