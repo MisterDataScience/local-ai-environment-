@@ -44,8 +44,10 @@ def configure(root, enabled):
                 file.write(data)
             temporary.chmod(0o600)
             temporary.replace(path)
-        subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{uid}", str(path)],
-                       capture_output=True, text=True, check=False)
+        result = subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{uid}", str(path)],
+                                capture_output=True, text=True)
+        if result.returncode and "already bootstrapped" not in result.stderr.lower() and "service already loaded" not in result.stderr.lower():
+            raise RuntimeError("launchctl bootstrap failed: " + result.stderr[:400])
         print("Login-time starter registered. Confirm launch behavior at next macOS login.")
     else:
         if not path.exists():
