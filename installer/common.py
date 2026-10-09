@@ -122,6 +122,11 @@ def webui_environment(root, configuration):
     if configuration.get('account_tools', {}).get('github'):
         from account_tools import connection
         connections.append(connection(root))
+    if configuration.get("web", {}).get("enabled") and configuration.get("browser", {}).get("enabled"):
+        connections.append({"type": "mcp", "url": "http://127.0.0.1:8931/mcp",
+            "auth_type": "none", "config": {"enable": True},
+            "info": {"id": "local-ai-browser", "name": "Playwright browser",
+                     "description": "VPN-only headless Chromium browser. Confirm all writes and form submissions."}})
     if connections:
         env['TOOL_SERVER_CONNECTIONS'] = json.dumps(connections)
     return env
