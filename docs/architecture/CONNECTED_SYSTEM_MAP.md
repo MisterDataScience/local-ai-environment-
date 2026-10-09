@@ -189,8 +189,7 @@ flowchart LR
    DOWN -->|"explicit import"| T["Approved file transfer"]
    T --> Q["Active OpenCode project copy"]
    Q -->|"explicit vault-export"| V["Cryptomator vault"]
-   X["Project file / sensitive context"] -. "No forwarding by generic helper" .-> D
-   linkStyle 12 stroke:#c04747,stroke-width:2px,stroke-dasharray:6 4;
+   X["Project file / sensitive context"] -.->|"NOT forwarded by generic helper"| D
 ```
 
 The **external helper never receives project text via this adapter**; it accepts only eight prewritten public questions and treats its returned text as untrusted. Separate direct VPN browser operations are not equivalent to this restricted adapter.
