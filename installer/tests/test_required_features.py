@@ -15,6 +15,7 @@ from image_inputs import normalize_data_image
 from tool_protocol import messages_for_ollama
 from file_transfer import transfer
 from pdf_reader import read_pdf
+from pdf_mcp import dispatch as pdf_dispatch
 
 
 def image_url():
@@ -62,6 +63,17 @@ class RequiredFeaturesTests(unittest.TestCase):
             (browser / "escape.pdf").symlink_to(dest)
             with self.assertRaises(ValueError):
                 transfer(root, project_id, "escape.pdf")
+
+    def test_pdf_mcp_is_discoverable_and_has_project_scoping(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            response = pdf_dispatch({"id": 1, "method": "initialize"}, root)
+            self.assertEqual(response["result"]["serverInfo"]["name"], "local-ai-project-pdf")
+            listing = pdf_dispatch({"id": 2, "method": "tools/list"}, root)
+            self.assertEqual(listing["result"]["tools"][0]["name"], "read_pdf")
+            denied = pdf_dispatch({"id": 3, "method": "tools/call", "params": {
+                "name": "read_pdf", "arguments": {"path": "../secret.pdf"}}}, root)
+            self.assertEqual(denied["error"]["code"], -32602)
 
     def test_pdf_reader_rejects_files_outside_workspace(self):
         with tempfile.TemporaryDirectory() as directory:
