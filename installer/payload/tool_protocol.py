@@ -3,6 +3,7 @@ import copy
 import json
 import re
 import uuid
+from image_inputs import parts_to_message, MAX_IMAGES_PER_REQUEST
 
 
 def function_call(value):
@@ -47,6 +48,7 @@ def messages_for_ollama(messages):
     if not isinstance(messages, list) or not messages or len(messages) > 500:
         raise ValueError("messages must contain 1–500 entries")
     result, pending, seen = [], {}, set()
+    image_count = 0
     for message in messages:
         if not isinstance(message, dict):
             raise ValueError("Each message must be an object")
@@ -56,11 +58,15 @@ def messages_for_ollama(messages):
         content = message.get("content")
         if content is None and role == "assistant" and message.get("tool_calls"):
             content = ""
-        if isinstance(content, list) and all(isinstance(p, dict) and p.get("type") == "text" and isinstance(p.get("text"), str) for p in content):
-            content = "\n".join(p["text"] for p in content)
+        content, images = parts_to_message(content, role)
+        image_count += len(images)
+        if image_count > MAX_IMAGES_PER_REQUEST:
+            raise ValueError("Too many images in one request")
         if not isinstance(content, str):
             raise ValueError("Only text content is supported; image/audio inputs are not implemented")
         clean = {"role": "system" if role == "developer" else role, "content": content}
+        if images:
+            clean["images"] = images
         if role == "tool":
             identifier = message.get("tool_call_id")
             if not isinstance(identifier, str) or identifier not in pending:
