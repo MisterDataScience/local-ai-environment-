@@ -89,6 +89,13 @@ class CapabilityIntegrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.inlet(record, {'messages': [{'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': 'https://example.org/picture.png'}}]}]})
 
+    def test_changed_upload_does_not_reuse_stale_staged_evidence(self):
+        record = self.record('.txt', b'Original evidence')
+        attachments.stage(self.root, record, self.uploads, 'owner')
+        Path(record.path).write_text('Changed evidence')
+        with self.assertRaises(ValueError):
+            attachments.stage(self.root, record, self.uploads, 'owner')
+
     def test_scanned_chat_pdf_injects_page_evidence_and_keeps_continuation(self):
         record = self.record('.pdf', b'%PDF-fake')
         evidence = {'page_count': 9, 'pages': [{'page': 1, 'text': 'SCANNED SAMPLE', 'method': 'ocr', 'truncated': False}], 'limited': True, 'next_page': 5}
@@ -217,6 +224,8 @@ class CapabilityIntegrationTests(unittest.TestCase):
         engine = Engine(self.config, self.root / 'control')
         self.addCleanup(engine.executor.shutdown)
         engine.mode = 'gaming'
+        with self.assertRaises(ValueError):
+            engine.check_policy({'model': 'local-ai', '_vision': True}, 'text')
         with patch('model_engine.api') as backend:
             with self.assertRaises(ValueError):
                 engine.submit(body)
@@ -237,6 +246,25 @@ class CapabilityIntegrationTests(unittest.TestCase):
         with patch.object(service_lifecycle, 'fingerprint', return_value='unrelated-service'), patch.object(service_lifecycle.os, 'killpg') as kill:
             service_lifecycle.recover(self.root)
             kill.assert_not_called()
+
+    def test_explicit_stop_unloads_only_this_installation_login_job(self):
+        import plistlib
+        import signal
+        from login_startup import LABEL
+        identity = str(self.root / 'control/runtime.py')
+        tasks.atomic_json(self.root / 'control/runtime-owner.json', {'pid': 12345, 'identity': identity})
+        home = self.root / 'test-home'
+        agent = home / 'Library/LaunchAgents' / (LABEL + '.plist')
+        agent.parent.mkdir(parents=True)
+        for owner, should_unload in [(self.root, True), (self.root / 'unrelated-installation', False)]:
+            agent.write_bytes(plistlib.dumps({'Label': LABEL, 'ProgramArguments': [str(owner / 'control/.venv/bin/python'), str(owner / 'control/runtime.py'), '--background']}))
+            with patch.object(service_lifecycle.Path, 'home', return_value=home), patch.object(service_lifecycle, 'fingerprint', return_value=identity), patch.object(service_lifecycle.subprocess, 'run') as launchctl, patch.object(service_lifecycle.os, 'kill') as kill, patch('builtins.print'):
+                service_lifecycle.stop(self.root)
+                self.assertEqual(launchctl.called, should_unload)
+                if should_unload:
+                    self.assertEqual(launchctl.call_args.args[0][:2], ['/bin/launchctl', 'bootout'])
+                kill.assert_called_once_with(12345, signal.SIGTERM)
+            self.assertTrue(agent.exists())
 
     def test_pinned_native_webui_image_fetch_patch_is_verified_and_idempotent(self):
         import importlib.metadata

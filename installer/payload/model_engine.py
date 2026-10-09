@@ -93,6 +93,8 @@ class Engine:
                 raise RuntimeError('Mode switch is not ready. Check AI Modes before submitting another request.')
             if not resource_modes.allowed(self.mode, body['model'], self.text_models[body['model']], route):
                 raise ValueError('Blocked by ' + self.mode + ' mode. Select an eligible model or change AI Modes on the Mac.')
+            if body.get('_vision') and self.mode == 'gaming':
+                raise ValueError('Visual inference requires Normal or Max mode.')
 
     def change_mode(self, mode):
         if mode not in resource_modes.MODES:
@@ -134,6 +136,7 @@ class Engine:
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
+        body['_vision'] = any(m.get('images') for m in messages)
         if any(m.get("images") for m in messages):
             model = self.text_models[body["model"]]["model"].lower()
             if not ("qwen3.5" in model or "gemma4" in model):

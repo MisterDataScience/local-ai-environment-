@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import plistlib
 from scheduled_tasks import atomic_json
 
 
@@ -62,7 +63,21 @@ def stop(root):
     pid = record.get('pid')
     if type(pid) is not int or pid < 1 or str(root) not in record.get('identity', '') or fingerprint(pid) != record['identity']:
         raise RuntimeError('Recorded Local AI supervisor is unavailable; no process stopped')
-    os.kill(pid, signal.SIGTERM)
+    # Unload this installation's login job for the current login session so a
+    # duplicate-start retry cannot bring it back after an explicit stop. The
+    # plist remains registered for the next login.
+    from login_startup import LABEL
+    agent = Path.home() / 'Library/LaunchAgents' / (LABEL + '.plist')
+    if agent.is_file() and not agent.is_symlink():
+        payload = plistlib.loads(agent.read_bytes())
+        expected = [str(root / 'control/.venv/bin/python'), str(root / 'control/runtime.py')]
+        if payload.get('Label') == LABEL and payload.get('ProgramArguments', [])[:2] == expected:
+            subprocess.run(['/bin/launchctl', 'bootout', f'gui/{os.getuid()}/{LABEL}'], capture_output=True)
+    if fingerprint(pid) == record['identity']:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
     print('Graceful shutdown requested. Active work releases its models before exit.')
 
 

@@ -1,5 +1,6 @@
 """Owned WebUI uploads, normalized locally and staged for approved handoffs."""
 import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -52,6 +53,24 @@ def stage(root, record, upload_root, user_id):
             os.close(source_fd)
     if target.is_symlink() or not target.is_file():
         raise ValueError('Unsafe staged attachment')
+    from file_transfer import open_source
+    def digest(fd):
+        result = hashlib.sha256()
+        count = 0
+        while block := os.read(fd, 1_048_576):
+            count += len(block)
+            if count > MAX_BYTES:
+                raise ValueError('Attachment grew beyond the staging budget')
+            result.update(block)
+        return result.digest()
+    source_fd = open_source(uploads, relative)
+    target_fd = open_source(destination_root, target.name)
+    try:
+        if digest(source_fd) != digest(target_fd):
+            raise ValueError('Upload changed after staging; attach a new copy instead of reusing stale evidence')
+    finally:
+        os.close(source_fd)
+        os.close(target_fd)
     return target
 
 
