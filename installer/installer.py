@@ -38,7 +38,7 @@ GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
 GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_worker.py')
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
               'office_setup.py', 'office_mcp.py', 'office_check.py', 'browser_agent.py', 'browser_setup.py',
-               'pdf_reader.py', 'pdf_mcp.py', 'file_transfer.py', 'login_startup.py',
+               'pdf_reader.py', 'pdf_mcp.py', 'file_transfer.py', 'vault_transfer.py', 'login_startup.py',
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
