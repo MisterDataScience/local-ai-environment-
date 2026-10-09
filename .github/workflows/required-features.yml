@@ -23,6 +23,7 @@ jobs:
       - run: python -m compileall -q installer
       - run: python -m unittest discover -s installer/tests -p "test_required_features.py" -v
       - run: python -m unittest discover -s installer/payload/tests -p "test_context_protocol.py" -v
+      - run: python -m unittest discover -s installer/payload/tests -p "test_vision_bridge.py" -v
 
 
   apple-native-pdf:
