@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:xlink="http://www.w3.org/1999/xlink" baseProfile="full" height="3370" version="1.1" viewBox="0 0 5200 3370" width="5200">
+  <defs/>
+  <g id="01-background">
+    <rect fill="#F6F9FF" height="3370" width="5200" x="0" y="0"/>
+    <rect fill="#FFFFFF" height="252" width="5200" x="0" y="0"/>
+    <line stroke="#D9E3F0" stroke-width="3" x1="95" x2="5105" y1="243" y2="243"/>
+    <rect fill="white" height="785" rx="23" ry="23" stroke="#D9E3F0" stroke-width="2" width="5020" x="90" y="294"/>
+    <rect fill="#0877EE" height="783" rx="4" width="9" x="91" y="295"/>
+    <line stroke="#E9EFF8" stroke-width="2" x1="124" x2="5082" y1="366" y2="366"/>
+    <rect fill="white" height="605" rx="23" ry="23" stroke="#D9E3F0" stroke-width="2" width="1810" x="90" y="1125"/>
+    <rect fill="#F07816" height="603" rx="4" width="9" x="91" y="1126"/>
+    <line stroke="#E9EFF8" stroke-width="2" x1="124" x2="1872" y1="1197" y2="1197"/>
+    <rect fill="white" height="605" rx="23" ry="23" stroke="#D9E3F0" stroke-width="2" width="1605" x="1940" y="1125"/>
+    <rect fill="#8441D5" height="603" rx="4" width="9" x="1941" y="1126"/>
+    <line stroke="#E9EFF8" stroke-width="2" x1="1974" x2="3517" y1="1197" y2="1197"/>
+    <rect fill="white" height="605" rx="23" ry="23" stroke="#D9E3F0" stroke-width="2" width="1525" x="3585" y="1125"/>
+    <rect fill="#E93857" height="603" rx="4" width="9" x="3586" y="1126"/>
+    <line stroke="#E9EFF8" stroke-width="2" x1="3619" x2="5082" y1="1197" y2="1197"/>
+    <rect fill="white" height="790" rx="23" ry="23" stroke="#D9E3F0" stroke-width="2" width="3180" x="90" y="1785"/>
+    <rect fill="#0A98A7" height="788" rx="4" width="9" x="91" y="1786"/>
+    <line stroke="#E9EFF8" stroke-width="2" x1="124" x2="3242" y1="1857" y2="1857"/>
+    <rect fill="white" height="790" rx="23" ry="23" stroke="#D9E3F0" stroke-width="2" width="1800" x="3310" y="1785"/>
+    <rect fill="#93502E" height="788" rx="4" width="9" x="3311" y="1786"/>
+    <line stroke="#E9EFF8" stroke-width="2" x1="3344" x2="5082" y1="1857" y2="1857"/>
+    <rect fill="white" height="492" rx="23" ry="23" stroke="#D9E3F0" stroke-width="2" width="5020" x="90" y="2630"/>
+    <rect fill="#EF3B94" height="490" rx="4" width="9" x="91" y="2631"/>
+    <line stroke="#E9EFF8" stroke-width="2" x1="124" x2="5082" y1="2702" y2="2702"/>
+  </g>
+  <g id="02-route-lines">
+    <path d="M310.0,560.0 L669.0,560.0 Q695.0,560.0 721.0,560.0 L1054.0,560.0 Q1080.0,560.0 1106.0,560.0 L1514.0,560.0 Q1540.0,560.0 1558.4,578.4 L1650.0,670.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="28"/>
+    <path d="M310.0,560.0 L669.0,560.0 Q695.0,560.0 721.0,560.0 L1054.0,560.0 Q1080.0,560.0 1106.0,560.0 L1514.0,560.0 Q1540.0,560.0 1558.4,578.4 L1650.0,670.0" fill="none" id="chat-owner-to-webui" opacity="1.0" stroke="#0877EE" stroke-linecap="round" stroke-linejoin="round" stroke-width="18"/>
+    <path d="M310.0,846.0 L669.0,846.0 Q695.0,846.0 721.0,846.0 L1054.0,846.0 Q1080.0,846.0 1106.0,846.0 L1524.0,846.0 Q1550.0,846.0 1568.4,827.6 L1631.6,764.4 Q1650.0,746.0 1668.3,727.5 L1720.0,675.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="28"/>
+    <path d="M310.0,846.0 L669.0,846.0 Q695.0,846.0 721.0,846.0 L1054.0,846.0 Q1080.0,846.0 1106.0,846.0 L1524.0,846.0 Q1550.0,846.0 1568.4,827.6 L1631.6,764.4 Q1650.0,746.0 1668.3,727.5 L1720.0,675.0" fill="none" id="work-agent-to-gateway" opacity="1.0" stroke="#189743" stroke-linecap="round" stroke-linejoin="round" stroke-width="18"/>
+    <path d="M1720.0,675.0 L2094.0,675.0 Q2120.0,675.0 2146.0,675.0 L2540.0,675.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="35"/>
+    <path d="M1720.0,675.0 L2094.0,675.0 Q2120.0,675.0 2146.0,675.0 L2540.0,675.0" fill="none" id="gateway-to-engine-to-ollama" opacity="1.0" stroke="#0D2750" stroke-linecap="round" stroke-linejoin="round" stroke-width="25"/>
+    <path d="M2540.0,675.0 L2714.0,675.0 Q2740.0,675.0 2756.1,654.6 L2833.9,555.4 Q2850.0,535.0 2876.0,535.0 L3200.0,535.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="25"/>
+    <path d="M2540.0,675.0 L2714.0,675.0 Q2740.0,675.0 2756.1,654.6 L2833.9,555.4 Q2850.0,535.0 2876.0,535.0 L3200.0,535.0" fill="none" id="role-coordinator" opacity="1.0" stroke="#189743" stroke-linecap="round" stroke-linejoin="round" stroke-width="15"/>
+    <path d="M2540.0,675.0 L3200.0,675.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="25"/>
+    <path d="M2540.0,675.0 L3200.0,675.0" fill="none" id="role-analyst" opacity="1.0" stroke="#189743" stroke-linecap="round" stroke-linejoin="round" stroke-width="15"/>
+    <path d="M2540.0,675.0 L2714.0,675.0 Q2740.0,675.0 2756.2,695.3 L2833.8,792.7 Q2850.0,813.0 2876.0,813.0 L3200.0,813.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="25"/>
+    <path d="M2540.0,675.0 L2714.0,675.0 Q2740.0,675.0 2756.2,695.3 L2833.8,792.7 Q2850.0,813.0 2876.0,813.0 L3200.0,813.0" fill="none" id="role-coder" opacity="1.0" stroke="#189743" stroke-linecap="round" stroke-linejoin="round" stroke-width="15"/>
+    <path d="M1080.0,560.0 L1080.0,474.0 Q1080.0,448.0 1106.0,448.0 L1280.0,448.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="20"/>
+    <path d="M1080.0,560.0 L1080.0,474.0 Q1080.0,448.0 1106.0,448.0 L1280.0,448.0" fill="none" id="webui-github-mcp" opacity="1.0" stroke="#0877EE" stroke-linecap="round" stroke-linejoin="round" stroke-width="10"/>
+    <path d="M1080.0,560.0 L1154.0,560.0 Q1180.0,560.0 1197.3,540.6 L1212.7,523.4 Q1230.0,504.0 1256.0,504.0 L1425.0,504.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="20"/>
+    <path d="M1080.0,560.0 L1154.0,560.0 Q1180.0,560.0 1197.3,540.6 L1212.7,523.4 Q1230.0,504.0 1256.0,504.0 L1425.0,504.0" fill="none" id="webui-vault-openapi" opacity="1.0" stroke="#0877EE" stroke-linecap="round" stroke-linejoin="round" stroke-width="10"/>
+    <path d="M220.0,1420.0 L499.0,1420.0 Q525.0,1420.0 551.0,1420.0 L809.0,1420.0 Q835.0,1420.0 861.0,1420.0 L1124.0,1420.0 Q1150.0,1420.0 1176.0,1420.0 L1540.0,1420.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="25"/>
+    <path d="M220.0,1420.0 L499.0,1420.0 Q525.0,1420.0 551.0,1420.0 L809.0,1420.0 Q835.0,1420.0 861.0,1420.0 L1124.0,1420.0 Q1150.0,1420.0 1176.0,1420.0 L1540.0,1420.0" fill="none" id="mic-vad-stt" opacity="1.0" stroke="#F07816" stroke-linecap="round" stroke-linejoin="round" stroke-width="15"/>
+    <path d="M220.0,1578.0 L302.0,1578.0 Q328.0,1578.0 345.8,1559.0 L462.6,1434.3 Q476.0,1420.0 495.6,1420.0 L525.0,1420.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="22"/>
+    <path d="M220.0,1578.0 L302.0,1578.0 Q328.0,1578.0 345.8,1559.0 L462.6,1434.3 Q476.0,1420.0 495.6,1420.0 L525.0,1420.0" fill="none" id="discord-source-to-bridge" opacity="1.0" stroke="#F07816" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+    <path d="M1540.0,1420.0 L1764.0,1420.0 Q1790.0,1420.0 1808.4,1401.6 L1831.6,1378.4 Q1850.0,1360.0 1850.0,1334.0 L1850.0,1121.0 Q1850.0,1095.0 1831.6,1076.6 L1738.4,983.4 Q1720.0,965.0 1720.0,939.0 L1720.0,675.0" fill="none" opacity="0.86" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="18"/>
+    <path d="M1540.0,1420.0 L1764.0,1420.0 Q1790.0,1420.0 1808.4,1401.6 L1831.6,1378.4 Q1850.0,1360.0 1850.0,1334.0 L1850.0,1121.0 Q1850.0,1095.0 1831.6,1076.6 L1738.4,983.4 Q1720.0,965.0 1720.0,939.0 L1720.0,675.0" fill="none" id="voice-native-agent-to-gateway" opacity="0.86" stroke="#F07816" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+    <path d="M1540.0,1420.0 L1540.0,1540.0 Q1540.0,1566.0 1514.0,1566.0 L1236.0,1566.0 Q1210.0,1566.0 1184.0,1566.0 L946.0,1566.0 Q920.0,1566.0 894.0,1566.0 L625.0,1566.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="22"/>
+    <path d="M1540.0,1420.0 L1540.0,1540.0 Q1540.0,1566.0 1514.0,1566.0 L1236.0,1566.0 Q1210.0,1566.0 1184.0,1566.0 L946.0,1566.0 Q920.0,1566.0 894.0,1566.0 L625.0,1566.0" fill="none" id="voice-agent-reply-tts" opacity="1.0" stroke="#F07816" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+    <path d="M625.0,1566.0 L551.0,1566.0 Q525.0,1566.0 525.0,1540.0 L525.0,1420.0" fill="none" opacity="0.85" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="18"/>
+    <path d="M625.0,1566.0 L551.0,1566.0 Q525.0,1566.0 525.0,1540.0 L525.0,1420.0" fill="none" id="voice-tts-bridge-playback" opacity="0.85" stroke="#F07816" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+    <path d="M695.0,846.0 L695.0,1024.0 Q695.0,1050.0 721.0,1050.0 L1849.0,1050.0 Q1875.0,1050.0 1893.4,1068.4 L1981.6,1156.6 Q2000.0,1175.0 2010.3,1198.9 L2110.0,1430.0" fill="none" opacity="0.9" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="21"/>
+    <path d="M695.0,846.0 L695.0,1024.0 Q695.0,1050.0 721.0,1050.0 L1849.0,1050.0 Q1875.0,1050.0 1893.4,1068.4 L1981.6,1156.6 Q2000.0,1175.0 2010.3,1198.9 L2110.0,1430.0" fill="none" id="opencode-to-tools" opacity="0.9" stroke="#8441D5" stroke-linecap="round" stroke-linejoin="round" stroke-width="11"/>
+    <path d="M2110.0,1430.0 L2224.0,1430.0 Q2250.0,1430.0 2271.5,1415.4 L2368.5,1349.6 Q2390.0,1335.0 2416.0,1335.0 L2655.0,1335.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="23"/>
+    <path d="M2110.0,1430.0 L2224.0,1430.0 Q2250.0,1430.0 2271.5,1415.4 L2368.5,1349.6 Q2390.0,1335.0 2416.0,1335.0 L2655.0,1335.0" fill="none" id="document-office" opacity="1.0" stroke="#8441D5" stroke-linecap="round" stroke-linejoin="round" stroke-width="13"/>
+    <path d="M2110.0,1430.0 L2655.0,1430.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="23"/>
+    <path d="M2110.0,1430.0 L2655.0,1430.0" fill="none" id="document-pdf" opacity="1.0" stroke="#8441D5" stroke-linecap="round" stroke-linejoin="round" stroke-width="13"/>
+    <path d="M2110.0,1430.0 L2224.0,1430.0 Q2250.0,1430.0 2270.1,1446.5 L2369.9,1528.5 Q2390.0,1545.0 2416.0,1545.0 L2655.0,1545.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="23"/>
+    <path d="M2110.0,1430.0 L2224.0,1430.0 Q2250.0,1430.0 2270.1,1446.5 L2369.9,1528.5 Q2390.0,1545.0 2416.0,1545.0 L2655.0,1545.0" fill="none" id="document-vision" opacity="1.0" stroke="#8441D5" stroke-linecap="round" stroke-linejoin="round" stroke-width="13"/>
+    <path d="M2120.0,675.0 L2120.0,1066.0 Q2120.0,1092.0 2146.0,1092.0 L3489.0,1092.0 Q3515.0,1092.0 3533.4,1110.4 L3609.6,1186.6 Q3628.0,1205.0 3628.0,1231.0 L3628.0,1254.0 Q3628.0,1280.0 3649.4,1294.8 L3830.0,1420.0" fill="none" opacity="0.8" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="20"/>
+    <path d="M2120.0,675.0 L2120.0,1066.0 Q2120.0,1092.0 2146.0,1092.0 L3489.0,1092.0 Q3515.0,1092.0 3533.4,1110.4 L3609.6,1186.6 Q3628.0,1205.0 3628.0,1231.0 L3628.0,1254.0 Q3628.0,1280.0 3649.4,1294.8 L3830.0,1420.0" fill="none" id="engine-to-comfy" opacity="0.8" stroke="#E93857" stroke-linecap="round" stroke-linejoin="round" stroke-width="10"/>
+    <path d="M3830.0,1420.0 L4014.0,1420.0 Q4040.0,1420.0 4060.2,1403.6 L4124.8,1351.4 Q4145.0,1335.0 4171.0,1335.0 L4430.0,1335.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="24"/>
+    <path d="M3830.0,1420.0 L4014.0,1420.0 Q4040.0,1420.0 4060.2,1403.6 L4124.8,1351.4 Q4145.0,1335.0 4171.0,1335.0 L4430.0,1335.0" fill="none" id="comfy-to-sdxl" opacity="1.0" stroke="#E93857" stroke-linecap="round" stroke-linejoin="round" stroke-width="14"/>
+    <path d="M3830.0,1420.0 L4014.0,1420.0 Q4040.0,1420.0 4057.7,1439.0 L4127.3,1514.0 Q4145.0,1533.0 4171.0,1533.0 L4430.0,1533.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="24"/>
+    <path d="M3830.0,1420.0 L4014.0,1420.0 Q4040.0,1420.0 4057.7,1439.0 L4127.3,1514.0 Q4145.0,1533.0 4171.0,1533.0 L4430.0,1533.0" fill="none" id="comfy-to-ltx" opacity="1.0" stroke="#E93857" stroke-linecap="round" stroke-linejoin="round" stroke-width="14"/>
+    <path d="M4430.0,1335.0 L4604.0,1335.0 Q4630.0,1335.0 4651.5,1349.6 L4748.5,1415.4 Q4770.0,1430.0 4796.0,1430.0 L4910.0,1430.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="22"/>
+    <path d="M4430.0,1335.0 L4604.0,1335.0 Q4630.0,1335.0 4651.5,1349.6 L4748.5,1415.4 Q4770.0,1430.0 4796.0,1430.0 L4910.0,1430.0" fill="none" id="image-output" opacity="1.0" stroke="#E93857" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+    <path d="M4430.0,1533.0 L4604.0,1533.0 Q4630.0,1533.0 4650.9,1517.6 L4749.1,1445.4 Q4770.0,1430.0 4796.0,1430.0 L4910.0,1430.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="22"/>
+    <path d="M4430.0,1533.0 L4604.0,1533.0 Q4630.0,1533.0 4650.9,1517.6 L4749.1,1445.4 Q4770.0,1430.0 4796.0,1430.0 L4910.0,1430.0" fill="none" id="video-output" opacity="1.0" stroke="#E93857" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+    <path d="M220.0,2140.0 L634.0,2140.0 Q660.0,2140.0 686.0,2140.0 L1054.0,2140.0 Q1080.0,2140.0 1106.0,2140.0 L1504.0,2140.0 Q1530.0,2140.0 1552.4,2153.2 L1700.0,2240.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="26"/>
+    <path d="M220.0,2140.0 L634.0,2140.0 Q660.0,2140.0 686.0,2140.0 L1054.0,2140.0 Q1080.0,2140.0 1106.0,2140.0 L1504.0,2140.0 Q1530.0,2140.0 1552.4,2153.2 L1700.0,2240.0" fill="none" id="webui-search-api" opacity="1.0" stroke="#0A98A7" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>
+    <path d="M220.0,2410.0 L634.0,2410.0 Q660.0,2410.0 686.0,2410.0 L1054.0,2410.0 Q1080.0,2410.0 1106.0,2410.0 L1504.0,2410.0 Q1530.0,2410.0 1548.4,2391.6 L1700.0,2240.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="26"/>
+    <path d="M220.0,2410.0 L634.0,2410.0 Q660.0,2410.0 686.0,2410.0 L1054.0,2410.0 Q1080.0,2410.0 1106.0,2410.0 L1504.0,2410.0 Q1530.0,2410.0 1548.4,2391.6 L1700.0,2240.0" fill="none" id="browser-interface-mcp" opacity="1.0" stroke="#0A98A7" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>
+    <path d="M2580.0,2410.0 L2954.0,2410.0 Q2980.0,2410.0 2997.7,2391.0 L3132.3,2247.0 Q3150.0,2228.0 3176.0,2228.0 L3465.0,2228.0" fill="none" id="browser-output-to-transfer-source" opacity="0.62" stroke="#0A98A7" stroke-dasharray="18 13" stroke-linecap="round" stroke-linejoin="round" stroke-width="7"/>
+    <path d="M1700.0,2240.0 L1964.0,2240.0 Q1990.0,2240.0 2008.4,2221.6 L2121.6,2108.4 Q2140.0,2090.0 2166.0,2090.0 L2470.0,2090.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="25"/>
+    <path d="M1700.0,2240.0 L1964.0,2240.0 Q1990.0,2240.0 2008.4,2221.6 L2121.6,2108.4 Q2140.0,2090.0 2166.0,2090.0 L2470.0,2090.0" fill="none" id="vpn-to-public" opacity="1.0" stroke="#0A98A7" stroke-linecap="round" stroke-linejoin="round" stroke-width="15"/>
+    <path d="M1080.0,2410.0 L1814.0,2410.0 Q1840.0,2410.0 1866.0,2410.0 L2024.0,2410.0 Q2050.0,2410.0 2076.0,2410.0 L2580.0,2410.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="22"/>
+    <path d="M1080.0,2410.0 L1814.0,2410.0 Q1840.0,2410.0 1866.0,2410.0 L2024.0,2410.0 Q2050.0,2410.0 2076.0,2410.0 L2580.0,2410.0" fill="none" id="vpn-to-browser-output" opacity="1.0" stroke="#0A98A7" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+    <path d="M1700.0,2240.0 L1934.0,2240.0 Q1960.0,2240.0 1976.0,2260.5 L2144.0,2474.5 Q2160.0,2495.0 2186.0,2495.0 L2470.0,2495.0" fill="none" id="vpn-to-deepseek" opacity="1.0" stroke="#EF3B94" stroke-dasharray="18 13" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+    <path d="M3465.0,2060.0 L3624.0,2060.0 Q3650.0,2060.0 3669.8,2076.8 L3850.0,2230.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="21"/>
+    <path d="M3465.0,2060.0 L3624.0,2060.0 Q3650.0,2060.0 3669.8,2076.8 L3850.0,2230.0" fill="none" id="chat-uploads-transfer" opacity="1.0" stroke="#0877EE" stroke-linecap="round" stroke-linejoin="round" stroke-width="11"/>
+    <path d="M3465.0,2228.0 L3850.0,2230.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="21"/>
+    <path d="M3465.0,2228.0 L3850.0,2230.0" fill="none" id="browser-downloads-transfer" opacity="1.0" stroke="#0A98A7" stroke-linecap="round" stroke-linejoin="round" stroke-width="11"/>
+    <path d="M3465.0,2410.0 L3624.0,2410.0 Q3650.0,2410.0 3669.3,2392.6 L3850.0,2230.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="21"/>
+    <path d="M3465.0,2410.0 L3624.0,2410.0 Q3650.0,2410.0 3669.3,2392.6 L3850.0,2230.0" fill="none" id="media-outputs-transfer" opacity="1.0" stroke="#E93857" stroke-linecap="round" stroke-linejoin="round" stroke-width="11"/>
+    <path d="M3850.0,2230.0 L4410.0,2230.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="27"/>
+    <path d="M3850.0,2230.0 L4410.0,2230.0" fill="none" id="approved-transfer-to-project" opacity="1.0" stroke="#93502E" stroke-linecap="round" stroke-linejoin="round" stroke-width="17"/>
+    <path d="M3850.0,2230.0 L3894.9,2454.5 Q3900.0,2480.0 3926.0,2480.0 L4854.0,2480.0 Q4880.0,2480.0 4880.0,2454.0 L4880.0,2230.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="22"/>
+    <path d="M3850.0,2230.0 L3894.9,2454.5 Q3900.0,2480.0 3926.0,2480.0 L4854.0,2480.0 Q4880.0,2480.0 4880.0,2454.0 L4880.0,2230.0" fill="none" id="vault-transfer-export" opacity="1.0" stroke="#93502E" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+    <path d="M4880.0,2230.0 L4880.0,2514.0 Q4880.0,2540.0 4854.0,2540.0 L3876.0,2540.0 Q3850.0,2540.0 3850.0,2514.0 L3850.0,2230.0" fill="none" id="vault-transfer-import" opacity="0.72" stroke="#93502E" stroke-dasharray="18 13" stroke-linecap="round" stroke-linejoin="round" stroke-width="7"/>
+    <path d="M2110.0,1430.0 L2110.0,1726.0 Q2110.0,1752.0 2136.0,1752.0 L3354.0,1752.0 Q3380.0,1752.0 3395.9,1772.6 L3424.1,1809.4 Q3440.0,1830.0 3466.0,1830.0 L4384.0,1830.0 Q4410.0,1830.0 4410.0,1856.0 L4410.0,2230.0" fill="none" id="office-project-workspace" opacity="0.52" stroke="#8441D5" stroke-dasharray="18 13" stroke-linecap="round" stroke-linejoin="round" stroke-width="7"/>
+    <path d="M1425.0,504.0 L1482.7,439.4 Q1500.0,420.0 1526.0,420.0 L3724.0,420.0 Q3750.0,420.0 3776.0,420.0 L5092.0,420.0 Q5118.0,420.0 5118.0,446.0 L5118.0,2034.0 Q5118.0,2060.0 5096.8,2075.1 L4880.0,2230.0" fill="none" id="workspace-api-to-vault" opacity="0.38" stroke="#0877EE" stroke-dasharray="18 13" stroke-linecap="round" stroke-linejoin="round" stroke-width="6"/>
+    <path d="M250.0,2907.0 L634.0,2907.0 Q660.0,2907.0 686.0,2907.0 L990.0,2907.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="26"/>
+    <path d="M250.0,2907.0 L634.0,2907.0 Q660.0,2907.0 686.0,2907.0 L990.0,2907.0" fill="none" id="scoped-profile-to-guard" opacity="1.0" stroke="#EF3B94" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>
+    <path d="M990.0,2907.0 L1134.0,2907.0 Q1160.0,2907.0 1178.2,2888.5 L1251.8,2813.5 Q1270.0,2795.0 1296.0,2795.0 L1445.0,2795.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="23"/>
+    <path d="M990.0,2907.0 L1134.0,2907.0 Q1160.0,2907.0 1178.2,2888.5 L1251.8,2813.5 Q1270.0,2795.0 1296.0,2795.0 L1445.0,2795.0" fill="none" id="guard-to-finder" opacity="1.0" stroke="#EF3B94" stroke-linecap="round" stroke-linejoin="round" stroke-width="13"/>
+    <path d="M990.0,2907.0 L1134.0,2907.0 Q1160.0,2907.0 1179.4,2924.3 L1250.6,2987.7 Q1270.0,3005.0 1296.0,3005.0 L1445.0,3005.0" fill="none" opacity="1.0" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="23"/>
+    <path d="M990.0,2907.0 L1134.0,2907.0 Q1160.0,2907.0 1179.4,2924.3 L1250.6,2987.7 Q1270.0,3005.0 1296.0,3005.0 L1445.0,3005.0" fill="none" id="guard-to-generic" opacity="1.0" stroke="#EF3B94" stroke-linecap="round" stroke-linejoin="round" stroke-width="13"/>
+    <path d="M1445.0,3005.0 L1644.0,3005.0 Q1670.0,3005.0 1688.4,2986.6 L1821.6,2853.4 Q1840.0,2835.0 1840.0,2809.0 L1840.0,2596.0 Q1840.0,2570.0 1814.0,2570.0 L1216.0,2570.0 Q1190.0,2570.0 1175.3,2548.6 L1080.0,2410.0" fill="none" id="scoped-external-via-browser" opacity="0.9" stroke="#EF3B94" stroke-dasharray="18 13" stroke-linecap="round" stroke-linejoin="round" stroke-width="7"/>
+    <path d="M2270.0,2735.0 L2270.0,2702.0 Q2270.0,2680.0 2292.0,2680.0 L3254.0,2680.0 Q3280.0,2680.0 3279.9,2654.0 L3275.1,1106.0 Q3275.0,1080.0 3249.0,1080.0 L2146.0,1080.0 Q2120.0,1080.0 2120.0,1054.0 L2120.0,675.0" fill="none" id="resource-mode-policy" opacity="0.35" stroke="#687A93" stroke-dasharray="18 13" stroke-linecap="round" stroke-linejoin="round" stroke-width="6"/>
+    <path d="M3240.0,2735.0 L3240.0,2681.0 Q3240.0,2655.0 3266.0,2655.0 L5049.0,2655.0 Q5075.0,2655.0 5075.0,2629.0 L5075.0,296.0 Q5075.0,270.0 5049.0,270.0 L1736.0,270.0 Q1710.0,270.0 1710.6,296.0 L1720.0,675.0" fill="none" id="scheduled-direct-gateway" opacity="0.26" stroke="#687A93" stroke-dasharray="18 13" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+  </g>
+  <g id="03-station-interchanges">
+    <circle cx="310" cy="560" fill="white" id="chat-owner" r="18" stroke="#0877EE" stroke-width="7"/>
+    <circle cx="695" cy="560" fill="white" id="webui-chat" r="18" stroke="#0877EE" stroke-width="7"/>
+    <circle cx="1080" cy="560" fill="white" id="webui-tool-loop" r="18" stroke="#0877EE" stroke-width="7"/>
+    <circle cx="1280" cy="448" fill="white" id="github-mcp" r="18" stroke="#0877EE" stroke-width="7"/>
+    <circle cx="1425" cy="504" fill="white" id="workspace-openapi" r="18" stroke="#0877EE" stroke-width="7"/>
+    <circle cx="310" cy="846" fill="white" id="work-owner" r="18" stroke="#189743" stroke-width="7"/>
+    <circle cx="695" cy="846" fill="white" id="opencode" r="18" stroke="#189743" stroke-width="7"/>
+    <circle cx="1080" cy="846" fill="white" id="plan-build" r="18" stroke="#189743" stroke-width="7"/>
+    <circle cx="1720" cy="675" fill="white" id="shared-gateway" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="1720" cy="675" fill="white" r="19" stroke="#0D2750" stroke-width="7"/>
+    <circle cx="2120" cy="675" fill="white" id="serial-engine" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="2120" cy="675" fill="white" r="19" stroke="#0D2750" stroke-width="7"/>
+    <circle cx="2540" cy="675" fill="white" id="ollama-core" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="2540" cy="675" fill="white" r="19" stroke="#0D2750" stroke-width="7"/>
+    <circle cx="3200" cy="535" fill="white" id="role-4b" r="18" stroke="#189743" stroke-width="7"/>
+    <circle cx="3200" cy="675" fill="white" id="role-9b" r="18" stroke="#189743" stroke-width="7"/>
+    <circle cx="3200" cy="813" fill="white" id="role-12b" r="18" stroke="#189743" stroke-width="7"/>
+    <circle cx="220" cy="1420" fill="white" id="mic" r="18" stroke="#F07816" stroke-width="7"/>
+    <circle cx="220" cy="1578" fill="white" id="discord-voice" r="18" stroke="#F07816" stroke-width="7"/>
+    <circle cx="525" cy="1420" fill="white" id="conversation-bridge" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="525" cy="1420" fill="white" r="19" stroke="#F07816" stroke-width="7"/>
+    <circle cx="835" cy="1420" fill="white" id="silero" r="18" stroke="#F07816" stroke-width="7"/>
+    <circle cx="1150" cy="1420" fill="white" id="parakeet" r="18" stroke="#F07816" stroke-width="7"/>
+    <circle cx="1540" cy="1420" fill="white" id="oc-session" r="18" stroke="#F07816" stroke-width="7"/>
+    <circle cx="1210" cy="1566" fill="white" id="qwen-tts" r="18" stroke="#F07816" stroke-width="7"/>
+    <circle cx="625" cy="1566" fill="white" id="voice-playback" r="18" stroke="#F07816" stroke-width="7"/>
+    <circle cx="2110" cy="1430" fill="white" id="tool-junction" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="2110" cy="1430" fill="white" r="19" stroke="#8441D5" stroke-width="7"/>
+    <circle cx="2655" cy="1335" fill="white" id="office" r="18" stroke="#8441D5" stroke-width="7"/>
+    <circle cx="2655" cy="1430" fill="white" id="pdf-kit" r="18" stroke="#8441D5" stroke-width="7"/>
+    <circle cx="2655" cy="1545" fill="white" id="vision-mcp" r="18" stroke="#8441D5" stroke-width="7"/>
+    <circle cx="3830" cy="1420" fill="white" id="comfy-ui" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="3830" cy="1420" fill="white" r="19" stroke="#E93857" stroke-width="7"/>
+    <circle cx="4430" cy="1335" fill="white" id="sdxl-model" r="18" stroke="#E93857" stroke-width="7"/>
+    <circle cx="4430" cy="1533" fill="white" id="ltx-model" r="18" stroke="#E93857" stroke-width="7"/>
+    <circle cx="4910" cy="1430" fill="white" id="media-save" r="18" stroke="#E93857" stroke-width="7"/>
+    <circle cx="220" cy="2140" fill="white" id="webui-retrieval-origin" r="18" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="660" cy="2140" fill="white" id="retrieval-api" r="18" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="1080" cy="2140" fill="white" id="searxng" r="18" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="220" cy="2410" fill="white" id="browser-tool-origin" r="18" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="1080" cy="2410" fill="white" id="playwright-mcp" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="1080" cy="2410" fill="white" r="19" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="1700" cy="2240" fill="white" id="shared-vpn" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="1700" cy="2240" fill="white" r="19" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="2470" cy="2090" fill="white" id="public-web" r="18" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="2580" cy="2410" fill="white" id="browser-download-output" r="18" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="2470" cy="2495" fill="white" id="deepseek-site" r="18" stroke="#EF3B94" stroke-width="7"/>
+    <circle cx="3465" cy="2060" fill="white" id="chat-upload-source" r="18" stroke="#0877EE" stroke-width="7"/>
+    <circle cx="3465" cy="2228" fill="white" id="browser-download-source" r="18" stroke="#0A98A7" stroke-width="7"/>
+    <circle cx="3465" cy="2410" fill="white" id="media-output-source" r="18" stroke="#E93857" stroke-width="7"/>
+    <circle cx="3850" cy="2230" fill="white" id="file-transfer" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="3850" cy="2230" fill="white" r="19" stroke="#93502E" stroke-width="7"/>
+    <circle cx="4410" cy="2230" fill="white" id="active-project" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="4410" cy="2230" fill="white" r="19" stroke="#93502E" stroke-width="7"/>
+    <circle cx="4880" cy="2230" fill="white" id="vault" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="4880" cy="2230" fill="white" r="19" stroke="#93502E" stroke-width="7"/>
+    <circle cx="250" cy="2907" fill="white" id="scoped-profile" r="18" stroke="#EF3B94" stroke-width="7"/>
+    <circle cx="990" cy="2907" fill="white" id="native-safety-guard" r="30" stroke="#0D2750" stroke-width="8"/>
+    <circle cx="990" cy="2907" fill="white" r="19" stroke="#EF3B94" stroke-width="7"/>
+    <circle cx="1445" cy="2795" fill="white" id="finder-control" r="18" stroke="#EF3B94" stroke-width="7"/>
+    <circle cx="1445" cy="3005" fill="white" id="public-question-only" r="18" stroke="#EF3B94" stroke-width="7"/>
+  </g>
+  <g id="04-editable-labels">
+    <text fill="#0D2750" font-family="DejaVu Sans, Arial, sans-serif" font-size="92" font-weight="bold" text-anchor="start" x="96" y="111">LOCAL AI</text>
+    <text fill="#0D2750" font-family="DejaVu Sans, Arial, sans-serif" font-size="82" font-weight="bold" text-anchor="start" x="665" y="111">SYSTEM TUBE MAP</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="normal" text-anchor="start" x="101" y="183">CODE-TRACED CONNECTIONS    •    DATA ROUTES    •    PERMISSIONS    •    MODEL HANDOFFS</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="30" font-weight="bold" text-anchor="start" x="124" y="345">01  CORE NETWORK</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="end" x="5082" y="342">Two independent interfaces share one inference gateway</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="30" font-weight="bold" text-anchor="start" x="124" y="1176">02  VOICE AND LIVE CONVERSATION</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="end" x="1872" y="1173">speech input → native agent → speech output</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="30" font-weight="bold" text-anchor="start" x="1974" y="1176">03  PROJECT DOCUMENT TOOLS</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="end" x="3517" y="1173">three independent MCP branches</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="30" font-weight="bold" text-anchor="start" x="3619" y="1176">04  IMAGE AND VIDEO</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="end" x="5082" y="1173">ComfyUI is started only for rendering</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="30" font-weight="bold" text-anchor="start" x="124" y="1836">05  WEB AND BROWSER</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="end" x="3242" y="1833">VPN-only supported retrieval and Chromium</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="30" font-weight="bold" text-anchor="start" x="3344" y="1836">06  FILES AND ENCRYPTED WORKSPACE</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="end" x="5082" y="1833">explicit, approved transfer</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="30" font-weight="bold" text-anchor="start" x="124" y="2681">07  AUTOMATION AND ACCESS</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="end" x="5082" y="2678">restricted mode replaces normal effectful tool permissions</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="310" y="516">Owner</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="310" y="544">chat request</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" x="695" y="607">Open WebUI</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="695" y="635">chat + owned uploads</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="1080" y="607">WebUI tool loop</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1080" y="635">native approvals</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" x="1280" y="416">GitHub MCP</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="bold" text-anchor="middle" x="1425" y="460">Workspace API</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="normal" text-anchor="middle" x="1425" y="488">mount-checked vault tools</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="310" y="891">Owner</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="310" y="919">work request</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="middle" x="695" y="890">OpenCode Work Agent</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="695" y="918">native Plan / Build</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="1080" y="891">Policy plugin</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1080" y="919">bounded handoffs + approvals</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="31" font-weight="bold" text-anchor="middle" x="1720" y="626">Python gateway</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1720" y="654">:8001  •  shared API + policy</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="middle" x="2120" y="626">Serial model engine</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="2120" y="654">loads / unloads one heavy model</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" x="2540" y="626">Ollama</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="2540" y="654">local inference backend</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="start" x="3246" y="525">4B coordinator</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="3246" y="553">routine + Plan / Build</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="start" x="3246" y="665">9B analyst</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="3246" y="693">reasoning via native handoff</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="start" x="3246" y="803">12B coder</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="3246" y="831">bounded editing and testing</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="normal" text-anchor="start" x="2880" y="991">Role selection happens through the same serial gateway. No parallel model swarm.</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle" x="220" y="1374">Mic input</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" x="220" y="1624">Discord</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="220" y="1652">voice channel</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="525" y="1374">Conversation bridge</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" x="835" y="1374">Silero VAD</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="835" y="1402">speech detection</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" x="1150" y="1374">Parakeet STT</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1150" y="1402">transcribed text</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle" x="1540" y="1374">Native OpenCode</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1540" y="1402">agent session</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle" x="1210" y="1613">Qwen3-TTS</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1210" y="1641">speech generation</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle" x="625" y="1613">Playback</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="625" y="1641">local UI / Discord</text>
+    <text fill="#F07816" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="bold" text-anchor="end" x="1530" y="1679">Reply path</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="end" x="2064" y="1420">Project tools</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="start" x="2701" y="1325">AIOffice MCP</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="2701" y="1353">DOCX / XLSX / PPTX</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="2701" y="1420">Apple PDFKit / Vision</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="2701" y="1448">native PDF + OCR</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="start" x="2701" y="1535">Vision MCP</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="2701" y="1563">project images via Ollama</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="normal" text-anchor="start" x="2155" y="1668">Plan inspects. Build changes require approval. Operations target the copied project.</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="end" x="3784" y="1410">ComfyUI</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="4430" y="1289">SDXL image</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="4430" y="1317">Normal / Max</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="4430" y="1579">LTX video</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="4430" y="1607">Max only</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle" x="4910" y="1476">Saved assets</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="4910" y="1504">not auto-imported</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="normal" text-anchor="start" x="3630" y="1668">Text models unload before rendering; ComfyUI stops afterward.</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" x="220" y="2094">WebUI search</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="220" y="2122">/search and /read</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle" x="660" y="2094">Retrieval API</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="660" y="2122">OpenAPI bridge</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" x="1080" y="2094">SearXNG + reader</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1080" y="2122">bounded page evidence</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle" x="220" y="2456">Browser tool</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="220" y="2484">WebUI OR OpenCode</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="1080" y="2456">Playwright MCP</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1080" y="2484">headless Chromium</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="middle" x="1700" y="2194">Gluetun / Proton VPN</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="1700" y="2222">same VPN namespace</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="2470" y="2044">Public internet</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="middle" x="2580" y="2456">Browser outputs</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="2580" y="2484">local directory</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="bold" text-anchor="start" x="2505" y="2485">DeepSeek site</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="17" font-weight="normal" text-anchor="start" x="2505" y="2513">only via approved fixed helper</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="normal" text-anchor="start" x="140" y="2530">Retrieval and browser traffic uses the configured VPN path; no direct host fallback in those routes.</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="bold" text-anchor="middle" x="3465" y="2014">Chat uploads</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="bold" text-anchor="end" x="3419" y="2218">Browser files</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="bold" text-anchor="middle" x="3465" y="2456">Media outputs</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="3850" y="2184">Approved transfer</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="3850" y="2212">create-only copies</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="4410" y="2184">Active project copy</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="4410" y="2212">OpenCode workspace</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="4880" y="2184">Cryptomator vault</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="4880" y="2212">manual unlock</text>
+    <text fill="#93502E" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="start" x="3945" y="2450">Approved vault export</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="4045" y="2570">Vault import becomes PLAINTEXT in project</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" x="250" y="2861">Opt-in profile</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="250" y="2889">not normal tool mode</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" x="990" y="2861">Native guard</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="middle" x="990" y="2889">session + prompt approvals</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="start" x="1491" y="2785">Finder + Calculator</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="1491" y="2813">fixed approved actions only</text>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="25" font-weight="bold" text-anchor="start" x="1491" y="2995">External helper</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="1491" y="3023">8 fixed public prompts; approval</text>
+  </g>
+  <g id="05-annotations-and-legend">
+    <rect fill="#EAF3FF" height="123" rx="20" ry="20" stroke="#D5E6FC" stroke-width="1" width="1403" x="3702" y="56"/>
+    <text fill="#0D2750" font-family="DejaVu Sans, Arial, sans-serif" font-size="29" font-weight="bold" text-anchor="start" x="3736" y="99">09 OCT 2026  /  SOURCE: main</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="normal" text-anchor="start" x="3736" y="140">Integrated release 2026-10-09-integrated-1   •   Mac-native checks pending</text>
+    <rect fill="#0877EE" height="57" rx="13" ry="13" stroke="#0877EE" stroke-width="0" width="216" x="131" y="407"/>
+    <text fill="white" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="150" y="447">CHAT LINE</text>
+    <rect fill="#189743" height="57" rx="13" ry="13" stroke="#189743" stroke-width="0" width="330" x="131" y="793"/>
+    <text fill="white" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="150" y="833">WORK AGENT LINE</text>
+    <rect fill="#F7FAFE" height="236" rx="18" ry="18" stroke="#D9E3F0" stroke-width="2" width="1180" x="3882" y="415"/>
+    <circle cx="3913" cy="451" fill="#0877EE" r="10"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="3938" y="459">SHARED CORE</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="normal" text-anchor="start" x="3910" y="500">WebUI and OpenCode own separate tool loops.</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="normal" text-anchor="start" x="3910" y="534">Both submit model requests to one gateway.</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="normal" text-anchor="start" x="3910" y="568">The engine serialises heavyweight model jobs.</text>
+    <rect fill="#F7FAFE" height="260" rx="18" ry="18" stroke="#D9E3F0" stroke-width="2" width="1180" x="3882" y="694"/>
+    <circle cx="3913" cy="730" fill="#F07816" r="10"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="3938" y="738">VERIFICATION BOUNDARY</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="normal" text-anchor="start" x="3910" y="779">Paths show implemented source code, not proof of</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="normal" text-anchor="start" x="3910" y="813">successful operation on the owner's Mac.</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="normal" text-anchor="start" x="3910" y="847">Browser VPN exits, approvals and resource use</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="normal" text-anchor="start" x="3910" y="881">still require live acceptance testing.</text>
+    <rect fill="#F07816" height="57" rx="13" ry="13" stroke="#F07816" stroke-width="0" width="232" x="126" y="1232"/>
+    <text fill="white" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="145" y="1272">VOICE LINE</text>
+    <rect fill="#8441D5" height="57" rx="13" ry="13" stroke="#8441D5" stroke-width="0" width="316" x="1976" y="1232"/>
+    <text fill="white" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="1995" y="1272">DOCUMENT LINE</text>
+    <rect fill="#E93857" height="57" rx="13" ry="13" stroke="#E93857" stroke-width="0" width="221" x="3621" y="1232"/>
+    <text fill="white" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="3640" y="1272">MEDIA LINE</text>
+    <rect fill="#0A98A7" height="57" rx="13" ry="13" stroke="#0A98A7" stroke-width="0" width="343" x="127" y="1890"/>
+    <text fill="white" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="146" y="1930">WEB ACCESS LINE</text>
+    <rect fill="#93502E" height="57" rx="13" ry="13" stroke="#93502E" stroke-width="0" width="399" x="3346" y="1890"/>
+    <text fill="white" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="3365" y="1930">TRANSFER + STORAGE</text>
+    <rect fill="#EF3B94" height="57" rx="13" ry="13" stroke="#EF3B94" stroke-width="0" width="442" x="126" y="2740"/>
+    <text fill="white" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="start" x="145" y="2780">RESTRICTED AUTOMATION</text>
+    <rect fill="#F7FAFE" height="287" rx="19" ry="19" stroke="#D9E3F0" stroke-width="2" width="885" x="2200" y="2735"/>
+    <circle cx="2246" cy="2792" fill="white" r="17" stroke="#687A93" stroke-width="6"/>
+    <text fill="#0D2750" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="start" x="2278" y="2803">RESOURCE MODES</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="normal" text-anchor="start" x="2237" y="2868">Gaming / Normal / Max</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="normal" text-anchor="start" x="2237" y="2911">gate model use</text>
+    <rect fill="#F7FAFE" height="287" rx="19" ry="19" stroke="#D9E3F0" stroke-width="2" width="885" x="3170" y="2735"/>
+    <circle cx="3216" cy="2792" fill="white" r="17" stroke="#687A93" stroke-width="6"/>
+    <text fill="#0D2750" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="start" x="3248" y="2803">SCHEDULED TEXT</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="normal" text-anchor="start" x="3207" y="2868">launchd → gateway</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="normal" text-anchor="start" x="3207" y="2911">inference only</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="normal" text-anchor="start" x="3207" y="2954">no tools</text>
+    <rect fill="#F7FAFE" height="287" rx="19" ry="19" stroke="#D9E3F0" stroke-width="2" width="885" x="4160" y="2735"/>
+    <circle cx="4206" cy="2792" fill="white" r="17" stroke="#687A93" stroke-width="6"/>
+    <text fill="#0D2750" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" font-weight="bold" text-anchor="start" x="4238" y="2803">TAILSCALE REMOTE</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="normal" text-anchor="start" x="4197" y="2868">private WebUI chat/media</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="normal" text-anchor="start" x="4197" y="2911">not OpenCode</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" font-weight="normal" text-anchor="start" x="2180" y="3072">Dotted grey = control/admission (not a tool execution route)</text>
+    <rect fill="white" height="186" rx="22" ry="22" stroke="#D9E3F0" stroke-width="2" width="5020" x="90" y="3152"/>
+    <text fill="#0D2750" font-family="DejaVu Sans, Arial, sans-serif" font-size="29" font-weight="bold" text-anchor="start" x="130" y="3198">ROUTE KEY</text>
+    <line stroke="#0877EE" stroke-linecap="round" stroke-width="13" x1="400" x2="463" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="480" y="3201">Chat</text>
+    <line stroke="#189743" stroke-linecap="round" stroke-width="13" x1="900" x2="963" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="980" y="3201">Work Agent</text>
+    <line stroke="#F07816" stroke-linecap="round" stroke-width="13" x1="1400" x2="1463" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="1480" y="3201">Voice</text>
+    <line stroke="#8441D5" stroke-linecap="round" stroke-width="13" x1="1900" x2="1963" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="1980" y="3201">Documents</text>
+    <line stroke="#E93857" stroke-linecap="round" stroke-width="13" x1="2400" x2="2463" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="2480" y="3201">Media</text>
+    <line stroke="#0A98A7" stroke-linecap="round" stroke-width="13" x1="2900" x2="2963" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="2980" y="3201">Web/VPN</text>
+    <line stroke="#93502E" stroke-linecap="round" stroke-width="13" x1="3400" x2="3463" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="3480" y="3201">Files</text>
+    <line stroke="#EF3B94" stroke-linecap="round" stroke-width="13" x1="3900" x2="3963" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="3980" y="3201">Scoped</text>
+    <line stroke="#687A93" stroke-linecap="round" stroke-width="13" x1="4400" x2="4463" y1="3191" y2="3191"/>
+    <text fill="#122546" font-family="DejaVu Sans, Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="start" x="4480" y="3201">Policy</text>
+    <circle cx="440" cy="3285" fill="white" r="12" stroke="#0877EE" stroke-width="5"/>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="normal" text-anchor="start" x="465" y="3295">Station</text>
+    <circle cx="650" cy="3285" fill="white" r="18" stroke="#0D2750" stroke-width="5"/>
+    <circle cx="650" cy="3285" fill="white" r="10" stroke="#0A98A7" stroke-width="4"/>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="normal" text-anchor="start" x="682" y="3295">Shared interchange</text>
+    <line stroke="#EF3B94" stroke-dasharray="12 10" stroke-width="6" x1="1060" x2="1130" y1="3285" y2="3285"/>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="normal" text-anchor="start" x="1150" y="3295">Conditional / guarded</text>
+    <text fill="#5D6B7F" font-family="DejaVu Sans, Arial, sans-serif" font-size="21" font-weight="normal" text-anchor="start" x="2210" y="3295">Repo code ≠ owner-Mac acceptance  •  Schematic routes, not measured network traces</text>
+  </g>
+</svg>
