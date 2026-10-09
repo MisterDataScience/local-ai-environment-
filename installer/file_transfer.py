@@ -50,7 +50,7 @@ def transfer(root, project_id, filename, *, direction="import"):
         raise ValueError("Use import or export")
     if source.suffix.lower() not in EXTENSIONS or not source.is_file():
         raise ValueError("Unsupported file type")
-    if source.stat().st_size > MAX_BYTES:
+    if source.stat().st_nlink != 1 or source.stat().st_size > MAX_BYTES:
         raise ValueError("File exceeds 50 MB")
     destination_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     if destination_root.is_symlink() or not destination_root.resolve().is_relative_to(project if direction == "import" else browser):
@@ -61,7 +61,7 @@ def transfer(root, project_id, filename, *, direction="import"):
     fd = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
         stat = os.fstat(fd)
-        if not os.path.isfile(source) or stat.st_size > MAX_BYTES or not os.path.samestat(stat, os.stat(source, follow_symlinks=False)):
+        if not os.path.isfile(source) or stat.st_nlink != 1 or stat.st_size > MAX_BYTES or not os.path.samestat(stat, os.stat(source, follow_symlinks=False)):
             raise ValueError("Source changed during inspection")
         temp = destination_root / ("." + uuid.uuid4().hex + ".partial")
         out = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
