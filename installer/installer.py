@@ -37,6 +37,7 @@ GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py", "context_policy.py", "model_team.py", "speech.py", "speech_worker.py")
 GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_worker.py')
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
+              'office_setup.py', 'office_mcp.py', 'office_check.py',
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
@@ -439,7 +440,7 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
-    for label, module in (("Scaffold Essay", "work_agent.py --scaffold"), ("Edit Essay", "work_agent.py --essay"), ("Connect Discord", "discord_setup.py"), ("Check Conversation", "conversation_check.py"), ("Start Conversation", "work_agent.py --conversation"), ("Configure Voice", "voice_setup.py"), ("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
+    for label, module in (("Check Office", "office_setup.py"), ("Scaffold Essay", "work_agent.py --scaffold"), ("Edit Essay", "work_agent.py --essay"), ("Connect Discord", "discord_setup.py"), ("Check Conversation", "conversation_check.py"), ("Start Conversation", "work_agent.py --conversation"), ("Configure Voice", "voice_setup.py"), ("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
                          ("Restore AI Workspace", "vault_backup.py --restore"), ("Archive Existing AI Files", "vault_backup.py --migrate-legacy")):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
@@ -497,6 +498,8 @@ def main():
         app = install_cryptomator(root, download, run)
         from work_agent import install as install_work_agent
         install_work_agent(root, download, run)
+        from office_setup import install as install_office
+        configuration['office'] = install_office(root, download, run)
         configuration['cryptomator_app'] = str(app)
         save_config(root, configuration)
         from discord_setup import install as install_discord, configure as configure_discord
@@ -520,6 +523,7 @@ def main():
                 run([args.uv, "pip", "freeze", "--python", directory / ".venv/bin/python"], stdout=output)
         (root / "software-versions.json").write_text(json.dumps(
             {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "opencode": "1.18.34",
+             "aioffice": configuration['office']['version'],
              "text_models": configured_text_models(configuration)}, indent=2))
         checkpoint(state, "installed")
         if args.web_access:

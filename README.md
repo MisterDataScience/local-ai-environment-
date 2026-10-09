@@ -1,5 +1,9 @@
 # Local AI environment
 
+DOCX, XLSX and PPTX tools are included in the installer through the OpenCode
+coordinator. Creation, reading and editing use a pinned local AIOffice MCP engine.
+See [Office tools, usage and Mac checks](docs/OFFICE-TOOLS.md).
+
 Reverse essay scaffolding is available through **Scaffold Essay.command**, with
 separate stages, explicit author approvals and empty answer templates.
 See [workflow usage and limits](docs/REVERSE-ESSAY-SCAFFOLDING.md).

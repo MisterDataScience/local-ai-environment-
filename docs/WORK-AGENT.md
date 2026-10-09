@@ -249,3 +249,12 @@ Use Edit Essay.command or the explicit text request documented in [ESSAY-EDITING
 ## Reverse essay scaffolding
 
 The existing document profile also accepts explicitly activated REVERSE_SCAFFOLD requests. Host code binds one stage and its source packet, persists approvals and validates outputs. It shares the two-attempt budget and 12,000-character handoff limit. Stage 8 templates and Stage 9 measurements run in host code. Editing remains separate. See [REVERSE-ESSAY-SCAFFOLDING.md](REVERSE-ESSAY-SCAFFOLDING.md).
+
+
+## Office files
+
+The coordinator has project-scoped AIOffice MCP tools for DOCX, XLSX and PPTX.
+Plan can inspect; Build uses native approvals for writes. These are direct tool
+operations, with no additional specialist or changed handoff allowance. Essay and
+scaffold workflow turns reject Office calls. See [Office tools](OFFICE-TOOLS.md)
+for installation, file locations, snapshot storage, privacy and acceptance.

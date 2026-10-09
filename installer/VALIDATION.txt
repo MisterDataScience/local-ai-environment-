@@ -1,3 +1,16 @@
+Office update 2026-10-09 UTC: 106 installer tests and 32 affected JavaScript
+policy tests pass. Real AIOffice 1.27.2 MCP acceptance passes for DOCX/XLSX/PPTX,
+directly and through the compact relay: creation, reading, editing, formula
+cache verification, independent ZIP/XML inspection, validation, HTML/SVG
+rendering, path/symlink rejection, stale revisions and snapshots. One Linux
+x64 run measured 76,276 KiB idle and a sampled peak of 176,400 KiB on small
+fixtures. These are not Mac measurements. The installer adds a checksum-pinned
+macOS arm64 binary, network denial, managed-heap/file bounds and Check Office.
+Native Mac network-sandbox behavior, UI layout/fidelity, local-model routing
+and sustained memory pressure remain unverified. PDF input editing is not
+implemented; PNG/PDF export requires an existing compatible local renderer.
+See OFFICE-TOOLS.md for usage and precise validation boundaries.
+
 Reverse-scaffold update 2026-10-08 UTC: 99 installer tests, 100 gateway tests
 and 70 JavaScript tests passed (269 checks). The affected 41 JavaScript tests
 also passed after the native synthetic-message ID fix. Coverage includes

@@ -12,6 +12,7 @@ import {parseScaffold, beginScaffold, loadScaffold, scaffoldContract, finishScaf
 const MAX_INPUT = 12000;
 const CODER_TOOLS = new Set(['read', 'glob', 'grep', 'edit', 'write', 'apply_patch', 'bash']);
 const READ_TOOLS = new Set(['read', 'glob', 'grep']);
+const OFFICE_READ = new Set(['office_read', 'office_query', 'office_get', 'office_validate', 'office_help', 'office_status']);
 const fields = ['objective', 'constraints', 'evidence', 'completed', 'remaining', 'result'];
 const stores = new Map();
 const turnKey = (session, message) => createHash('sha256').update(session + '\0' + message).digest('hex');
@@ -46,6 +47,8 @@ async function loadStore(ledgerPath) {
     for (const call of turn.calls) if (call.status === 'reserved') call.status = 'interrupted';
     if (turn.media !== undefined && (!Array.isArray(turn.media) || turn.media.length > 2)) fail('invalid media ledger');
     for (const call of turn.media ?? []) if (call.status === 'reserved') call.status = 'interrupted';
+    if (turn.office !== undefined && (!Array.isArray(turn.office) || turn.office.length > 24)) fail('invalid Office ledger');
+    for (const call of turn.office ?? []) if (call.status === 'reserved') call.status = 'interrupted';
   }
   await save();
   return { ledger, exclusive, save, active: new Map() };
@@ -269,6 +272,34 @@ export default async function LocalTeam({ client, directory }, options = {}) {
     },
     async 'tool.execute.before'(input, output) {
       const session = data(await client.session.get({ path: { id: input.sessionID } }));
+      if (input.tool.startsWith('aioffice_')) {
+        await checkMode();
+        const messages = data(await client.session.messages({ path: { id: input.sessionID } }));
+        const assistant = messages.find(m => m.info.role === 'assistant' && m.parts.some(p =>
+          p.type === 'tool' && (p.callID === input.callID || p.id === input.callID)));
+        if (session.parentID || !['plan', 'build'].includes(assistant?.info.agent)) fail('Office tools belong to the coordinator only');
+        const {key} = await identity(input);
+        if (ledger.turns[key]?.essay || ledger.turns[key]?.scaffold) fail('Office operations require a separate request from essay/scaffold stages');
+        const name = input.tool.slice('aioffice_'.length);
+        if (assistant.info.agent === 'plan' && !OFFICE_READ.has(name)) fail('Office writes require Build and native approval');
+        if (name === 'office_read') output.args.max_bytes = Math.min(Math.max(1, Number(output.args.max_bytes) || 8000), 8000);
+        await exclusive(async () => {
+          const turn = ledger.turns[key];
+          turn.office ??= [];
+          if (turn.office.some(c => c.id === input.callID)) fail('duplicate Office call; inspect its saved record');
+          if (turn.office.length >= 24) fail('Office reached its 24-tool-attempt limit for this user turn');
+          const last = active.get(input.sessionID);
+          if (last) {
+            const finished = messages.some(m => m.parts.some(p => p.type === 'tool' &&
+              (p.callID === last || p.id === last) && ['error', 'completed'].includes(p.state?.status)));
+            if (!finished) fail('wait for active work before Office operations');
+            active.delete(input.sessionID);
+          }
+          turn.office.push({id: input.callID, tool: input.tool, status: 'reserved'});
+          await save();
+          active.set(input.sessionID, input.callID);
+        });
+      }
       if (session.parentID || input.tool !== 'task') {
         const messages = data(await client.session.messages({ path: { id: input.sessionID } }));
         const assistant = messages.find(m => m.info.role === 'assistant' && m.parts.some(p =>
@@ -342,6 +373,28 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       });
     },
     async 'tool.execute.after'(input, output) {
+      if (input.tool.startsWith('aioffice_')) {
+        const {key} = await identity(input);
+        // Native MCP after hooks receive CallToolResult, unlike native tools'
+        // {output,metadata}. The local team is text-only: do not inject images.
+        const text = (output.content ?? []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+        const omitted = (output.content ?? []).filter(c => c.type !== 'text').map(c => c.type);
+        const report = await saveArtifact(join(resolve(directory), '.local-ai-office'),
+          hash(input.sessionID + input.callID) + '.json', {tool: input.tool, output: text, omitted_content_types: omitted});
+        await exclusive(async () => {
+          const record = ledger.turns[key].office?.find(c => c.id === input.callID);
+          if (!record) fail('Office result has no reserved call');
+          Object.assign(record, {status: 'completed', report: report.path});
+          await save();
+          if (active.get(input.sessionID) === input.callID) active.delete(input.sessionID);
+        });
+        output.content = [{type: 'text', text: text.length > 8000 ? JSON.stringify({truncated: true,
+          excerpt: text.slice(0, 6000), full_report: report.path,
+          instruction: 'This result is incomplete. Read a bounded section of the saved report or request a smaller document range. Do not treat the excerpt as complete evidence.'}) : text}];
+        if (omitted.length) output.content.push({type: 'text', text: 'Binary preview omitted from this text-only model. Report saved file paths; visual appearance has not been checked.'});
+        delete output.structuredContent;
+        return;
+      }
       if (input.tool !== 'task') return;
       const { key } = await identity(input);
       const call = ledger.turns[key].calls.find(c => c.id === input.callID);
