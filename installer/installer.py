@@ -440,6 +440,11 @@ def make_launcher(root):
         helper.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
                           "\nexec .venv/bin/python browser_setup.py --root " + shlex.quote(str(root)) + argument + "\n")
         helper.chmod(0o755)
+    for label, module in (("Read PDF", "pdf_reader.py"), ("File Transfer", "file_transfer.py")):
+        helper = root / (label + ".command")
+        helper.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
+                          "\nexec .venv/bin/python " + module + " \"$@\"\n")
+        helper.chmod(0o755)
     for label, argument in (("Enable Login Startup", ""), ("Disable Login Startup", " --disable")):
         helper = root / (label + ".command")
         helper.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
