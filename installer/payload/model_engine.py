@@ -134,6 +134,13 @@ class Engine:
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
+        if any(m.get("images") for m in messages):
+            from model_team import PROFILES
+            model = self.text_models[body["model"]]["model"].lower()
+            if not ("qwen3.5" in model or "gemma4" in model):
+                raise ValueError("Selected model does not have verified vision support; select Qwen3.5.")
+            if route != "text":
+                raise ValueError("Image input is supported only for text questions.")
         if route == 'speak':
             body['_speech_request'] = speech.request(self.config, self.root, prompt, body.get('speech'))
         elif 'speech' in body:
