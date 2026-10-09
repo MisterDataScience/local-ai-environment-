@@ -83,9 +83,15 @@ def main():
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--project", required=True)
     parser.add_argument("--file", required=True)
-    parser.add_argument("--direction", choices=("import", "export"), default="import")
+    parser.add_argument("--direction", choices=("import", "export", "vault-import", "vault-export"), default="import")
     args = parser.parse_args()
-    print(transfer(args.root, args.project, args.file, direction=args.direction))
+    if args.direction.startswith("vault-"):
+        import json
+        from vault_transfer import transfer_vault
+        config = json.loads((args.root.expanduser() / "control/config.json").read_text())
+        print(transfer_vault(config, args.root, args.project, args.file, args.direction))
+    else:
+        print(transfer(args.root, args.project, args.file, direction=args.direction))
 
 
 if __name__ == "__main__":
