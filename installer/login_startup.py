@@ -15,12 +15,14 @@ LABEL = "local.local-ai.start-at-login"
 
 def launch_agent(root):
     root = Path(root).expanduser().resolve(strict=True)
-    app = Path.home() / "Applications/Local AI.app"
-    owned = app / "Contents/local-ai-owner.txt"
-    if not owned.is_file() or owned.read_text().strip() != str(root):
-        raise RuntimeError("Owned Local AI.app is missing; rerun the installer")
-    return {"Label": LABEL, "ProgramArguments": ["/usr/bin/open", "-a", str(app)],
-            "RunAtLoad": True, "StandardOutPath": str(root / "logs/login-start.log"),
+    python = root / "control/.venv/bin/python"
+    supervisor = root / "control/runtime.py"
+    if not python.is_file() or not supervisor.is_file():
+        raise RuntimeError("LOCAL AI installation is incomplete; rerun installer")
+    return {"Label": LABEL, "ProgramArguments": [str(python), str(supervisor)],
+            "WorkingDirectory": str(root / "control"),
+            "RunAtLoad": True, "KeepAlive": {"SuccessfulExit": False}, "ThrottleInterval": 60,
+            "StandardOutPath": str(root / "logs/login-start.log"),
             "StandardErrorPath": str(root / "logs/login-start-error.log")}
 
 
