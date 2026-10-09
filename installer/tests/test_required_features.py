@@ -16,6 +16,10 @@ from tool_protocol import messages_for_ollama
 from file_transfer import transfer
 from pdf_reader import read_pdf
 from pdf_mcp import dispatch as pdf_dispatch
+from vault_transfer import transfer_vault
+from unittest.mock import patch
+from contextlib import contextmanager
+import os
 
 
 def image_url():
@@ -74,6 +78,35 @@ class RequiredFeaturesTests(unittest.TestCase):
             denied = pdf_dispatch({"id": 3, "method": "tools/call", "params": {
                 "name": "read_pdf", "arguments": {"path": "../secret.pdf"}}}, root)
             self.assertEqual(denied["error"]["code"], -32602)
+
+    def test_explicit_vault_transfer_and_no_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project_id = "a" * 32
+            project = root / "work-agent/projects" / project_id
+            project.mkdir(parents=True)
+            vault = root / "mockvault"
+            for folder in ("Inbox", "Projects", "Outputs", "Archive"):
+                (vault / folder).mkdir(parents=True)
+            (vault / "Inbox/source.pdf").write_bytes(b"%PDF-test")
+            @contextmanager
+            def mounted(_):
+                fd = os.open(vault, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    yield fd
+                finally:
+                    os.close(fd)
+            with patch("vault_transfer.mounted_root", mounted):
+                result = transfer_vault({}, root, project_id, "Inbox/source.pdf", "vault-import")
+                self.assertIn("PLAINTEXT", result)
+                self.assertEqual((project / "Inbox/source.pdf").read_bytes(), b"%PDF-test")
+                with self.assertRaises(FileExistsError):
+                    transfer_vault({}, root, project_id, "Inbox/source.pdf", "vault-import")
+                result = transfer_vault({}, root, project_id, "Inbox/source.pdf", "vault-export")
+                self.assertIn("encrypted workspace", result)
+                self.assertEqual((vault / "Outputs/source.pdf").read_bytes(), b"%PDF-test")
+                with self.assertRaises(ValueError):
+                    transfer_vault({}, root, project_id, "../outside.pdf", "vault-import")
 
     def test_pdf_reader_rejects_files_outside_workspace(self):
         with tempfile.TemporaryDirectory() as directory:
