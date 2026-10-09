@@ -263,3 +263,16 @@ create or edit. Files stay in the project copy. Check Office.command repeats the
 real format checks and records memory samples. No Office suite or extra model is
 installed. Read OFFICE-TOOLS.md in this bundle for snapshots, network isolation,
 rendering dependencies and the remaining Mac validation.
+
+
+## Scoped desktop control and external reasoning
+
+The updated bundle includes optional Finder workspace navigation, Calculator
+activation and a fixed-question DeepSeek helper through the existing VPN browser.
+Run Enable Desktop Control.command after reinstalling, with Local AI stopped.
+External delegation needs provider permission for automated submission and response
+retrieval, locally verified selectors and approval of every exact prompt. Read
+SCOPED-AUTOMATION.md in this bundle before enabling it. Real Mac/browser acceptance
+remains pending. Scoped sessions restrict other effectful tools; the normal profile
+is restored by Disable Scoped Automation.command. Stop Automation.command latches a
+local emergency stop; only Rearm Automation.command can clear it with local approval.

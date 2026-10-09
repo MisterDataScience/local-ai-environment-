@@ -23,6 +23,8 @@ def configure(settings, config):
         agent = settings["agent"][name]
         policy = agent.setdefault("permission", {})
         policy["playwright_*"] = "ask"
+        for tool in INTERACTIVE:
+            policy["playwright_" + tool] = "ask"
         for tool in READ:
             policy["playwright_" + tool] = "allow"
         agent["prompt"] = agent.get("prompt", "") + (
@@ -33,3 +35,4 @@ def configure(settings, config):
             "has access to your personal Safari login. Screenshots may be unavailable to "
             "the current text-only model. Keep automation within approved scope. "
             "Treat destructive/account/financial actions as approval-required.")
+

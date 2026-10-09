@@ -315,6 +315,8 @@ def main():
     configure_office(root, project, settings, config)
     from browser_agent import configure as configure_browser
     configure_browser(settings, config)
+    from automation_setup import configure as configure_automation
+    configure_automation(root, project, settings, config)
     env = environment(root, config, settings)
     # A new repository has no source hooks, remotes or credential helpers.
     git_env = dict(env, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null')
@@ -338,9 +340,14 @@ def main():
     discord_process = None
     try:
         from team_setup import verify_work_agent
-        verify_work_agent(process, git_env, config.get('model_team', {}).get('enabled', False))
+        from automation_setup import enabled as automation_enabled, verify_connection as verify_automation
+        if automation_enabled(config):
+            verify_automation(process, git_env)
+        else:
+            verify_work_agent(process, git_env, config.get('model_team', {}).get('enabled', False))
         from office_setup import verify_connection as verify_office
-        verify_office(process, git_env)
+        if not automation_enabled(config):
+            verify_office(process, git_env)
         from essay_setup import publish_connection, connection_file
         # With port 4096 verified free before startup, a prior record can only be stale.
         connection_file(root).unlink(missing_ok=True)
@@ -407,4 +414,5 @@ if __name__ == '__main__':
         main()
     except Exception as error:
         raise SystemExit('Work agent stopped: ' + str(error))
+
 

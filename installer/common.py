@@ -127,6 +127,13 @@ def webui_environment(root, configuration):
             "auth_type": "none", "config": {"enable": True},
             "info": {"id": "local-ai-browser", "name": "Playwright browser",
                      "description": "VPN-only headless Chromium browser. Confirm all writes and form submissions."}})
+    if configuration.get('desktop', {}).get('enabled') or configuration.get('external_delegation', {}).get('enabled'):
+        # These capabilities are exposed only through the guarded work agent.
+        # Prevent another model-facing connection from bypassing that boundary.
+        connections = []
+        env.pop('TOOL_SERVER_CONNECTIONS', None)
+        env['ENABLE_CODE_EXECUTION'] = 'False'
+        env['ENABLE_CODE_INTERPRETER'] = 'False'
     if connections:
         env['TOOL_SERVER_CONNECTIONS'] = json.dumps(connections)
     return env
@@ -134,4 +141,5 @@ def webui_environment(root, configuration):
 
 def ollama_binary(root):
     return root / "tools/Ollama.app/Contents/Resources/ollama"
+
 
