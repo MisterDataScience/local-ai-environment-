@@ -436,8 +436,8 @@ def make_launcher(root):
         web_command.chmod(0o755)
     for label, argument in (("Enable Browser", ""), ("Disable Browser", " --disable"), ("Check Browser", " --check")):
         helper = root / (label + ".command")
-        helper.write_text("#!/bin/bash\\nset -e\\ncd " + shlex.quote(str(root / "control")) +
-                          "\\nexec .venv/bin/python browser_setup.py --root " + shlex.quote(str(root)) + argument + "\\n")
+        helper.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
+                          "\nexec .venv/bin/python browser_setup.py --root " + shlex.quote(str(root)) + argument + "\n")
         helper.chmod(0o755)
     for label, argument in (("Enable Remote Access", ""), ("Disable Remote Access", " --disable")):
         remote_command = root / (label + ".command")
