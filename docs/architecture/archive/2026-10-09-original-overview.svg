@@ -1,0 +1,324 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3650" height="2975" viewBox="0 0 3650 2975" role="img" aria-label="LOCAL AI verified source architecture map, eight implementation paths, October 2026">
+<defs><marker id="arrow" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto"><path d="M0 0 L12 4.5 L0 9 z" fill="#7B8EA3"/></marker><filter id="soft"><feDropShadow dx="0" dy="3" stdDeviation="7" flood-color="#0C2439" flood-opacity="0.06"/></filter></defs>
+<rect x="0" y="0" width="3650" height="2975" rx="0" fill="#F7F9FC" stroke="#F7F9FC" stroke-width="0"/>
+<rect x="0" y="0" width="3650" height="205" rx="0" fill="#10263A" stroke="#10263A" stroke-width="0"/>
+<text x="85" y="86" font-family="DejaVu Sans,Arial,sans-serif" font-size="57" font-weight="700" fill="#FFFFFF" text-anchor="start" letter-spacing="1">LOCAL AI</text>
+<text x="85" y="143" font-family="DejaVu Sans,Arial,sans-serif" font-size="27" font-weight="500" fill="#D3E2F0" text-anchor="start" letter-spacing="1">YOUR SYSTEM  |  SOURCE-TRACED ARCHITECTURE</text>
+<text x="3565" y="75" font-family="DejaVu Sans,Arial,sans-serif" font-size="22" font-weight="600" fill="#DBE6F0" text-anchor="end" letter-spacing="0">INTEGRATED RELEASE: 2026-10-09-integrated-1</text>
+<text x="3565" y="121" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#BBD0E2" text-anchor="end" letter-spacing="0">CANONICAL BRANCH: main</text>
+<text x="3565" y="160" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#BBD0E2" text-anchor="end" letter-spacing="0">Repository tree: f62d85478126</text>
+<rect x="82" y="233" width="3486" height="81" rx="15" fill="#EAF1F7" stroke="#CBD8E5" stroke-width="1.5"/>
+<text x="112" y="266" font-family="DejaVu Sans,Arial,sans-serif" font-size="20" font-weight="700" fill="#407AB3" text-anchor="start" letter-spacing="0">SHARED CORE</text>
+<text x="310" y="267" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="500" fill="#102136" text-anchor="start" letter-spacing="0">Open WebUI and OpenCode are separate interfaces. Both use the same gateway, serialized local inference and mode policy.</text>
+<text x="310" y="298" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Optional integrations require individual activation. A working repository is not proof of acceptance on the owner’s Mac.</text>
+<text x="104" y="338" font-family="DejaVu Sans,Arial,sans-serif" font-size="17" font-weight="700" fill="#4C6178" text-anchor="start" letter-spacing="0.4">ENTRY / REQUEST</text>
+<text x="717" y="338" font-family="DejaVu Sans,Arial,sans-serif" font-size="17" font-weight="700" fill="#4C6178" text-anchor="start" letter-spacing="0.4">NATIVE POLICY / ROUTING</text>
+<text x="1337" y="338" font-family="DejaVu Sans,Arial,sans-serif" font-size="17" font-weight="700" fill="#4C6178" text-anchor="start" letter-spacing="0.4">GATEWAY / RESOURCE</text>
+<text x="1957" y="338" font-family="DejaVu Sans,Arial,sans-serif" font-size="17" font-weight="700" fill="#4C6178" text-anchor="start" letter-spacing="0.4">LOCAL EXECUTION</text>
+<text x="2602" y="338" font-family="DejaVu Sans,Arial,sans-serif" font-size="17" font-weight="700" fill="#4C6178" text-anchor="start" letter-spacing="0.4">OUTPUT / BOUNDARY</text>
+<rect x="79" y="350" width="3492" height="273" rx="18" fill="#FFFFFF" stroke="#DBE4EC" stroke-width="1.2"/>
+<rect x="79" y="350" width="9" height="273" rx="4" fill="#3179AB" stroke="#3179AB" stroke-width="0"/>
+<text x="105" y="390" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#3179AB" text-anchor="start" letter-spacing="0.35">01  ORDINARY CHAT + TEXT / VISION</text>
+<rect x="92" y="412" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="92" y="412" width="8" height="186" rx="3" fill="#3179AB" stroke="#3179AB" stroke-width="0"/>
+<text x="116" y="452" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Open WebUI</text>
+<text x="116" y="484" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#3179AB" text-anchor="start" letter-spacing="0">0.11.1, local chat interface</text>
+<text x="116" y="525" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">User chat, model selection,</text>
+<text x="116" y="553" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">owned image / PDF uploads</text>
+<path d="M596 503 L690 503" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="705" y="412" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="705" y="412" width="8" height="186" rx="3" fill="#3179AB" stroke="#3179AB" stroke-width="0"/>
+<text x="729" y="452" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Tool &amp; upload layer</text>
+<text x="729" y="484" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#3179AB" text-anchor="start" letter-spacing="0">WebUI owns tool approvals</text>
+<text x="729" y="525" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Native tool loop, attachment</text>
+<text x="729" y="553" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">filter and image validation</text>
+<path d="M1209 503 L1310 503" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1325" y="412" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1325" y="412" width="8" height="186" rx="3" fill="#3179AB" stroke="#3179AB" stroke-width="0"/>
+<text x="1349" y="452" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Local gateway</text>
+<text x="1349" y="484" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#3179AB" text-anchor="start" letter-spacing="0">gateway.py / http_api.py</text>
+<text x="1349" y="525" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">OpenAI-compatible /v1 API,</text>
+<text x="1349" y="553" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">routing and bounded context</text>
+<path d="M1829 503 L1930 503" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1945" y="412" width="530" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1945" y="412" width="8" height="186" rx="3" fill="#3179AB" stroke="#3179AB" stroke-width="0"/>
+<text x="1969" y="452" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Ollama inference</text>
+<text x="1969" y="484" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#3179AB" text-anchor="start" letter-spacing="0">Qwen3.5 coordinator 4B</text>
+<text x="1969" y="525" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Local text and supported vision;</text>
+<text x="1969" y="553" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">gateway checks real capabilities</text>
+<path d="M2479 503 L2575 503" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="2590" y="412" width="960" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="2590" y="412" width="8" height="186" rx="3" fill="#3179AB" stroke="#3179AB" stroke-width="0"/>
+<text x="2614" y="452" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Chat / outputs</text>
+<text x="2614" y="484" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#3179AB" text-anchor="start" letter-spacing="0">WebUI history and assets</text>
+<text x="2614" y="525" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">No cloud inference implicit;</text>
+<text x="2614" y="553" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">remote media is separately scoped</text>
+<rect x="79" y="639" width="3492" height="273" rx="18" fill="#F0F5FA" stroke="#DBE4EC" stroke-width="1.2"/>
+<rect x="79" y="639" width="9" height="273" rx="4" fill="#297E74" stroke="#297E74" stroke-width="0"/>
+<text x="105" y="679" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#297E74" text-anchor="start" letter-spacing="0.35">02  WORK AGENT + SPECIALIST HANDOFFS</text>
+<rect x="92" y="701" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="92" y="701" width="8" height="186" rx="3" fill="#297E74" stroke="#297E74" stroke-width="0"/>
+<text x="116" y="741" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">OpenCode Work Agent</text>
+<text x="116" y="773" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#297E74" text-anchor="start" letter-spacing="0">1.18.34, Plan / Build</text>
+<text x="116" y="814" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Separate browser UI on 4096;</text>
+<text x="116" y="842" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">project copy, native approvals</text>
+<path d="M596 792 L690 792" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="705" y="701" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="705" y="701" width="8" height="186" rx="3" fill="#297E74" stroke="#297E74" stroke-width="0"/>
+<text x="729" y="741" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Team policy plugin</text>
+<text x="729" y="773" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#297E74" text-anchor="start" letter-spacing="0">opencode-team.mjs</text>
+<text x="729" y="814" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">2 specialist attempts / turn;</text>
+<text x="729" y="842" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">coder project tools bounded</text>
+<path d="M1209 792 L1310 792" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1325" y="701" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1325" y="701" width="8" height="186" rx="3" fill="#297E74" stroke="#297E74" stroke-width="0"/>
+<text x="1349" y="741" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Same local gateway</text>
+<text x="1349" y="773" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#297E74" text-anchor="start" letter-spacing="0">127.0.0.1:8001/v1</text>
+<text x="1349" y="814" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Native tasks call local provider;</text>
+<text x="1349" y="842" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">resource mode applied server-side</text>
+<path d="M1829 792 L1930 792" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1945" y="701" width="530" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1945" y="701" width="8" height="186" rx="3" fill="#297E74" stroke="#297E74" stroke-width="0"/>
+<text x="1969" y="741" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Sequential model team</text>
+<text x="1969" y="773" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#297E74" text-anchor="start" letter-spacing="0">Qwen 4B / Qwen 9B / Gemma 12B</text>
+<text x="1969" y="814" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">4B coordinator; 9B analyst;</text>
+<text x="1969" y="842" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">12B coder; no parallel model swarm</text>
+<path d="M2479 792 L2575 792" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="2590" y="701" width="960" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="2590" y="701" width="8" height="186" rx="3" fill="#297E74" stroke="#297E74" stroke-width="0"/>
+<text x="2614" y="741" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Work project state</text>
+<text x="2614" y="773" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#297E74" text-anchor="start" letter-spacing="0">projects / .local-ai-handoffs</text>
+<text x="2614" y="814" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Scoped copies, diff and test data;</text>
+<text x="2614" y="842" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">handoff ledger remains plaintext</text>
+<rect x="79" y="928" width="3492" height="273" rx="18" fill="#FFFFFF" stroke="#DBE4EC" stroke-width="1.2"/>
+<rect x="79" y="928" width="9" height="273" rx="4" fill="#695DB0" stroke="#695DB0" stroke-width="0"/>
+<text x="105" y="968" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#695DB0" text-anchor="start" letter-spacing="0.35">03  IMAGES / VIDEO + SHARED MODEL MEMORY</text>
+<rect x="92" y="990" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="92" y="990" width="8" height="186" rx="3" fill="#695DB0" stroke="#695DB0" stroke-width="0"/>
+<text x="116" y="1030" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Chat or Work Agent</text>
+<text x="116" y="1062" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#695DB0" text-anchor="start" letter-spacing="0">/image /video / local_image</text>
+<text x="116" y="1103" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">OpenCode coordinator media tools;</text>
+<text x="116" y="1131" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">native prompts require approval</text>
+<path d="M596 1081 L690 1081" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="705" y="990" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="705" y="990" width="8" height="186" rx="3" fill="#695DB0" stroke="#695DB0" stroke-width="0"/>
+<text x="729" y="1030" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Gateway media routes</text>
+<text x="729" y="1062" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#695DB0" text-anchor="start" letter-spacing="0">Authenticated /image /video</text>
+<text x="729" y="1103" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Only configured workflows;</text>
+<text x="729" y="1131" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">no arbitrary checkpoint paths</text>
+<path d="M1209 1081 L1310 1081" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1325" y="990" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1325" y="990" width="8" height="186" rx="3" fill="#695DB0" stroke="#695DB0" stroke-width="0"/>
+<text x="1349" y="1030" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Serial model engine</text>
+<text x="1349" y="1062" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#695DB0" text-anchor="start" letter-spacing="0">model_engine.py</text>
+<text x="1349" y="1103" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Unload text before render;</text>
+<text x="1349" y="1131" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">exclusive resource ownership</text>
+<path d="M1829 1081 L1930 1081" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1945" y="990" width="530" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1945" y="990" width="8" height="186" rx="3" fill="#695DB0" stroke="#695DB0" stroke-width="0"/>
+<text x="1969" y="1030" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">ComfyUI on demand</text>
+<text x="1969" y="1062" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#695DB0" text-anchor="start" letter-spacing="0">SDXL Base / LTX-Video 2B</text>
+<text x="1969" y="1103" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Images in Normal or Max;</text>
+<text x="1969" y="1131" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">video only in Max</text>
+<path d="M2479 1081 L2575 1081" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="2590" y="990" width="960" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="2590" y="990" width="8" height="186" rx="3" fill="#695DB0" stroke="#695DB0" stroke-width="0"/>
+<text x="2614" y="1030" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Generated media</text>
+<text x="2614" y="1062" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#695DB0" text-anchor="start" letter-spacing="0">Local output + vault if set up</text>
+<text x="2614" y="1103" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Media jobs record status;</text>
+<text x="2614" y="1131" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">native visual QA still pending</text>
+<rect x="79" y="1217" width="3492" height="273" rx="18" fill="#F0F5FA" stroke="#DBE4EC" stroke-width="1.2"/>
+<rect x="79" y="1217" width="9" height="273" rx="4" fill="#B16A2D" stroke="#B16A2D" stroke-width="0"/>
+<text x="105" y="1257" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#B16A2D" text-anchor="start" letter-spacing="0.35">04  LIVE CONVERSATION + DISCORD VOICE</text>
+<rect x="92" y="1279" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="92" y="1279" width="8" height="186" rx="3" fill="#B16A2D" stroke="#B16A2D" stroke-width="0"/>
+<text x="116" y="1319" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Conversation or Discord</text>
+<text x="116" y="1351" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#B16A2D" text-anchor="start" letter-spacing="0">UI :8003 / private voice bot</text>
+<text x="116" y="1392" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Browser microphone / optional</text>
+<text x="116" y="1420" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Discord remote voice transport</text>
+<path d="M596 1370 L690 1370" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="705" y="1279" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="705" y="1279" width="8" height="186" rx="3" fill="#B16A2D" stroke="#B16A2D" stroke-width="0"/>
+<text x="729" y="1319" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Voice + session bridge</text>
+<text x="729" y="1351" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#B16A2D" text-anchor="start" letter-spacing="0">conversation.py / Discord adapter</text>
+<text x="729" y="1392" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Native OpenCode session;</text>
+<text x="729" y="1420" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">no replacement agent loop</text>
+<path d="M1209 1370 L1310 1370" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1325" y="1279" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1325" y="1279" width="8" height="186" rx="3" fill="#B16A2D" stroke="#B16A2D" stroke-width="0"/>
+<text x="1349" y="1319" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Gateway / coordinator</text>
+<text x="1349" y="1351" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#B16A2D" text-anchor="start" letter-spacing="0">4B speech-compatible profile</text>
+<text x="1349" y="1392" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Native Plan / Build approvals;</text>
+<text x="1349" y="1420" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">speech pauses on heavy jobs</text>
+<path d="M1829 1370 L1930 1370" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1945" y="1279" width="530" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1945" y="1279" width="8" height="186" rx="3" fill="#B16A2D" stroke="#B16A2D" stroke-width="0"/>
+<text x="1969" y="1319" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Audio model workers</text>
+<text x="1969" y="1351" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#B16A2D" text-anchor="start" letter-spacing="0">Silero / Parakeet / Qwen3-TTS</text>
+<text x="1969" y="1392" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">CPU VAD; MLX speech-to-text;</text>
+<text x="1969" y="1420" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">MLX text-to-speech</text>
+<path d="M2479 1370 L2575 1370" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="2590" y="1279" width="960" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="2590" y="1279" width="8" height="186" rx="3" fill="#B16A2D" stroke="#B16A2D" stroke-width="0"/>
+<text x="2614" y="1319" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Local call records</text>
+<text x="2614" y="1351" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#B16A2D" text-anchor="start" letter-spacing="0">conversation.jsonl + media</text>
+<text x="2614" y="1392" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Local transcripts plaintext;</text>
+<text x="2614" y="1420" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Discord separately carries audio/text</text>
+<rect x="79" y="1506" width="3492" height="273" rx="18" fill="#FFFFFF" stroke="#DBE4EC" stroke-width="1.2"/>
+<rect x="79" y="1506" width="9" height="273" rx="4" fill="#397F9E" stroke="#397F9E" stroke-width="0"/>
+<text x="105" y="1546" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#397F9E" text-anchor="start" letter-spacing="0.35">05  WEB SEARCH + PLAYWRIGHT UNDER VPN</text>
+<rect x="92" y="1568" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="92" y="1568" width="8" height="186" rx="3" fill="#397F9E" stroke="#397F9E" stroke-width="0"/>
+<text x="116" y="1608" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Chat / Work Agent</text>
+<text x="116" y="1640" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#397F9E" text-anchor="start" letter-spacing="0">/search /read / browser MCP</text>
+<text x="116" y="1681" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">WebUI OpenAPI or separate</text>
+<text x="116" y="1709" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">OpenCode browser connection</text>
+<path d="M596 1659 L690 1659" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="705" y="1568" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="705" y="1568" width="8" height="186" rx="3" fill="#397F9E" stroke="#397F9E" stroke-width="0"/>
+<text x="729" y="1608" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Retrieval &amp; MCP tools</text>
+<text x="729" y="1640" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#397F9E" text-anchor="start" letter-spacing="0">web_client.py / browser_setup.py</text>
+<text x="729" y="1681" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">SearXNG / reader; dynamic pages</text>
+<text x="729" y="1709" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">use Playwright Chromium MCP</text>
+<path d="M1209 1659 L1310 1659" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1325" y="1568" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1325" y="1568" width="8" height="186" rx="3" fill="#397F9E" stroke="#397F9E" stroke-width="0"/>
+<text x="1349" y="1608" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">VPN network boundary</text>
+<text x="1349" y="1640" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#397F9E" text-anchor="start" letter-spacing="0">Docker + Gluetun + Proton</text>
+<text x="1349" y="1681" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">SearXNG, reader and browser</text>
+<text x="1349" y="1709" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">share tunnel namespace</text>
+<path d="M1829 1659 L1930 1659" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1945" y="1568" width="530" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1945" y="1568" width="8" height="186" rx="3" fill="#397F9E" stroke="#397F9E" stroke-width="0"/>
+<text x="1969" y="1608" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Web &amp; browser work</text>
+<text x="1969" y="1640" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#397F9E" text-anchor="start" letter-spacing="0">Search, read, navigate</text>
+<text x="1969" y="1681" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Headless Chromium, not Safari;</text>
+<text x="1969" y="1709" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">no host-side fallback</text>
+<path d="M2479 1659 L2575 1659" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="2590" y="1568" width="960" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="2590" y="1568" width="8" height="186" rx="3" fill="#397F9E" stroke="#397F9E" stroke-width="0"/>
+<text x="2614" y="1608" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Local browser state</text>
+<text x="2614" y="1640" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#397F9E" text-anchor="start" letter-spacing="0">browser-profile / outputs</text>
+<text x="2614" y="1681" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Persistent cookies and files;</text>
+<text x="2614" y="1709" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">VPN exit/drop tests pending</text>
+<rect x="79" y="1795" width="3492" height="273" rx="18" fill="#F0F5FA" stroke="#DBE4EC" stroke-width="1.2"/>
+<rect x="79" y="1795" width="9" height="273" rx="4" fill="#846C3F" stroke="#846C3F" stroke-width="0"/>
+<text x="105" y="1835" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#846C3F" text-anchor="start" letter-spacing="0.35">06  OFFICE DOCUMENTS + PDF/OCR + TRANSFERS</text>
+<rect x="92" y="1857" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="92" y="1857" width="8" height="186" rx="3" fill="#846C3F" stroke="#846C3F" stroke-width="0"/>
+<text x="116" y="1897" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Project files / uploads</text>
+<text x="116" y="1929" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#846C3F" text-anchor="start" letter-spacing="0">Active OpenCode project copy</text>
+<text x="116" y="1970" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Imported chat/browser/media files</text>
+<text x="116" y="1998" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">must use explicit transfer</text>
+<path d="M596 1948 L690 1948" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="705" y="1857" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="705" y="1857" width="8" height="186" rx="3" fill="#846C3F" stroke="#846C3F" stroke-width="0"/>
+<text x="729" y="1897" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">MCP document adapters</text>
+<text x="729" y="1929" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#846C3F" text-anchor="start" letter-spacing="0">office_mcp.py / pdf_mcp.py</text>
+<text x="729" y="1970" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Native Apple PDFKit / Vision OCR;</text>
+<text x="729" y="1998" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">sandboxed local Office relay</text>
+<path d="M1209 1948 L1310 1948" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1325" y="1857" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1325" y="1857" width="8" height="186" rx="3" fill="#846C3F" stroke="#846C3F" stroke-width="0"/>
+<text x="1349" y="1897" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Local document tools</text>
+<text x="1349" y="1929" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#846C3F" text-anchor="start" letter-spacing="0">AIOffice 1.27.2</text>
+<text x="1349" y="1970" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">DOCX / XLSX / PPTX;</text>
+<text x="1349" y="1998" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">no network for Office child</text>
+<path d="M1829 1948 L1930 1948" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1945" y="1857" width="530" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1945" y="1857" width="8" height="186" rx="3" fill="#846C3F" stroke="#846C3F" stroke-width="0"/>
+<text x="1969" y="1897" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Project-only outputs</text>
+<text x="1969" y="1929" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#846C3F" text-anchor="start" letter-spacing="0">work-agent/projects/&lt;id&gt;</text>
+<text x="1969" y="1970" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Plan reads; Build asks for writes;</text>
+<text x="1969" y="1998" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">source originals not overwritten</text>
+<path d="M2479 1948 L2575 1948" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="2590" y="1857" width="960" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="2590" y="1857" width="8" height="186" rx="3" fill="#846C3F" stroke="#846C3F" stroke-width="0"/>
+<text x="2614" y="1897" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Approved vault export</text>
+<text x="2614" y="1929" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#846C3F" text-anchor="start" letter-spacing="0">Cryptomator / iCloud Drive</text>
+<text x="2614" y="1970" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Manual unlock, mount check;</text>
+<text x="2614" y="1998" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">explicit plaintext import/export</text>
+<rect x="79" y="2084" width="3492" height="273" rx="18" fill="#FFFFFF" stroke="#DBE4EC" stroke-width="1.2"/>
+<rect x="79" y="2084" width="9" height="273" rx="4" fill="#A54E59" stroke="#A54E59" stroke-width="0"/>
+<text x="105" y="2124" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#A54E59" text-anchor="start" letter-spacing="0.35">07  SCOPED MAC DESKTOP + EXTERNAL HELPER</text>
+<rect x="92" y="2146" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="92" y="2146" width="8" height="186" rx="3" fill="#A54E59" stroke="#A54E59" stroke-width="0"/>
+<text x="116" y="2186" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Scoped Work Agent</text>
+<text x="116" y="2218" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#A54E59" text-anchor="start" letter-spacing="0">Optional restricted mode</text>
+<text x="116" y="2259" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Ordinary effectful tools and</text>
+<text x="116" y="2287" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">specialist routes disabled</text>
+<path d="M596 2237 L690 2237" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="705" y="2146" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="705" y="2146" width="8" height="186" rx="3" fill="#A54E59" stroke="#A54E59" stroke-width="0"/>
+<text x="729" y="2186" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Independent guard</text>
+<text x="729" y="2218" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#A54E59" text-anchor="start" letter-spacing="0">control_policy.py + hook</text>
+<text x="729" y="2259" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Session bounds, stop latch,</text>
+<text x="729" y="2287" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">tool allowlist / no raw browser</text>
+<path d="M1209 2237 L1310 2237" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1325" y="2146" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1325" y="2146" width="8" height="186" rx="3" fill="#A54E59" stroke="#A54E59" stroke-width="0"/>
+<text x="1349" y="2186" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Native local approval</text>
+<text x="1349" y="2218" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#A54E59" text-anchor="start" letter-spacing="0">Exact action or outgoing prompt</text>
+<text x="1349" y="2259" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Fixed AppleScript arguments;</text>
+<text x="1349" y="2287" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">no arbitrary keystrokes / clicks</text>
+<path d="M1829 2237 L1930 2237" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1945" y="2146" width="530" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1945" y="2146" width="8" height="186" rx="3" fill="#A54E59" stroke="#A54E59" stroke-width="0"/>
+<text x="1969" y="2186" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Two narrow adapters</text>
+<text x="1969" y="2218" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#A54E59" text-anchor="start" letter-spacing="0">Finder / Calculator | 8 fixed Qs</text>
+<text x="1969" y="2259" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">DeepSeek only via existing VPN</text>
+<text x="1969" y="2287" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">browser, subject to permission</text>
+<path d="M2479 2237 L2575 2237" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="2590" y="2146" width="960" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="2590" y="2146" width="8" height="186" rx="3" fill="#A54E59" stroke="#A54E59" stroke-width="0"/>
+<text x="2614" y="2186" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Minimal local audit</text>
+<text x="2614" y="2218" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#A54E59" text-anchor="start" letter-spacing="0">Action / time / result only</text>
+<text x="2614" y="2259" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">No prompts, paths or responses;</text>
+<text x="2614" y="2287" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Mac/provider acceptance pending</text>
+<rect x="79" y="2373" width="3492" height="273" rx="18" fill="#F0F5FA" stroke="#DBE4EC" stroke-width="1.2"/>
+<rect x="79" y="2373" width="9" height="273" rx="4" fill="#6A7284" stroke="#6A7284" stroke-width="0"/>
+<text x="105" y="2413" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#6A7284" text-anchor="start" letter-spacing="0.35">08  DEPLOYMENT / REMOTE / DATA GOVERNANCE</text>
+<rect x="92" y="2435" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="92" y="2435" width="8" height="186" rx="3" fill="#6A7284" stroke="#6A7284" stroke-width="0"/>
+<text x="116" y="2475" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Single published release</text>
+<text x="116" y="2507" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#6A7284" text-anchor="start" letter-spacing="0">main + automated ZIP</text>
+<text x="116" y="2548" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">One installer, release manifest;</text>
+<text x="116" y="2576" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">retired branches are history</text>
+<path d="M596 2526 L690 2526" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="705" y="2435" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="705" y="2435" width="8" height="186" rx="3" fill="#6A7284" stroke="#6A7284" stroke-width="0"/>
+<text x="729" y="2475" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Runtime supervisor</text>
+<text x="729" y="2507" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#6A7284" text-anchor="start" letter-spacing="0">runtime.py + launchd</text>
+<text x="729" y="2548" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Ollama / gateway / WebUI;</text>
+<text x="729" y="2576" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">optional login &amp; text schedules</text>
+<path d="M1209 2526 L1310 2526" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1325" y="2435" width="500" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1325" y="2435" width="8" height="186" rx="3" fill="#6A7284" stroke="#6A7284" stroke-width="0"/>
+<text x="1349" y="2475" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Mode + admission policy</text>
+<text x="1349" y="2507" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#6A7284" text-anchor="start" letter-spacing="0">Gaming / Normal / Max</text>
+<text x="1349" y="2548" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Queue, loads, model eligibility;</text>
+<text x="1349" y="2576" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">scheduled tasks inference-only</text>
+<path d="M1829 2526 L1930 2526" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="1945" y="2435" width="530" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="1945" y="2435" width="8" height="186" rx="3" fill="#6A7284" stroke="#6A7284" stroke-width="0"/>
+<text x="1969" y="2475" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Scoped integrations</text>
+<text x="1969" y="2507" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#6A7284" text-anchor="start" letter-spacing="0">Tailscale / GitHub MCP / vault</text>
+<text x="1969" y="2548" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Private chat/media, GitHub tool</text>
+<text x="1969" y="2576" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">and mount-checked file boundary</text>
+<path d="M2479 2526 L2575 2526" fill="none" stroke="#7B8EA3" stroke-width="3.4" marker-end="url(#arrow)"/>
+<rect x="2590" y="2435" width="960" height="186" rx="14" fill="#FFFFFF" stroke="#C4D2E0" stroke-width="1.6"/>
+<rect x="2590" y="2435" width="8" height="186" rx="3" fill="#6A7284" stroke="#6A7284" stroke-width="0"/>
+<text x="2614" y="2475" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">Operating conditions</text>
+<text x="2614" y="2507" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="600" fill="#6A7284" text-anchor="start" letter-spacing="0">Mac mini / 32 GB unified</text>
+<text x="2614" y="2548" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Source code integrated; native</text>
+<text x="2614" y="2576" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Mac acceptance remains outstanding</text>
+<rect x="82" y="2690" width="3486" height="249" rx="16" fill="#E9EFF5" stroke="#C8D5E2" stroke-width="1.5"/>
+<text x="110" y="2734" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" fill="#102136" text-anchor="start" letter-spacing="0">WHAT THE MAP ASSERTS</text>
+<text x="114" y="2775" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="700" fill="#287957" text-anchor="start" letter-spacing="0">REPOSITORY IMPLEMENTATION</text>
+<text x="570" y="2775" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Modules and interfaces described above exist in the inspected main release; connections follow its implementation guides.</text>
+<text x="114" y="2825" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="700" fill="#266FA7" text-anchor="start" letter-spacing="0">LOCAL ACTIVATION REQUIRED</text>
+<text x="570" y="2825" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">VPN browser, desktop, Office, vault, Discord, remote access and external helper retain explicit setup or approvals.</text>
+<text x="114" y="2875" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="700" fill="#A87928" text-anchor="start" letter-spacing="0">NATIVE CHECKS PENDING</text>
+<text x="570" y="2875" font-family="DejaVu Sans,Arial,sans-serif" font-size="19" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">Real Mac GPU/memory, Apple Events, Playwright/VPN drop, provider permission/selectors and voice remain hardware checks.</text>
+<text x="90" y="2941" font-family="DejaVu Sans,Arial,sans-serif" font-size="17" font-weight="400" fill="#4C6178" text-anchor="start" letter-spacing="0">SOURCE: github.com/MisterDataScience/local-ai-environment-  |  README.md; docs/GATEWAY-STRUCTURE.md; WORK-AGENT.md; RELEASE-VALIDATION.md; SCOPED-AUTOMATION.md; feature-specific docs</text>
+</svg>
