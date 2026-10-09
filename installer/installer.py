@@ -37,7 +37,7 @@ GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "tool_protocol.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py", "context_policy.py", "model_team.py", "speech.py", "speech_worker.py")
 GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_worker.py')
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
-              'office_setup.py', 'office_mcp.py', 'office_check.py',
+              'office_setup.py', 'office_mcp.py', 'office_check.py', 'browser_agent.py', 'browser_setup.py',
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
@@ -434,6 +434,11 @@ def make_launcher(root):
         web_command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
                               "\nexec .venv/bin/python web_access.py --root " + shlex.quote(str(root)) + argument + "\n")
         web_command.chmod(0o755)
+    for label, argument in (("Enable Browser", ""), ("Disable Browser", " --disable"), ("Check Browser", " --check")):
+        helper = root / (label + ".command")
+        helper.write_text("#!/bin/bash\\nset -e\\ncd " + shlex.quote(str(root / "control")) +
+                          "\\nexec .venv/bin/python browser_setup.py --root " + shlex.quote(str(root)) + argument + "\\n")
+        helper.chmod(0o755)
     for label, argument in (("Enable Remote Access", ""), ("Disable Remote Access", " --disable")):
         remote_command = root / (label + ".command")
         remote_command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
