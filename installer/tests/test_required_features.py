@@ -17,6 +17,7 @@ from file_transfer import transfer
 from pdf_reader import read_pdf
 from pdf_mcp import dispatch as pdf_dispatch
 from vault_transfer import transfer_vault
+from transfer_mcp import dispatch as file_dispatch
 from unittest.mock import patch
 from contextlib import contextmanager
 import os
@@ -78,6 +79,19 @@ class RequiredFeaturesTests(unittest.TestCase):
             denied = pdf_dispatch({"id": 3, "method": "tools/call", "params": {
                 "name": "read_pdf", "arguments": {"path": "../secret.pdf"}}}, root)
             self.assertEqual(denied["error"]["code"], -32602)
+
+    def test_file_transfer_mcp_requires_valid_arguments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "work-agent/projects" / ("b" * 32)
+            project.mkdir(parents=True)
+            info = file_dispatch({"id": 11, "method": "initialize"}, root, project)
+            self.assertEqual(info["result"]["serverInfo"]["name"], "local-ai-project-transfers")
+            listing = file_dispatch({"id": 12, "method": "tools/list"}, root, project)
+            self.assertEqual(listing["result"]["tools"][0]["name"], "transfer_file")
+            bad = file_dispatch({"id": 13, "method": "tools/call", "params": {
+                "name": "transfer_file", "arguments": {"direction": "shell", "path": "x"}}}, root, project)
+            self.assertEqual(bad["error"]["code"], -32602)
 
     def test_explicit_vault_transfer_and_no_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
