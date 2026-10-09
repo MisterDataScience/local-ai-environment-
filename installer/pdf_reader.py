@@ -20,7 +20,7 @@ let path = CommandLine.arguments[1]
 let useOCR = CommandLine.arguments[2] == "ocr"
 let limit = Int(CommandLine.arguments[3]) ?? 12
 guard let pdf = PDFDocument(url: URL(fileURLWithPath: path)) else {
-  fputs("Cannot open PDF or PDF requires a password.\\n", stderr); exit(2)
+  fputs("Cannot open PDF or PDF requires a password.\n", stderr); exit(2)
 }
 let count = pdf.pageCount
 var pages: [[String: Any]] = []
@@ -48,7 +48,7 @@ for n in 0..<min(count, limit) {
       let handler = VNImageRequestHandler(cgImage: cg)
       do {
         try handler.perform([request])
-        text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\\n")
+        text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
       } catch { }
     }
   }
