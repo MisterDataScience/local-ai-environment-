@@ -24,3 +24,33 @@ jobs:
       - run: python -m unittest discover -s installer/tests -p "test_required_features.py" -v
       - run: python -m unittest discover -s installer/payload/tests -p "test_context_protocol.py" -v
 
+
+  apple-native-pdf:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --disable-pip-version-check reportlab Pillow
+      - name: Create known local text PDF and extract with PDFKit
+        run: |
+          mkdir -p "$RUNNER_TEMP/pdfproject/Inbox"
+          PDF_PATH="$RUNNER_TEMP/pdfproject/Inbox/sample.pdf" python - <<'PY'
+          import os
+          from reportlab.pdfgen import canvas
+          c = canvas.Canvas(os.environ["PDF_PATH"])
+          c.drawString(72, 740, "Local AI PDFKit verified text extraction")
+          c.showPage()
+          c.save()
+          PY
+          python installer/pdf_reader.py Inbox/sample.pdf --root "$RUNNER_TEMP/pdfproject" > "$RUNNER_TEMP/extracted.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "extracted.json").read_text())
+          assert result["page_count"] == 1, result
+          assert "PDFKit verified text extraction" in result["pages"][0]["text"], result
+          print("PDFKit extraction verified on macOS runner.")
+          PY
