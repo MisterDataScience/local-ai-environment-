@@ -50,7 +50,7 @@ class VisionGatewayTests(unittest.TestCase):
                 posted = [args for route, args in seen if route == "/api/chat"][0]
                 self.assertEqual(len(posted["messages"][0]["images"]), 1)
                 self.assertEqual(posted["messages"][0]["content"], "What is in this picture?")
-                self.assertEqual(base64.b64decode(posted["messages"][0]["images"][0])[:2], b"\\xff\\xd8")
+                self.assertEqual(base64.b64decode(posted["messages"][0]["images"][0])[:2], bytes.fromhex("ffd8"))
             finally:
                 engine.executor.shutdown(wait=True)
 
