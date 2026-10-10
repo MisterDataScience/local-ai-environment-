@@ -16,7 +16,7 @@ import threading
 import uuid
 import zipfile
 
-from common import http, stop_process, port_open
+from common import GLOBAL_BEHAVIOUR, http, stop_process, port_open
 
 VERSION = '1.18.34'
 URL = f'https://github.com/anomalyco/opencode/releases/download/v{VERSION}/opencode-darwin-arm64.zip'
@@ -88,6 +88,16 @@ def copy_project(source, destination, max_bytes=256*1024*1024):
         raise
 
 
+def _apply_global_behaviour(settings):
+    """Prepend one short policy to configured agents, without changing tools."""
+    for agent in settings['agent'].values():
+        if agent.get('disable'):
+            continue
+        prompt = agent.get('prompt', '')
+        agent['prompt'] = GLOBAL_BEHAVIOUR + ('\n' + prompt if prompt else '')
+    return settings
+
+
 def configuration(config, identifiers, mode='normal', root=None, status=None):
     sys.path.insert(0, str(Path(__file__).resolve().parent / 'payload'))
     from text_models import configured_text_models, output_ceiling
@@ -119,7 +129,7 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
             'agent': {'build': {'steps': 12}, 'plan': {'steps': 8}}}
     roles = team_roles(config, models)
     if not roles:
-        return settings
+        return _apply_global_behaviour(settings)
     if root is None:
         raise ValueError('Model team requires an installed policy plugin and ledger')
     plugin = root / 'control/opencode-team.mjs'
@@ -227,7 +237,7 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                     'template': '$ARGUMENTS'},
         'document': {'description': 'Read supplied text with the 32K 4B profile', 'agent': 'document',
                      'subtask': False, 'template': '$ARGUMENTS'}}
-    return settings
+    return _apply_global_behaviour(settings)
 
 
 def environment(root, config, settings):
