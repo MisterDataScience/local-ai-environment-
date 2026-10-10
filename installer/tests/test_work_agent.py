@@ -28,6 +28,23 @@ class WorkAgentTests(unittest.TestCase):
         self.assertFalse(cfg['autoupdate'])
         self.assertEqual(cfg['share'], 'disabled')
 
+    def test_global_behaviour_is_passive_and_does_not_register_new_tools(self):
+        from common import GLOBAL_BEHAVIOUR
+        cfg = w.configuration({'text_models': DEFAULT_TEXT_MODELS}, ['local-ai'])
+        for name in ('plan', 'build'):
+            self.assertEqual(cfg['agent'][name]['prompt'], GLOBAL_BEHAVIOUR)
+        self.assertIn('answer simple requests directly', GLOBAL_BEHAVIOUR)
+        self.assertIn('Discover additional capabilities only when needed', GLOBAL_BEHAVIOUR)
+        self.assertFalse(cfg['tools']['websearch'])
+        self.assertFalse(cfg['tools']['webfetch'])
+        self.assertFalse(cfg['tools']['task'])
+
+    def test_webui_inherits_same_behaviour_without_forcing_account_override(self):
+        from common import GLOBAL_BEHAVIOUR, webui_environment
+        env = webui_environment(Path('/tmp/example'), {'api_key': 'key', 'webui_secret': 'secret'})
+        self.assertEqual(json.loads(env['DEFAULT_INTERFACE_SETTINGS']), {'system': GLOBAL_BEHAVIOUR})
+        self.assertEqual(json.loads(env['DEFAULT_MODEL_PARAMS'])['function_calling'], 'native')
+
     def test_output_advertisement_matches_mode_and_custom_context(self):
         import copy
         for mode, expected in [('normal', 4096), ('max', 8192)]:
