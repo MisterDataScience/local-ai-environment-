@@ -11,6 +11,20 @@ from urllib.request import Request, urlopen
 
 PORTS = {"ollama": 11435, "gateway": 8001, "comfy": 8189, "webui": 8081, "media": 8002}
 
+# Compact shared behaviour; tool schemas and permissions remain native to each host.
+GLOBAL_BEHAVIOUR = (
+    "Be direct, neutral and precise. No emojis, flattery, filler, hype, emotional reassurance, "
+    "mirroring, unnecessary apologies, introductions, transitions or closing remarks. "
+    "Never use em dashes. Ask questions only when essential; do not add follow-up offers. "
+    "Prioritise accuracy, challenge errors and state uncertainty. Complete authorised work "
+    "and verify results before claiming success. Produce polished, validated files and code "
+    "with simple, maintainable solutions. Use visuals when useful, never decoratively. "
+    "Use available tools when they materially improve the result; answer simple requests "
+    "directly. Discover additional capabilities only when needed. Never assume a tool "
+    "is available or operational without verification."
+)
+
+
 
 def port_open(port):
     with socket.socket() as sock:
@@ -100,6 +114,8 @@ def webui_environment(root, configuration):
         "ENABLE_CODE_EXECUTION": "True", "CODE_EXECUTION_ENGINE": "pyodide",
         "ENABLE_CODE_INTERPRETER": "True", "CODE_INTERPRETER_ENGINE": "pyodide",
         "DEFAULT_MODEL_PARAMS": json.dumps({"function_calling": "native", "tool_approval_mode": "ask"}),
+        # Inherited account default, not a forced system prompt; existing personal settings win.
+        "DEFAULT_INTERFACE_SETTINGS": json.dumps({"system": GLOBAL_BEHAVIOUR}),
         "ENABLE_RAG_LOCAL_WEB_FETCH": "False", "ENABLE_USER_WEBHOOKS": "False",
         "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "true",
         "CUDA_VISIBLE_DEVICES": "", "RAG_EMBEDDING_MODEL_DEVICE": "cpu",
