@@ -73,6 +73,12 @@ class TeamTests(unittest.TestCase):
             (root / 'control/essay-edit-prompt.txt').write_text('Essay prompt')
             (root / 'control/reverse-scaffold-prompt.txt').write_text('Scaffold prompt')
             settings = work_agent.configuration(cfg, cfg['text_models'], root=root)
+            from common import GLOBAL_BEHAVIOUR
+            for name in ('plan', 'build', 'analyst', 'coder', 'document'):
+                self.assertTrue(settings['agent'][name]['prompt'].startswith(GLOBAL_BEHAVIOUR + '\n'))
+            self.assertTrue(settings['agent']['general']['disable'])
+            self.assertNotIn('prompt', settings['agent']['general'])
+            self.assertTrue(settings['agent']['explore']['disable'])
             self.assertEqual(settings['agent']['build']['permission']['task'], 'deny')
             self.assertFalse(settings['tools']['task'])
             self.assertEqual(settings['agent']['analyst']['permission'], {'*': 'deny'})
