@@ -6,6 +6,20 @@
 
 # Open WebUI owns tools; the gateway owns model memory
 
+## Minimal global behaviour and tool awareness
+
+The launcher provides one compact shared behaviour policy to Open WebUI and OpenCode.
+Open WebUI uses `DEFAULT_INTERFACE_SETTINGS.system` so accounts that have not set
+personal system instructions inherit it; existing personal and model-specific
+system prompts take precedence. OpenCode prepends the same policy to active agent
+prompts. Open WebUI and OpenCode continue to advertise their own allowed native
+tool schemas. Simple questions need no tool call; additional capabilities are
+investigated only when relevant. There is no capability-discovery agent, always-on
+search, additional process or extra dependency. These defaults take effect when
+services are relaunched from the updated installer; existing account overrides
+are deliberately preserved. Tool permissions and approval rules are unchanged.
+
+
 Updated 2026-10-05 UTC (2026-10-06 in London). Open WebUI remains pinned to 0.11.1.
 This revision replaces the private agent loop with a tool-message compatibility
 bridge. It does not claim native Mac or browser acceptance has passed.
