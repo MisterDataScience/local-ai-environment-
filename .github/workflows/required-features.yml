@@ -1,4 +1,4 @@
-name: Integrated release checks
+name: LOCAL AI integrated release checks
 
 on:
   push:
