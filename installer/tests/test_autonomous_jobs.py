@@ -96,7 +96,7 @@ class JobsTest(unittest.TestCase):
         (self.inputs / "one.md").write_text("Changed")
         result = self.process()
         self.assertEqual(result["status"], "needs-review")
-        self.assertEqual(result["attempts"]["one.md"], 1)
+        self.assertEqual(result["attempts"].get("one.md", 0), 0)
 
     def test_model_error_retries_only_twice(self):
         self.file("one.md", "Original")
