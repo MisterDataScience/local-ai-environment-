@@ -6,9 +6,9 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-09-integrated-1'
+RELEASE = '2026-10-11-bounded-jobs-1'
 PREFIX = 'mac-local-ai-installer/'
-STAMP = (2026, 10, 9, 0, 0, 0)
+STAMP = (2026, 10, 11, 0, 0, 0)
 
 
 def contents(root):
