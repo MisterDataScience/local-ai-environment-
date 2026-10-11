@@ -131,6 +131,13 @@ def webui_environment(root, configuration):
             "key": configuration["api_key"], "config": {"enable": True},
             "info": {"id": "local-ai-vpn", "name": "Local AI VPN retrieval", "description": "VPN search and page reading"}}])
     connections = json.loads(env.get('TOOL_SERVER_CONNECTIONS', '[]'))
+    # Small read-only index. Deliberately not an always-active chat tool.
+    connections.append({'type': 'openapi', 'url': 'http://127.0.0.1:8001',
+        'spec_type': 'url', 'spec': '', 'path': 'capabilities/openapi.json',
+        'auth_type': 'bearer', 'key': configuration['api_key'], 'config': {'enable': True},
+        'info': {'id': 'local-ai-capabilities', 'name': 'LOCAL AI capabilities',
+                 'description': 'Read-only, on-demand feature availability index'}})
+
     connections.append({'type': 'openapi', 'url': 'http://127.0.0.1:8001',
         'spec_type': 'url', 'spec': '', 'path': 'files/openapi.json',
         'auth_type': 'bearer', 'key': configuration['api_key'], 'config': {'enable': True},
