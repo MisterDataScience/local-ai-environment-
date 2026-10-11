@@ -45,6 +45,16 @@ regressions use a real loopback server. Other inference/provider responses are
 synthetic where required by the existing suites. No external prompt or native
 desktop action was submitted during this release's authoring verification.
 
+## Optional finite autonomous jobs
+
+The new unattended document-batch worker is separate from the interactive
+OpenCode delegation policy and existing text-only recurring scheduler. It
+checkpoints an explicitly authorised finite inventory, makes tool-free local
+model calls and creates only job-owned Markdown files. Host tests cover its
+state machine and recovery logic. Native launchd behavior, interruption timing,
+model output quality and memory pressure remain unverified on the owner's Mac.
+See [AUTONOMOUS-JOBS.md](AUTONOMOUS-JOBS.md).
+
 ## Native checks still required
 
 The optional conversation browser UI test was not run successfully because this
