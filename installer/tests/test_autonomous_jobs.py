@@ -40,7 +40,7 @@ class JobsTest(unittest.TestCase):
         jobs.atomic_json(self.folder / "job.json", self.job)
         jobs.atomic_json(self.folder / "state.json", self.state)
 
-    def run(self, model=None):
+    def process(self, model=None):
         model = model or (lambda config, job, item, content: b"## Verified\n" + content.encode() + b"\n")
         config = {"api_key": "test-only", "text_models": {"local-ai": {}}}
         with patch.object(jobs, "allowed_mode", return_value=config), patch.object(jobs, "inference", side_effect=model):
@@ -50,13 +50,13 @@ class JobsTest(unittest.TestCase):
         for i in range(10):
             self.file(f"item-{i}.md", f"Content {i}")
         self.save()
-        first = self.run()
+        first = self.process()
         self.assertEqual(first["status"], "pending")
         self.assertEqual(len(first["complete"]), 8)
-        second = self.run()
+        second = self.process()
         self.assertEqual(second["status"], "complete")
         self.assertEqual(len(second["complete"]), 10)
-        self.assertEqual(self.run()["status"], "complete")
+        self.assertEqual(self.process()["status"], "complete")
 
     def test_prepared_result_recovers_without_second_model_call(self):
         self.file("one.md", "Initial")
@@ -74,7 +74,7 @@ class JobsTest(unittest.TestCase):
         self.save()
         output = self.folder / "outputs" / jobs.output_name(0, self.items[0])
         jobs.publish(output, b"Unknown\n")
-        result = self.run()
+        result = self.process()
         self.assertEqual(result["status"], "needs-review")
         self.assertEqual(result["complete"], {})
 
@@ -83,18 +83,18 @@ class JobsTest(unittest.TestCase):
         self.assertEqual(self.run_after_save(), "complete")
         output = self.folder / "outputs" / jobs.output_name(0, self.items[0])
         output.write_text("Modified\n")
-        result = self.run()
+        result = self.process()
         self.assertEqual(result["status"], "needs-review")
 
     def run_after_save(self):
         self.save()
-        return self.run()["status"]
+        return self.process()["status"]
 
     def test_changed_input_prevents_inference(self):
         self.file("one.md", "Original")
         self.save()
         (self.inputs / "one.md").write_text("Changed")
-        result = self.run()
+        result = self.process()
         self.assertEqual(result["status"], "needs-review")
         self.assertEqual(result["attempts"]["one.md"], 1)
 
@@ -103,18 +103,18 @@ class JobsTest(unittest.TestCase):
         self.save()
         def failure(*args):
             raise RuntimeError("inference unavailable")
-        first = self.run(failure)
-        second = self.run(failure)
+        first = self.process(failure)
+        second = self.process(failure)
         self.assertEqual(first["status"], "pending")
         self.assertEqual(second["status"], "needs-review")
         self.assertEqual(second["attempts"]["one.md"], 2)
-        self.assertEqual(self.run()["status"], "needs-review")
+        self.assertEqual(self.process()["status"], "needs-review")
 
     def test_stop_marker_prevents_work(self):
         self.file("one.md", "Original")
         self.save()
         (self.folder / "STOP").touch()
-        result = self.run()
+        result = self.process()
         self.assertEqual(result["complete"], {})
 
     def test_symlinks_and_hardlinks_are_rejected(self):
