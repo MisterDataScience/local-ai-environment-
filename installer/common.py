@@ -166,6 +166,15 @@ def webui_environment(root, configuration):
         env['ENABLE_CODE_INTERPRETER'] = 'False'
     if connections:
         env['TOOL_SERVER_CONNECTIONS'] = json.dumps(connections)
+        # Static, bounded capability awareness without advertising each tool schema.
+        names = [item['info']['name'] for item in connections]
+        guidance = (' Registered chat integrations: ' + ', '.join(names) +
+                    '. Tools are callable only when selected and permitted in this chat. '
+                    'Use capability discovery only for relevant missing capabilities.')
+    else:
+        guidance = (' No external chat integrations are available in this mode. '
+                    'Do not claim access to unavailable tools.')
+    env['DEFAULT_INTERFACE_SETTINGS'] = json.dumps({'system': GLOBAL_BEHAVIOUR + guidance})
     return env
 
 
