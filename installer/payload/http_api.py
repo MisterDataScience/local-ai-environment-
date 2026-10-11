@@ -12,6 +12,7 @@ import uuid
 import queue
 from token_stream import Stream
 from web_tools_api import specification, execute as retrieve_tool
+from capability_discovery import specification as discovery_specification, discover as discover_local_capabilities
 import vault_tools
 import vault_media
 import resource_modes
@@ -151,6 +152,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(200, vault_tools.specification())
         if path == "/tools/openapi.json":
             return self.json_response(200, specification())
+        if path == "/capabilities/openapi.json":
+            return self.json_response(200, discovery_specification())
         if path == '/files/openapi.json':
             from file_workflows import specification as file_specification
             return self.json_response(200, file_specification())
@@ -233,6 +236,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json_response(200, result)
             except (ValueError, RuntimeError, OSError) as error:
                 return self.json_response(409, {'error': str(error)})
+        if path == "/capabilities/discover_local_capabilities":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 512:
+                    self.close_connection = True
+                    raise ValueError("Invalid discovery request size")
+                arguments = json.loads(self.rfile.read(length))
+                return self.json_response(200, discover_local_capabilities(self.server.engine.config, arguments))
+            except (ValueError, TypeError) as error:
+                return self.json_response(400, {"error": str(error)[:200]})
         if path in {"/tools/vpn_search_web", "/tools/vpn_read_page", "/tools/vpn_reverse_image"}:
             try:
                 length = int(self.headers.get("Content-Length", "0"))
