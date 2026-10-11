@@ -211,6 +211,18 @@ class InstallerTests(unittest.TestCase):
         kill.assert_called_once_with(123, common.signal.SIGTERM)
         process.wait.assert_called_once_with(timeout=4200)
 
+    def test_check_tool_availability_launcher_has_executable_lines(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "control").mkdir()
+            with patch.object(installer.Path, "home", return_value=root):
+                installer.make_launcher(root)
+            script = (root / "Check Tool Availability.command").read_text()
+            self.assertEqual(script.splitlines()[0], "#!/bin/bash")
+            self.assertEqual(script.splitlines()[1], "set -e")
+            self.assertIn("tool_availability.py --root ", script.splitlines()[3])
+            self.assertNotIn(r"\\n", script)
+
     def test_unrelated_application_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
