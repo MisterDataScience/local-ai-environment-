@@ -466,8 +466,8 @@ def make_launcher(root):
                           '\nexec .venv/bin/python scheduled_tasks.py --root ' + shlex.quote(str(root)) + ' ' + argument + '\n')
         helper.chmod(0o755)
     helper = root / 'Check Tool Availability.command'
-    helper.write_text('#!/bin/bash\\nset -e\\ncd ' + shlex.quote(str(root / 'control')) +
-                      '\\nexec .venv/bin/python tool_availability.py --root ' + shlex.quote(str(root)) + '\\n')
+    helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
+                      '\nexec .venv/bin/python tool_availability.py --root ' + shlex.quote(str(root)) + '\n')
     helper.chmod(0o755)
     helper = root / 'Check Required Capabilities.command'
     helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
