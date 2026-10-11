@@ -20,9 +20,9 @@ import uuid
 from common import http
 
 PREFIX = "local.local-ai.batch."
-MAX_FILES = 500
-MAX_BYTES = 48_000
-MAX_METADATA_BYTES = 512_000
+MAX_FILES = 5_000
+MAX_BYTES = 16_000
+MAX_METADATA_BYTES = 4_000_000
 MAX_INSTRUCTION = 3_000
 MAX_ITEMS_PER_RUN = 8
 MAX_ATTEMPTS = 2
@@ -127,7 +127,7 @@ def inventory(source):
             relative = file.relative_to(source).as_posix()
             items.append({"path": relative, "sha256": checksum(data), "bytes": len(data)})
             if len(items) > MAX_FILES:
-                raise ValueError("Job exceeds 500 input files")
+                raise ValueError("Job exceeds 5000 input files")
     if not items:
         raise ValueError("No supported .txt/.md/.json inputs")
     return sorted(items, key=lambda item: item["path"])
