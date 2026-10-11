@@ -221,7 +221,7 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(script.splitlines()[0], "#!/bin/bash")
             self.assertEqual(script.splitlines()[1], "set -e")
             self.assertIn("tool_availability.py --root ", script.splitlines()[3])
-            self.assertNotIn(r"\\n", script)
+            self.assertNotIn(r"\n", script)
 
     def test_unrelated_application_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:
