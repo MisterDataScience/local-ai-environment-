@@ -244,11 +244,13 @@ def run_job(root, job_id):
         with (folder / ".job.lock").open("a+") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             folder, job, state = load(root, job_id)
-            if stop_requested(folder) or state.get("status") in {"complete", "needs-review", "stopped"}:
+            if stop_requested(folder) or state.get("status") in {"needs-review", "stopped"}:
                 return state
             try:
                 completed = record_outputs(folder, state, job["items"])
                 atomic_json(folder / "state.json", state)
+                if state.get("status") == "complete" and len(completed) != len(job["items"]):
+                    raise ValueError("Completed job inventory is inconsistent")
                 if len(completed) == len(job["items"]):
                     state["status"] = "complete"
                     atomic_json(folder / "state.json", state)
@@ -398,8 +400,8 @@ def change(root, job_id, action):
         subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{PREFIX}{job_id}"],
                        capture_output=True)
     elif action == "resume":
-        if state.get("status") not in {"stopped", "pending"}:
-            raise ValueError("Only stopped/pending jobs can resume; review failures first")
+        if state.get("status") not in {"stopped", "pending"} or not stop_requested(folder):
+            raise ValueError("Only explicitly stopped jobs can resume; review failures first")
         if input("Type RESUME BATCH to continue this original approved inventory: ").strip() != "RESUME BATCH":
             raise RuntimeError("Resume not authorised")
         (folder / "STOP").unlink(missing_ok=True)
