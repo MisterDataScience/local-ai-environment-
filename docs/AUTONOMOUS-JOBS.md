@@ -32,7 +32,8 @@ recheck interval. It runs at login and while the Mac remains awake. Every run
 processes at most eight unfinished items. A global lock admits one autonomous
 batch at a time. At most two model attempts are permitted per item, including
 an interrupted attempt. Failed items needing review stop the job rather than
-being skipped. A runtime/mode outage leaves the job pending without granting
+being skipped. Completed and needs-review jobs remove their launchd registration
+automatically, avoiding ongoing polling. Stopped jobs can be explicitly resumed. A runtime/mode outage leaves the job pending without granting
 another model or additional input.
 
 The model has no tools: the gateway receives tool_choice=none and
@@ -75,6 +76,8 @@ it stops for review instead of assuming an arbitrary output is valid.
 - The model cannot call tools or choose filesystem paths. Its Markdown
   output may still be inaccurate or contain untrusted links.
 - A sleeping Mac is not awakened. Recovery occurs at the next login/start.
+- Stopping the worker prevents subsequent batches but cannot guarantee that
+  Ollama immediately cancels an already-dispatched inference request.
 - Unexpected source changes, symlinks, hard links and existing output
   collisions cause refusal, not overwrites.
 - Only deterministic per-document inference is supported. This is not an
