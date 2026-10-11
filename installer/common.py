@@ -90,6 +90,8 @@ def ollama_environment(root):
 
 def webui_environment(root, configuration):
     env = os.environ.copy()
+    # Installer-owned integrations must not inherit arbitrary host tool servers.
+    env.pop("TOOL_SERVER_CONNECTIONS", None)
     env.update({
         "DATA_DIR": str(root / "webui/data"), "WEBUI_AUTH": "False",
         "WEBUI_SECRET_KEY": configuration["webui_secret"],
