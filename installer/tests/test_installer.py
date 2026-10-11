@@ -173,6 +173,28 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(env["ENABLE_WEB_SEARCH"], "False")
         self.assertEqual(env["ENABLE_IMAGE_GENERATION"], "False")
 
+    def test_read_only_discovery_server_is_registered_but_not_automatically_selected(self):
+        env = common.webui_environment(Path("/test"), {
+            "api_key": "gateway-key", "webui_secret": "secret"
+        })
+        connections = json.loads(env["TOOL_SERVER_CONNECTIONS"])
+        catalogue = [c for c in connections if c["info"]["id"] == "local-ai-capabilities"]
+        self.assertEqual(len(catalogue), 1)
+        self.assertEqual(catalogue[0]["path"], "capabilities/openapi.json")
+        self.assertEqual(catalogue[0]["auth_type"], "bearer")
+        self.assertNotIn("tool_ids", env)
+        self.assertNotIn("TOOL_SEARCH_ALWAYS_LOADED", env)
+
+    def test_guarded_automation_does_not_advertise_webui_tools(self):
+        env = common.webui_environment(Path("/test"), {
+            "api_key": "gateway-key", "webui_secret": "secret",
+            "web": {"enabled": True}, "browser": {"enabled": True},
+            "desktop": {"enabled": True}
+        })
+        self.assertNotIn("TOOL_SERVER_CONNECTIONS", env)
+        self.assertEqual(env["ENABLE_CODE_EXECUTION"], "False")
+        self.assertEqual(env["ENABLE_CODE_INTERPRETER"], "False")
+
     def test_shutdown_waits_for_owned_process(self):
         process = Mock(pid=123)
         with patch.object(common.os, "killpg") as kill:
