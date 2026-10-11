@@ -22,6 +22,7 @@ from common import http
 PREFIX = "local.local-ai.batch."
 MAX_FILES = 500
 MAX_BYTES = 48_000
+MAX_METADATA_BYTES = 512_000
 MAX_INSTRUCTION = 3_000
 MAX_ITEMS_PER_RUN = 8
 MAX_ATTEMPTS = 2
@@ -69,7 +70,7 @@ def sync_directory(path):
         os.close(fd)
 
 
-def read_owned(path):
+def read_owned(path, limit=MAX_BYTES):
     """Open each path component without following links; refuse hardlinked files."""
     path = Path(path)
     if not path.is_absolute():
@@ -87,12 +88,12 @@ def read_owned(path):
             info = os.fstat(file_fd)
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
                 raise ValueError("Source is not a single-link regular file")
-            if info.st_size > MAX_BYTES:
-                raise ValueError("Input exceeds 48 KB")
+            if info.st_size > limit:
+                raise ValueError("File exceeds configured size limit")
             with os.fdopen(file_fd, "rb", closefd=False) as handle:
-                data = handle.read(MAX_BYTES + 1)
-            if len(data) > MAX_BYTES:
-                raise ValueError("Input exceeds 48 KB")
+                data = handle.read(limit + 1)
+            if len(data) > limit:
+                raise ValueError("File exceeds configured size limit")
             return data
         finally:
             os.close(file_fd)
@@ -140,8 +141,8 @@ def locations(root, job_id):
 
 def load(root, job_id):
     folder = locations(root, job_id)
-    config = json.loads(read_owned(folder / "job.json"))
-    state = json.loads(read_owned(folder / "state.json"))
+    config = json.loads(read_owned(folder / "job.json", MAX_METADATA_BYTES))
+    state = json.loads(read_owned(folder / "state.json", MAX_METADATA_BYTES))
     if config.get("id") != job_id or config.get("version") != 1:
         raise ValueError("Invalid saved job")
     if len(config.get("items", [])) > MAX_FILES or not isinstance(config.get("items"), list):
@@ -172,7 +173,9 @@ def publish(path, body):
 
 def record_outputs(folder, state, items):
     """Adopt only fully published outputs from a previously interrupted write."""
+    private_dir(folder / "outputs")
     complete = state.setdefault("complete", {})
+    prepared = state.setdefault("prepared", {})
     for index, item in enumerate(items):
         key = item["path"]
         output = folder / "outputs" / output_name(index, item)
@@ -182,9 +185,10 @@ def record_outputs(folder, state, items):
             continue
         if output.exists() or output.is_symlink():
             data = read_owned(output)
-            if not data or not data.endswith(b"\n"):
-                raise ValueError("Unexpected interrupted output; manual review required")
+            if not data or checksum(data) != prepared.get(key):
+                raise ValueError("Unverified interrupted output; manual review required")
             complete[key] = checksum(data)
+            prepared.pop(key, None)
     return complete
 
 
@@ -285,8 +289,11 @@ def run_job(root, job_id):
                             state["status"] = "stopped"
                             break
                         output = folder / "outputs" / output_name(index, item)
+                        state.setdefault("prepared", {})[item["path"]] = checksum(answer)
+                        atomic_json(folder / "state.json", state)
                         publish(output, answer)
                         completed[item["path"]] = checksum(answer)
+                        state["prepared"].pop(item["path"], None)
                         state.pop("last_error", None)
                         atomic_json(folder / "state.json", state)
                     except Exception as error:
@@ -399,7 +406,7 @@ def change(root, job_id, action):
         state["status"] = "pending"
         atomic_json(folder / "state.json", state)
         bootstrap(root, job_id)
-    return {"job": job_id, "status": state["status"], "done": len(state["complete"]),
+    return {"job": job_id, "status": "stopped" if stop_requested(folder) else state["status"], "done": len(state["complete"]),
             "total": len(job["items"]), "last_error": state.get("last_error")}
 
 
@@ -412,7 +419,7 @@ def status(root):
         if folder.is_dir() and IDENTIFIER.fullmatch(folder.name):
             try:
                 _, job, state = load(root, folder.name)
-                rows.append({"id": folder.name, "status": state["status"],
+                rows.append({"id": folder.name, "status": "stopped" if stop_requested(folder) else state["status"],
                              "done": len(state.get("complete", {})), "total": len(job["items"])})
             except Exception:
                 rows.append({"id": folder.name, "status": "corrupt-needs-review"})
