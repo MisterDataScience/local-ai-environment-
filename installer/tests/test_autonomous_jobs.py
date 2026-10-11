@@ -134,12 +134,12 @@ class JobsTest(unittest.TestCase):
         self.assertEqual([record["path"] for record in inventory], ["one.md"])
 
     def test_full_inventory_exceeds_small_text_read_limit_without_failing_load(self):
-        for index in range(120):
+        for index in range(600):
             self.file(f"item-{index:03d}.md", "Small")
         self.save()
-        self.assertGreater((self.folder / "job.json").stat().st_size, 10_000)
+        self.assertGreater((self.folder / "job.json").stat().st_size, jobs.MAX_BYTES)
         _, job, state = jobs.load(self.root, self.job["id"])
-        self.assertEqual(len(job["items"]), 120)
+        self.assertEqual(len(job["items"]), 600)
 
     def test_output_publish_is_create_only(self):
         path = self.folder / "outputs" / "result.md"
