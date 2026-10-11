@@ -88,6 +88,11 @@ the tool server on the Mac. No additional phone-facing approval port is introduc
 
 ## On-demand capability discovery and registration check (October 2026)
 
+Open WebUI also receives one short, configuration-derived list of registered
+integration names in its inherited system prompt. This costs only a small fixed
+number of tokens and does not inject any tool schemas, inspect services, expose
+credentials or trigger background work. It reports registration, not chat access.
+
 The installer registers a single **read-only LOCAL AI capabilities** OpenAPI
 server with the existing authenticated gateway. It is *not* attached to every
 chat. In Open WebUI, select **LOCAL AI capabilities** under Integrations only
