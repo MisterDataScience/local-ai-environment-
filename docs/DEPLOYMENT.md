@@ -34,6 +34,7 @@ not another code branch or a second deployment.
 | Office and file workflows | Run `Check Office.command`; use native transfer approvals. Configure and manually unlock Cryptomator for vault operations. |
 | Start at login | Run `Enable Login Startup.command`; verify the next login and use `Stop Local AI.command` for graceful shutdown. |
 | Recurring text inference | Run `Schedule AI Task.command`; inspect `Scheduled Task Status.command`. Tool/command routes are blocked and cutoffs are reported as incomplete. |
+| Finite autonomous document batch | Run `Create Autonomous Job.command` and explicitly approve the exact source folder, model and per-file instruction. Manage it through the dedicated Status/Stop/Resume commands. See `AUTONOMOUS-JOBS.md`. No unattended model tool calls. |
 | VPN browser | Set up Docker/Proton through `Enable Web Access.command`, then `Enable Browser.command`. Run `Check Browser.command` and verify tunnel failure stops browsing. |
 | Scoped desktop | Run `Enable Desktop Control.command`, then `Check Desktop Control.command`. Open the Work Agent to use locally approved Finder/Calculator sessions. |
 | Generic external helper | Enable and verify VPN browser first, then run `Enable External Delegation.command`. Provider permission and verified selectors are required. Every exact outgoing prompt needs local approval. |

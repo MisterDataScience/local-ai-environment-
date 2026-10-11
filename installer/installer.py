@@ -40,7 +40,7 @@ GATEWAY_FILES += ('capability_discovery.py',)
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
               'office_setup.py', 'office_mcp.py', 'office_check.py', 'browser_agent.py', 'browser_setup.py',
                'tool_availability.py', 'pdf_reader.py', 'pdf_mcp.py', 'transfer_mcp.py', 'file_transfer.py', 'vault_transfer.py', 'login_startup.py',
-               'vision_mcp.py', 'chat_attachments.py', 'webui_attachments_filter.py', 'attachment_setup.py', 'file_workflows.py', 'scheduled_tasks.py', 'service_lifecycle.py', 'webui_local_images.py', 'required_tools_setup.py', 'native_pdf_loader.py', 'capability_acceptance.py',
+               'vision_mcp.py', 'chat_attachments.py', 'webui_attachments_filter.py', 'attachment_setup.py', 'file_workflows.py', 'scheduled_tasks.py', 'autonomous_jobs.py', 'service_lifecycle.py', 'webui_local_images.py', 'required_tools_setup.py', 'native_pdf_loader.py', 'capability_acceptance.py',
               'control_policy.py', 'delegation_browser.py', 'automation_mcp.py', 'automation_setup.py', 'automation_check.py', 'automation-guard.mjs',
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
@@ -464,6 +464,13 @@ def make_launcher(root):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
                           '\nexec .venv/bin/python scheduled_tasks.py --root ' + shlex.quote(str(root)) + ' ' + argument + '\n')
+        helper.chmod(0o755)
+    for label, argument in (('Create Autonomous Job', '--configure'), ('Autonomous Job Status', '--status'),
+                            ('Stop Autonomous Job', '--stop'), ('Resume Autonomous Job', '--resume')):
+        helper = root / (label + '.command')
+        helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
+                          '\nexec .venv/bin/python autonomous_jobs.py --root ' +
+                          shlex.quote(str(root)) + ' ' + argument + ' "$@"\n')
         helper.chmod(0o755)
     helper = root / 'Check Tool Availability.command'
     helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +

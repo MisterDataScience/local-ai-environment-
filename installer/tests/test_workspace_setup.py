@@ -51,10 +51,12 @@ class WorkspaceSetupTests(unittest.TestCase):
             root = Path(d)
             config = {'api_key': 'local-key', 'webui_secret': 'web-key', 'web': {'enabled': True},
                       'vault': {'enabled': True}, 'account_tools': {'github': True}}
-            with patch.object(account_tools, 'connection', return_value={'type': 'mcp', 'url': account_tools.URL}):
+            with patch.object(account_tools, 'connection', return_value={'type': 'mcp', 'url': account_tools.URL,
+                    'info': {'id': 'local-ai-github', 'name': 'GitHub', 'description': 'Test integration'}}):
                 env = common.webui_environment(root, config)
             servers = json.loads(env['TOOL_SERVER_CONNECTIONS'])
-            self.assertEqual(len(servers), 4)
+            self.assertEqual(len(servers), 5)
+            self.assertIn('capabilities/openapi.json', [s.get('path') for s in servers])
             self.assertIn('workspace/openapi.json', [s.get('path') for s in servers])
             self.assertIn('files/openapi.json', [s.get('path') for s in servers])
             self.assertEqual(json.loads(env['DEFAULT_MODEL_PARAMS'])['tool_approval_mode'], 'ask')

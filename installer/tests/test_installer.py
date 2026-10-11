@@ -223,6 +223,26 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("tool_availability.py --root ", script.splitlines()[3])
             self.assertNotIn(r"\n", script)
 
+    def test_autonomous_worker_is_packaged_and_launchers_require_job_id(self):
+        self.assertIn("autonomous_jobs.py", installer.TEAM_FILES)
+        self.assertTrue((installer.SOURCE / "autonomous_jobs.py").is_file())
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "control").mkdir()
+            with patch.object(installer.Path, "home", return_value=root):
+                installer.make_launcher(root)
+            for label, flag in (
+                ("Create Autonomous Job", "--configure"),
+                ("Autonomous Job Status", "--status"),
+                ("Stop Autonomous Job", "--stop"),
+                ("Resume Autonomous Job", "--resume")
+            ):
+                script = (root / (label + ".command")).read_text()
+                self.assertIn("autonomous_jobs.py --root ", script)
+                self.assertIn(flag, script)
+                self.assertIn('"$@"', script)
+                self.assertEqual(script.splitlines()[0], "#!/bin/bash")
+
     def test_unrelated_application_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

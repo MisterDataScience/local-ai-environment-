@@ -23,6 +23,11 @@ credentials are retained. No credentials or model weights are packaged here.
 
 Launch `~/LocalAI-Automated/Start Local AI.command` or `Local AI.app`.
 `Enable Login Startup.command` registers optional background startup.
+`Create Autonomous Job.command` authorises a finite local text-file batch with
+crash-safe checkpoints and create-only Markdown output. `Autonomous Job Status.command`,
+`Stop Autonomous Job.command JOB_ID`, and `Resume Autonomous Job.command JOB_ID`
+manage its independent launchd worker. See docs/AUTONOMOUS-JOBS.md.
+This does not authorise unrestricted unattended OpenCode tools.
 `Stop Local AI.command` requests graceful shutdown. The chat is local at
 `http://127.0.0.1:8081`; use the optional private remote-access setup for other devices.
 
