@@ -347,6 +347,19 @@ def bootstrap(root, job_id):
                    check=True)
 
 
+def deregister(root, job_id):
+    """Remove terminal jobs from launchd so completed work causes no idle polling."""
+    path = agent_path(job_id)
+    if path.is_symlink():
+        raise ValueError("Unexpected symlink LaunchAgent")
+    if path.exists():
+        if plistlib.loads(read_owned(path)) != definition(root, job_id):
+            raise ValueError("Unrecognised LaunchAgent; not removed")
+        path.unlink()
+    subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{PREFIX}{job_id}"],
+                   capture_output=True)
+
+
 def configure(root):
     config = json.loads(read_owned(root / "control" / "config.json"))
     source = Path(input("Source folder of UTF-8 .txt/.md/.json files: ").strip()).expanduser()
@@ -397,8 +410,7 @@ def change(root, job_id, action):
         (folder / "STOP").touch(mode=0o600, exist_ok=True)
         state["status"] = "stopped"
         atomic_json(folder / "state.json", state)
-        subprocess.run(["/bin/launchctl", "bootout", f"gui/{os.getuid()}/{PREFIX}{job_id}"],
-                       capture_output=True)
+        deregister(root, job_id)
     elif action == "resume":
         if state.get("status") not in {"stopped", "pending"} or not stop_requested(folder):
             raise ValueError("Only explicitly stopped jobs can resume; review failures first")
@@ -444,7 +456,10 @@ def main():
     elif args.status:
         print(json.dumps(status(root), indent=2))
     elif args.run:
-        print(json.dumps(run_job(root, args.run), indent=2))
+        result = run_job(root, args.run)
+        print(json.dumps(result, indent=2))
+        if result.get("status") in {"complete", "needs-review", "stopped"}:
+            deregister(root, args.run)
     elif args.stop:
         print(json.dumps(change(root, args.stop, "stop"), indent=2))
     else:
