@@ -9,6 +9,11 @@ startup and recurring text tasks with the scoped Mac controller and generic
 external reasoning helper. It also contains the existing local text, Office,
 image/video, speech, conversation, Discord and encrypted workspace tools.
 
+Optional finite autonomous document jobs use the existing text gateway and a
+checkpointed launchd worker. They read only a pre-authorised folder of small
+UTF-8 files and create new Markdown outputs without model tool access. This is
+not an unrestricted background OpenCode agent. See [autonomous jobs](docs/AUTONOMOUS-JOBS.md).
+
 **Ready for installation on Apple Silicon; owner-Mac acceptance remains required.**
 Local authoring tests do not establish GPU performance, microphone quality,
 actual VPN tunnel-drop behavior, account approvals or memory pressure on your Mac.
@@ -34,6 +39,7 @@ installer. See [deployment and activation](docs/DEPLOYMENT.md).
 | Approved file handoffs | Work Agent transfer tools; vault must be manually unlocked |
 | Background startup | `Enable Login Startup.command` |
 | Recurring text tasks | `Schedule AI Task.command`; text-only route enforced by the gateway |
+| Finite autonomous batches | `Create Autonomous Job.command`; separate explicit approval, read-only inputs, local new Markdown outputs, resumable job checkpoints |
 | VPN search and browser | `Enable Web Access.command`, then `Enable Browser.command` |
 | Scoped Mac control | `Enable Desktop Control.command`; Finder folders and Calculator only |
 | Generic external reasoning | `Enable External Delegation.command`; provider permission, selectors and exact local approvals required |
