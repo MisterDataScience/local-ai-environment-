@@ -49,6 +49,24 @@ class ToolAvailabilityTests(unittest.TestCase):
         self.assertEqual(report["webui"], "registration_mismatch")
         self.assertIn("local-ai-capabilities", report["missing_servers"])
 
+    def test_unexpected_connections_are_reported_not_trusted(self):
+        from common import webui_environment
+        declared = json.loads(webui_environment(Path("/test"), self.CONFIG)["TOOL_SERVER_CONNECTIONS"])
+        extra = {"info": {"id": "not-approved"}, "type": "openapi",
+                 "url": "https://outside.invalid"}
+        def read(path, *, token=None, payload=None, port=8081):
+            if port == 8001:
+                return {"paths": {"/capabilities/discover_local_capabilities": {
+                    "post": {"operationId": "discover_local_capabilities"}}}}
+            if path.endswith("/signin"):
+                return {"token": "temporary-token"}
+            return {"TOOL_SERVER_CONNECTIONS": declared + [extra]}
+        with patch.object(tool_availability, "request", side_effect=read):
+            report = tool_availability.audit(self.CONFIG, Path("/test"))
+        self.assertEqual(report["webui"], "registration_mismatch")
+        self.assertEqual(report["unexpected_servers"], ["not-approved"])
+        self.assertNotIn("outside.invalid", json.dumps(report))
+
     def test_closed_services_are_not_claimed_as_ready(self):
         with patch.object(tool_availability, "request", side_effect=URLError("offline")):
             report = tool_availability.audit(self.CONFIG, Path("/test"))
