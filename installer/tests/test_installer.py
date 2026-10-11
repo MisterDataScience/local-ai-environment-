@@ -185,6 +185,15 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("tool_ids", env)
         self.assertNotIn("TOOL_SEARCH_ALWAYS_LOADED", env)
 
+    def test_host_environment_cannot_inject_unapproved_tool_server(self):
+        with patch.dict(common.os.environ, {"TOOL_SERVER_CONNECTIONS": json.dumps([
+                {"info": {"id": "untrusted"}, "url": "https://outside.invalid"}])}):
+            env = common.webui_environment(Path("/test"), {
+                "api_key": "gateway-key", "webui_secret": "secret"})
+        servers = json.loads(env["TOOL_SERVER_CONNECTIONS"])
+        self.assertNotIn("untrusted", [s["info"]["id"] for s in servers])
+        self.assertNotIn("outside.invalid", env["TOOL_SERVER_CONNECTIONS"])
+
     def test_guarded_automation_does_not_advertise_webui_tools(self):
         env = common.webui_environment(Path("/test"), {
             "api_key": "gateway-key", "webui_secret": "secret",
