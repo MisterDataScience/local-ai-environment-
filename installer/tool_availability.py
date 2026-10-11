@@ -45,6 +45,7 @@ def audit(config, root):
         "webui": "unverified",
         "registered_servers": [],
         "missing_servers": [],
+        "unexpected_servers": [],
         "per_chat_selection": "not_verified",
         "opencode": "checked separately by the existing Work Agent startup checks",
     }
@@ -73,7 +74,10 @@ def audit(config, root):
         }
         report["registered_servers"] = sorted(set(declared) & live_ids)
         report["missing_servers"] = sorted(set(declared) - live_ids)
-        report["webui"] = ("registration_matches" if not report["missing_servers"]
+        report["unexpected_servers"] = sorted(
+            value for value in live_ids - set(declared) if isinstance(value, str))
+        report["webui"] = ("registration_matches"
+                           if not report["missing_servers"] and not report["unexpected_servers"]
                            else "registration_mismatch")
     except (HTTPError, URLError, OSError, ValueError, KeyError, TypeError):
         report["webui"] = "not_reachable_or_registration_unverified"
