@@ -42,8 +42,10 @@ class CapabilityDiscoveryTests(unittest.TestCase):
         result = capability_discovery.discover(config, {})
         found = {entry["category"]: entry["configured"] for entry in result["capabilities"]}
         self.assertTrue(found["desktop"])
-        for name in ("web", "files", "browser", "office", "coding", "media"):
+        for name in ("web", "files", "browser", "office", "coding"):
             self.assertFalse(found[name], name)
+        # Explicit gateway media commands remain configured separately from integrations.
+        self.assertTrue(found["media"])
 
     def test_rejects_invalid_arguments(self):
         for args in (None, [], {"category": "shell"}, {"category": 3},
