@@ -1,7 +1,7 @@
 """Explicit, read-only inspection of LOCAL AI tool registration.
 
 Runs only when requested. Does not invoke a model, activate a tool, open
-an account, start a service, or change security permissions.
+a model, start a service, or change tool configuration or permissions.
 """
 import argparse
 import json
@@ -23,7 +23,10 @@ def request(path, *, token=None, payload=None, port=8081):
         headers["Authorization"] = "Bearer " + token
     with OPENER.open(Request(f"http://127.0.0.1:{port}" + path, data=data,
                             headers=headers), timeout=4) as response:
-        return json.load(response)
+        raw = response.read(1_000_001)
+        if len(raw) > 1_000_000:
+            raise ValueError("Local configuration response too large")
+        return json.loads(raw)
 
 
 def audit(config, root):
