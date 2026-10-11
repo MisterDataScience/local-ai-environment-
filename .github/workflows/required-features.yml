@@ -32,7 +32,8 @@ jobs:
       - run: python -m compileall -q installer
       - name: Persistent batch job regressions
         run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -p test_autonomous_jobs.py -v
-      - run: python scripts/build_installer.py --check
+      - name: Check single installer exactly matches shipped source
+        run: python scripts/build_installer.py --check
       - run: python -m unittest discover -s scripts -p 'test_*.py' -v
       - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -v
       - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/payload/tests -v
