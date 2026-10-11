@@ -141,6 +141,22 @@ class JobsTest(unittest.TestCase):
         _, job, state = jobs.load(self.root, self.job["id"])
         self.assertEqual(len(job["items"]), 600)
 
+    def test_deregister_terminal_job_removes_only_its_owned_plist(self):
+        launch_file = self.root / "owned.plist"
+        launch_file.write_bytes(jobs.plistlib.dumps(jobs.definition(self.root, self.job["id"])))
+        with patch.object(jobs, "agent_path", return_value=launch_file), \
+                patch.object(jobs.subprocess, "run") as bootout:
+            jobs.deregister(self.root, self.job["id"])
+        self.assertFalse(launch_file.exists())
+        bootout.assert_called_once()
+        launch_file.write_bytes(b"not a matching plist")
+        with patch.object(jobs, "agent_path", return_value=launch_file), \
+                patch.object(jobs.subprocess, "run") as bootout:
+            with self.assertRaises(Exception):
+                jobs.deregister(self.root, self.job["id"])
+        self.assertTrue(launch_file.exists())
+        bootout.assert_not_called()
+
     def test_output_publish_is_create_only(self):
         path = self.folder / "outputs" / "result.md"
         jobs.publish(path, b"First\n")
