@@ -1,7 +1,7 @@
 """Explicit, read-only inspection of LOCAL AI tool registration.
 
-Runs only when requested. Does not invoke a model, activate a tool, open
-a model, start a service, or change tool configuration or permissions.
+Runs only when requested. Does not invoke a model, activate a tool,
+start a service, or change tool configuration or permissions.
 """
 import argparse
 import json
