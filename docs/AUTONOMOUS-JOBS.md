@@ -48,8 +48,8 @@ untrusted and should be reviewed before reuse.
 - **Stop Autonomous Job.command JOB_ID** creates a durable STOP marker and
   unregisters the launchd job, retaining completed work.
 - **Resume Autonomous Job.command JOB_ID** requires exact confirmation
-  RESUME BATCH. It resumes only stopped or pending jobs against their
-  original authorised inventory.
+  RESUME BATCH. It resumes a stopped job against its original authorised
+  inventory. Pending jobs continue automatically.
 - Jobs marked needs-review are deliberately not auto-resumable. Examine
   sources, outputs and saved state, and make a new approved job for corrected
   material. Completed jobs do not reprocess files.
