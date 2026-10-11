@@ -42,7 +42,12 @@ class WorkAgentTests(unittest.TestCase):
     def test_webui_inherits_same_behaviour_without_forcing_account_override(self):
         from common import GLOBAL_BEHAVIOUR, webui_environment
         env = webui_environment(Path('/tmp/example'), {'api_key': 'key', 'webui_secret': 'secret'})
-        self.assertEqual(json.loads(env['DEFAULT_INTERFACE_SETTINGS']), {'system': GLOBAL_BEHAVIOUR})
+        system = json.loads(env['DEFAULT_INTERFACE_SETTINGS'])['system']
+        self.assertTrue(system.startswith(GLOBAL_BEHAVIOUR))
+        self.assertIn('LOCAL AI capabilities', system)
+        self.assertIn('Tools are callable only when selected and permitted', system)
+        self.assertNotIn('secret', system)
+        self.assertNotIn('key', system)
         self.assertEqual(json.loads(env['DEFAULT_MODEL_PARAMS'])['function_calling'], 'native')
 
     def test_output_advertisement_matches_mode_and_custom_context(self):
