@@ -1,5 +1,10 @@
 # LOCAL AI: connected system map
 
+**13 October 2026 update:** the captain now uses temporary native worker sessions
+and concurrent shared text inference. The single serial model path in the older
+diagrams remains the specialist/media path. The current captain wiring and
+resource relationships are in [Captain and workers](../CAPTAIN-AND-WORKERS.md).
+
 **Source:** `main`, integrated release `2026-10-09-integrated-1`.  
 **Inspected repository tree:** `f62d85478126589bae4128fbc56856fcee41f0e7` (9 October 2026).  
 **Purpose:** Show **connections**, not merely a feature inventory. These diagrams map calls and data movement recorded in the repository and are **not proof that the owner's Mac has passed live acceptance**.

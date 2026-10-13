@@ -1,5 +1,10 @@
 # LOCAL AI installer
 
+The Work Agent includes a captain and up to five temporary workers. For the
+MiniCPM shared model, run **Install Local AI with MiniCPM Captain.command** from
+this same package. The standard launcher uses the existing 4B shared model.
+See [the captain explanation](docs/CAPTAIN-AND-WORKERS.md).
+
 This is the single integrated installer for LOCAL AI. It includes vision,
 Apple PDF/OCR, approved file workflows, background operation, the scoped Mac
 controller and generic external reasoning, alongside the existing text,

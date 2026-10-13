@@ -6,9 +6,9 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-11-bounded-jobs-1'
+RELEASE = '2026-10-13-captain-workers-1'
 PREFIX = 'mac-local-ai-installer/'
-STAMP = (2026, 10, 11, 0, 0, 0)
+STAMP = (2026, 10, 13, 0, 0, 0)
 
 
 def contents(root):
@@ -30,6 +30,8 @@ def contents(root):
         'main': 'cc490411940f5387191f5127ff853309b857a1e0',
         'required_capabilities': 'bb68a8e101b39d8489b015daecb0c40ba2b040b1',
         'scoped_automation': 'b3439a7938811f4ec8efb98155fd953f35f83d4e'},
+        'captain_inputs': {'base': '4a4b0bfee3afb110ef14d7ae06d20055fc00a374',
+                           'native_runtime': '1b70350c92563449576bcbbf552994b1d1ed847d'},
         'owner_mac_acceptance': 'not_run',
         'files': {name: hashlib.sha256(data).hexdigest() for name, (data, _) in sorted(result.items())}}
     encoded = json.dumps(manifest, sort_keys=True, indent=2).encode() + b'\n'

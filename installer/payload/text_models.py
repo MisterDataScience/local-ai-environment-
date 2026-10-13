@@ -42,6 +42,10 @@ def configured_text_models(config):
         if not isinstance(preset, dict):
             raise ValueError("Each text preset must be an object.")
         model = preset.get("model")
+        if preset.get('backend', 'ollama') != 'ollama' and not (
+                preset.get('backend') == 'llama' and config.get('captain', {}).get('provider') == 'llama'
+                and identifier == config.get('captain', {}).get('model_id')):
+            raise ValueError('Unknown or unconfigured text backend')
         if not isinstance(model, str) or not model.strip() or model.endswith(":cloud"):
             raise ValueError("Each preset must name a local Ollama model.")
         if not isinstance(preset.get("name"), str) or not preset["name"].strip():

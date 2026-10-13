@@ -1,4 +1,4 @@
-"""Single serial owner of model loading, backend work and memory handoffs."""
+"""Gateway owner of shared text inference and exclusive media/mode handoffs."""
 
 import concurrent.futures
 import json
@@ -28,6 +28,9 @@ import vault_media
 import speech
 import token_stream
 from conversation_audio import Audio
+from inference_scheduler import ModelQueue
+from captain_config import settings as captain_settings
+from shared_llama import SharedLlama
 from vault_tools import mounted_root, enabled as vault_enabled
 
 ROOT = Path(__file__).resolve().parent
@@ -52,7 +55,11 @@ class Engine:
         if config.get("github", {}).get("enabled"):
             raise ValueError("GitHub activation is not available until credential and approval integration is validated")
         self.text_models = configured_text_models(config)
+        self.captain = captain_settings(config)
         self.ollama = config.get("ollama_url", "http://127.0.0.1:11434")
+        self.shared_ollama = 'http://127.0.0.1:11436'
+        self.shared_llama = SharedLlama(self.captain) if self.captain['enabled'] and self.captain['provider'] == 'llama' else None
+        self.shared_last_used = time.monotonic()
         self.comfy = config.get("comfy_url", "http://127.0.0.1:8188")
         self.comfy_port = urlparse(self.comfy).port
         self.process = None
@@ -61,9 +68,10 @@ class Engine:
         self.text_profile = None
         (root / "media").mkdir(exist_ok=True)
         (root / "logs").mkdir(exist_ok=True)
-        # A single executor owns every model operation, including waiting for unloads.
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        self.pending = threading.BoundedSemaphore(4)
+        self.model_jobs = ModelQueue()
+        self.prepare_lock = threading.RLock()
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=6 if self.captain['enabled'] else 1)
+        self.pending = threading.BoundedSemaphore(12 if self.captain['enabled'] else 4)
         self.mode_lock = threading.RLock()
         self.mode = resource_modes.load(root)
         self.mode_epoch = 0
@@ -76,7 +84,27 @@ class Engine:
         with self.mode_lock:
             return {'mode': self.mode, 'transitioning': self.mode_transitioning,
                     'error': self.mode_error, 'description': resource_modes.MODES[self.mode],
-                    'epoch': self.mode_epoch, 'instance_id': self.instance_id}
+                    'epoch': self.mode_epoch, 'instance_id': self.instance_id,
+                    'inference': self.model_jobs.status(),
+                    'captain': {'enabled': self.captain['enabled'], 'model_id': self.captain['model_id'],
+                                'slots': self.parallel_slots()}}
+
+    def parallel_slots(self):
+        if not self.captain['enabled'] or self.mode == 'gaming' or self.audio.enabled:
+            return 1
+        return self.captain[self.mode + '_parallel']
+
+    def expire_shared(self):
+        if not self.shared_llama or not self.shared_llama.process:
+            return
+        preset = self.text_models[self.captain['model_id']]
+        if time.monotonic() - self.shared_last_used < preset['keep_alive_seconds']:
+            return
+        with self.model_jobs.idle_lease() as idle:
+            if idle and time.monotonic() - self.shared_last_used >= preset['keep_alive_seconds']:
+                with self.prepare_lock:
+                    self.shared_llama.stop()
+                    self.text_profile = None
 
     def visible_models(self):
         with self.mode_lock:
@@ -113,6 +141,10 @@ class Engine:
         return self.mode_status()
 
     def finish_mode_change(self):
+        with self.model_jobs.lease():
+            self._finish_mode_change()
+
+    def _finish_mode_change(self):
         self.audio.control('stop')
         try:
             self.stop_comfy()
@@ -145,7 +177,8 @@ class Engine:
         body['_vision'] = any(m.get('images') for m in messages)
         if any(m.get("images") for m in messages):
             model = self.text_models[body["model"]]["model"].lower()
-            if not ("qwen3.5" in model or "gemma4" in model):
+            if not ("qwen3.5" in model or "gemma4" in model or
+                    (body['model'] == self.captain['model_id'] and self.shared_llama and self.captain.get('llama', {}).get('mmproj'))):
                 raise ValueError("Selected model does not have verified vision support; select Qwen3.5.")
             if route != "text":
                 raise ValueError("Image input is supported only for text questions.")
@@ -163,7 +196,7 @@ class Engine:
                     raise ValueError('Media work-agent mode changed. Restart the work agent.')
             epoch = self.mode_epoch
             if not self.pending.acquire(blocking=False):
-                raise RuntimeError('Four requests are already queued. Wait for them to finish.')
+                raise RuntimeError('The bounded model queue is full. Wait for active work to finish.')
             try:
                 future = self.executor.submit(self.run_admitted, epoch, messages, route, prompt, body)
             except Exception:
@@ -177,17 +210,36 @@ class Engine:
             if epoch != self.mode_epoch:
                 raise RuntimeError('Request cancelled because the resource mode changed. Submit it again.')
             self.check_policy(body, route)
-        return self.run(messages, route, prompt, body)
+        shared = (self.captain['enabled'] and body['model'] == self.captain['model_id']
+                  and route == 'text' and not body.get('_vision'))
+        # Only the same shared profile can overlap. Specialists, larger document
+        # profiles, audio, media and mode transitions acquire an exclusive lease.
+        key = ('captain', body['model']) if shared and self.mode != 'gaming' else None
+        with self.model_jobs.lease(key, self.parallel_slots()):
+            with self.mode_lock:
+                if epoch != self.mode_epoch:
+                    raise RuntimeError('Request cancelled because the resource mode changed.')
+                self.check_policy(body, route)
+            return self.run(messages, route, prompt, body)
 
     def unload_ollama(self):
         self.state = "unloading-text"
         self.text_profile = None
-        loaded = api(self.ollama, "/api/ps").get("models", [])
+        bases = [self.ollama]
+        if self.shared_llama:
+            self.shared_llama.stop()
+        if self.captain['enabled'] and self.captain['provider'] == 'ollama':
+            bases.append(self.shared_ollama)
+        for base in bases:
+            self._unload_server(base)
+
+    def _unload_server(self, base):
+        loaded = api(base, "/api/ps").get("models", [])
         for model in loaded:
-            api(self.ollama, "/api/generate", {"model": model["name"], "keep_alive": 0}, timeout=120)
+            api(base, "/api/generate", {"model": model["name"], "keep_alive": 0}, timeout=120)
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
-            if not api(self.ollama, "/api/ps").get("models"):
+            if not api(base, "/api/ps").get("models"):
                 return
             time.sleep(0.5)
         raise RuntimeError("Ollama did not confirm unload. ComfyUI was not started.")
@@ -355,7 +407,10 @@ class Engine:
         from model_team import team_roles
         roles = team_roles(self.config, self.text_models)
         light = (route == 'text' and roles and body['model'] == roles['coordinator']
+                 and self.text_models[body['model']].get('role') == 'coordinator'
                  and self.text_models[body['model']]['num_ctx'] <= 8192)
+        light = light or (route == 'text' and self.captain['enabled']
+                         and body['model'] == self.captain['model_id'] and not self.audio.enabled)
         with self.audio.model_job(light=bool(light)):
             try:
                 return self.run_inner(messages, route, prompt, body)
@@ -366,7 +421,7 @@ class Engine:
 
     def start_conversation(self):
         def start():
-            with self.audio.model_job():
+            with self.model_jobs.lease(), self.audio.model_job():
                 self.stop_comfy()
                 if port_open(self.comfy_port):
                     raise RuntimeError('Stop unmanaged ComfyUI before conversation')
@@ -378,9 +433,10 @@ class Engine:
         LOG.info("Starting %s request", route)
         try:
             self.check_policy(body, route)
-            self.stop_comfy()
-            if port_open(self.comfy_port):
-                raise RuntimeError("Stop manually started ComfyUI. The gateway must own it.")
+            with self.prepare_lock:
+                self.stop_comfy()
+                if port_open(self.comfy_port):
+                    raise RuntimeError("Stop manually started ComfyUI. The gateway must own it.")
             if route in {"image", "video"}:
                 return self.render(route, prompt)
             if route == 'speak':
@@ -399,16 +455,37 @@ class Engine:
                 self.state = "retrieving-web"
                 budget = max(500, min(10000, (preset["num_ctx"] - 2600) * 2))
                 messages, links = retrieve(self.config, route, prompt, budget)
-            # Switching text models also explicitly releases the old model.
-            loaded = api(self.ollama, "/api/ps").get("models", [])
-            profile = (preset['model'], preset['num_ctx'], preset.get('thinking', False))
-            if loaded and (any(model["name"] != preset["model"] for model in loaded)
-                           or self.text_profile != profile):
-                self.unload_ollama()
+            if self.shared_llama and body['model'] == self.captain['model_id'] and route in {'text', 'search', 'read'}:
+                with self.prepare_lock:
+                    profile = ('llama', preset['model'], preset['num_ctx'], preset.get('thinking', False))
+                    if self.text_profile != profile:
+                        self.unload_ollama()
+                        self.text_profile = profile
+                    self.shared_llama.start(preset['num_ctx'], preset.get('thinking', False))
+                    self.shared_last_used = time.monotonic()
+                request = body if route == 'text' else dict(body, messages=messages)
+                result = self.shared_llama.chat(request, output_limit(body, self.mode, preset))
+                if request is not body:
+                    for name in ('_usage', '_finish_reason'):
+                        if name in request:
+                            body[name] = request[name]
+                return result + links if isinstance(result, str) else result
+            base = self.shared_ollama if (self.captain['enabled'] and self.mode != 'gaming'
+                and body['model'] == self.captain['model_id']) else self.ollama
+            profile = ((base,) if self.captain['enabled'] else ()) + (preset['model'], preset['num_ctx'], preset.get('thinking', False))
+            # A shared group prepares its model once. Never unload an active
+            # sibling's runner because it has not yet returned its first token.
+            with self.prepare_lock:
+                loaded = api(base, "/api/ps").get("models", [])
+                if (self.captain['enabled'] or loaded) and self.text_profile != profile:
+                    self.unload_ollama()
+                elif loaded and any(model['name'] != preset['model'] for model in loaded):
+                    self.unload_ollama()
+                self.text_profile = profile
             self.check_policy(body, route)
             self.state = "generating-text"
             if any(m.get('images') for m in messages):
-                capabilities = api(self.ollama, '/api/show', {'model': preset['model']}).get('capabilities', [])
+                capabilities = api(base, '/api/show', {'model': preset['model']}).get('capabilities', [])
                 if 'vision' not in capabilities:
                     raise ValueError('The installed model has no vision capability. Use an installed Qwen3.5 vision artifact.')
             options = {"num_ctx": preset["num_ctx"], "num_predict": output_limit(body, self.mode, preset)}
@@ -428,9 +505,8 @@ class Engine:
             # Exactly one inference call. Open WebUI executes/approves tools and
             # submits the next inference turn with their results.
             stream = body.get('_stream') if route == 'text' else None
-            response = (token_stream.chat(self.ollama, payload, stream) if stream
-                        else api(self.ollama, '/api/chat', payload, timeout=1800))
-            self.text_profile = profile
+            response = (token_stream.chat(base, payload, stream) if stream
+                        else api(base, '/api/chat', payload, timeout=1800))
             message = response['message']
             counts = [response.get('prompt_eval_count'), response.get('eval_count')]
             if all(type(n) is int and n >= 0 for n in counts):
@@ -451,7 +527,9 @@ class Engine:
                                       else 'stop')
             return answer + links if isinstance(answer, str) else answer
         finally:
-            self.state = "idle"
+            if self.shared_llama and body['model'] == self.captain['model_id']:
+                self.shared_last_used = time.monotonic()
+            self.state = "generating-text" if self.model_jobs.status()['active'] > 1 else "idle"
             LOG.info("Finished %s request", route)
 
 

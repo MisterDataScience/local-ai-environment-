@@ -4,6 +4,18 @@ One source of truth: **`main`**. One deployment package:
 [Mac-Local-AI-Automated-Installer.zip](downloads/Mac-Local-AI-Automated-Installer.zip).
 Feature branches are development history, not installation choices.
 
+The Work Agent now has a **captain and temporary workers**. One request can become
+up to five independent workers with separate contexts, role-specific tools,
+shared findings and peer messages. Compatible text requests can run concurrently
+against one model; speech and media still use exclusive model handoffs.
+Read [how the captain works](docs/CAPTAIN-AND-WORKERS.md).
+
+For the planned 32GB Mac, **Install Local AI with MiniCPM Captain.command** in the
+same ZIP builds the pinned native runtime and selects MiniCPM-V 4.7 35B-A3B as
+the shared model. It omits the stock 9B analyst and 12B coder downloads. The regular
+installer also provides the captain using the existing 4B model. Worker count
+does not multiply model downloads. Native Mac throughput remains unmeasured.
+
 This release combines vision, Apple PDF/OCR, approved file workflows, background
 startup and recurring text tasks with the scoped Mac controller and generic
 external reasoning helper. It also contains the existing local text, Office,

@@ -41,6 +41,10 @@ def main():
     def expire_audio():
         while not stopping.wait(5):
             server.engine.audio.expire()
+            try:
+                server.engine.expire_shared()
+            except (RuntimeError, OSError):
+                LOG.warning('Shared model idle release failed; model handoffs still require verified release.')
     threading.Thread(target=expire_audio, daemon=True).start()
     media_server = None
     if config.get("remote_access", {}).get("enabled"):
@@ -68,6 +72,8 @@ def main():
         server.server_close()
         server.engine.executor.shutdown(wait=True)
         server.engine.stop_comfy()
+        if server.engine.shared_llama:
+            server.engine.shared_llama.stop()
         if media_server:
             media_server.shutdown()
             media_server.server_close()

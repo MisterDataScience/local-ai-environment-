@@ -9,7 +9,7 @@ import time
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-PORTS = {"ollama": 11435, "gateway": 8001, "comfy": 8189, "webui": 8081, "media": 8002}
+PORTS = {"ollama": 11435, "shared_text": 11436, "shared_gguf": 11437, "gateway": 8001, "comfy": 8189, "webui": 8081, "media": 8002}
 
 # Compact shared behaviour; tool schemas and permissions remain native to each host.
 GLOBAL_BEHAVIOUR = (
@@ -78,11 +78,11 @@ def launch(command, cwd, log_path, environment):
                                 env=environment, start_new_session=True)
 
 
-def ollama_environment(root):
+def ollama_environment(root, parallel=1, port=None):
     env = os.environ.copy()
-    env.update({"OLLAMA_HOST": f"127.0.0.1:{PORTS['ollama']}",
+    env.update({"OLLAMA_HOST": f"127.0.0.1:{port or PORTS['ollama']}",
                 "OLLAMA_MODELS": str(root / "models/ollama"),
-                "OLLAMA_MAX_LOADED_MODELS": "1", "OLLAMA_NUM_PARALLEL": "1",
+                "OLLAMA_MAX_LOADED_MODELS": "1", "OLLAMA_NUM_PARALLEL": str(parallel),
                 "OLLAMA_CONTEXT_LENGTH": "8192", "OLLAMA_KEEP_ALIVE": "5m",
                 "OLLAMA_NO_CLOUD": "1"})
     return env

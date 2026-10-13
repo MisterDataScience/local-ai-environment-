@@ -2,6 +2,7 @@
 // No inference calls or account credentials. Contracts/reports contain local text.
 import { readFile, open, rename } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import {workers as captainWorkers, activeCaptains} from './captain-runtime.mjs';
 import { dirname, join, resolve } from 'node:path';
 import { hash, validateContract, bindContract, assessResult, saveArtifact, RESULT_INSTRUCTION } from './handoff-contract.mjs';
 
@@ -271,6 +272,12 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       }
     },
     async 'tool.execute.before'(input, output) {
+      // The captain policy validates its host-registered native child sessions.
+      if (captainWorkers.has(input.sessionID)) return;
+      if (activeCaptains.has(input.sessionID) && !READ_TOOLS.has(input.tool) &&
+          !['team_board', 'team_note', 'team_message', 'team_inbox', 'team_run'].includes(input.tool)) {
+        fail('wait for the captain cohort before other effectful tools or specialist calls');
+      }
       const session = data(await client.session.get({ path: { id: input.sessionID } }));
       if (input.tool.startsWith('aioffice_')) {
         await checkMode();
@@ -373,6 +380,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       });
     },
     async 'tool.execute.after'(input, output) {
+      if (captainWorkers.has(input.sessionID)) return;
       if (input.tool.startsWith('aioffice_')) {
         const {key} = await identity(input);
         // Native MCP after hooks receive CallToolResult, unlike native tools'

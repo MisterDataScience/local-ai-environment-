@@ -1,5 +1,12 @@
 # Text models, profiles and idle retention
 
+**Captain update:** ordinary installs add a shared 8K captain profile backed by
+the existing 4B weights. MiniCPM installs select a shared 16K desktop GGUF profile
+and use it for temporary workers, retaining the 4B fallback/32K document profile and omitting the stock
+9B/12B download selections. Parallel shared requests have their own backend;
+the serial specialist path described below remains available on standard installs.
+See [Captain and workers](CAPTAIN-AND-WORKERS.md).
+
 The updated installer configures three abliterated 4-bit models, with four role
 profiles. Installation records artifact metadata in `control/model-artifacts.json`.
 

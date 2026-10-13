@@ -21,7 +21,7 @@ from common import GLOBAL_BEHAVIOUR, http, stop_process, port_open
 VERSION = '1.18.34'
 URL = f'https://github.com/anomalyco/opencode/releases/download/v{VERSION}/opencode-darwin-arm64.zip'
 SHA256 = '8522b70f545184b3a8d97c5ca4f814093b2476d72aebfda8c48bcd072ec31d1b'
-SKIP = {'.git', '.opencode', '.claude', '.agents', '.local-ai-handoffs', '.local-ai-media', '.local-ai-office', '.venv', 'venv', 'node_modules',
+SKIP = {'.git', '.opencode', '.claude', '.agents', '.local-ai-handoffs', '.local-ai-team', '.local-ai-media', '.local-ai-office', '.venv', 'venv', 'node_modules',
         '__pycache__', '.ssh', '.aws', 'secrets', 'opencode.json', 'opencode.jsonc',
         'AGENTS.md', 'CLAUDE.md', '.mcp.json'}
 
@@ -110,7 +110,8 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
     if not models:
         raise ValueError('No eligible local model for the work agent')
     for identifier in models:
-        if 'qwen3.5' in presets[identifier]['model'].lower():
+        if ('qwen3.5' in presets[identifier]['model'].lower() or
+                (presets[identifier].get('backend') == 'llama' and config.get('captain', {}).get('llama', {}).get('mmproj'))):
             models[identifier]['modalities'] = {'input': ['text', 'image'], 'output': ['text']}
     preferred = 'local-ai' if 'local-ai' in models else next(iter(models))
     reserved = min(2048, min(m['limit']['context'] for m in models.values()) // 4)
@@ -132,6 +133,10 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
         return _apply_global_behaviour(settings)
     if root is None:
         raise ValueError('Model team requires an installed policy plugin and ledger')
+    from captain_config import settings as captain_settings
+    captain = captain_settings(config)
+    if captain['enabled']:
+        roles = dict(roles, coordinator=captain['model_id'])
     plugin = root / 'control/opencode-team.mjs'
     if not plugin.is_file():
         raise RuntimeError('Model team policy missing. Rerun the installer.')
@@ -187,13 +192,17 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
         'Stage 7A produces a research plan. Source acquisition is a separately authorised client/coordinator operation. '
         'Never claim to have searched, downloaded or checked absent source passages. '
         'For ordinary requests do not enable this workflow; use Scaffold Essay.command or the documented explicit text request.')
+    if captain['enabled']:
+        routing = routing.replace(
+            'Use analyst for difficult reasoning, planning and synthesis; coder for code design or proposed fixes.',
+            'Use captain team_run for useful independent tasks. Use native task only for a useful different-model specialist or explicit essay/scaffold work.')
     for name in ('plan', 'build'):
         settings['agent'][name].update(model=coordinator, prompt=routing,
             permission={'task': 'deny'})
     settings['agent']['plan']['permission'].update(edit='deny', bash='ask')
     descriptions = {'analyst': 'Focused reasoning, planning and evidence synthesis',
                     'coder': 'Inspect project code, implement bounded fixes and run relevant tests with approval',
-                    'document': 'Read and summarise supplied text using the larger 4B context'}
+                    'document': 'Read and summarise supplied text using the configured document profile'}
     for role in ('analyst', 'coder', 'document'):
         settings['agent'][role] = {
             'description': descriptions[role],
@@ -235,8 +244,10 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                  'template': '$ARGUMENTS'},
         'analyse': {'description': 'Ask the analyst directly', 'agent': 'analyst', 'subtask': False,
                     'template': '$ARGUMENTS'},
-        'document': {'description': 'Read supplied text with the 32K 4B profile', 'agent': 'document',
+        'document': {'description': 'Read supplied text with the configured document profile', 'agent': 'document',
                      'subtask': False, 'template': '$ARGUMENTS'}}
+    from captain_setup import configure as configure_captain
+    configure_captain(config, settings, root, status)
     return _apply_global_behaviour(settings)
 
 
@@ -368,6 +379,10 @@ def main():
     # A new repository has no source hooks, remotes or credential helpers.
     git_env = dict(env, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null')
     subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', 'init', '-q', str(project)], env=git_env, check=True)
+    exclude = project / '.git/info/exclude'
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open('a') as output:
+        output.write('\n.local-ai-team/\n')
     subprocess.run(['git', '-C', str(project), '-c', 'core.hooksPath=/dev/null', 'add', '--all'], env=git_env, check=True)
     subprocess.run(['git', '-C', str(project), '-c', 'core.hooksPath=/dev/null',
                     '-c', 'user.name=Local AI', '-c', 'user.email=local-ai@localhost',

@@ -1,5 +1,12 @@
 # Model team and handoff policy
 
+**Captain update, 13 October 2026:** the shared team is implemented separately
+from the original sequential specialist handoffs recorded here. It uses native
+OpenCode worker sessions, bounded cohorts, a task board and peer messages. The
+MiniCPM installation maps the captain/analyst/coder to one shared model, retains the 32K 4B document workflow, and retires the stock
+9B analyst/12B coder from the download plan. This does not establish superior
+coding/reasoning quality. See [Captain and workers](CAPTAIN-AND-WORKERS.md).
+
 Acceptance-contract update: handoffs preserve source-bound quoted requirements,
 label derived criteria, separate facts/assumptions/unknowns, and keep the checklist
 unchanged on retries. Structured returns are checked against native tool records;

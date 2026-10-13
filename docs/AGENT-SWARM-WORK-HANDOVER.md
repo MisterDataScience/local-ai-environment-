@@ -1,5 +1,10 @@
 # LOCAL AI: Adaptive Agent Swarms and Shared Inference
 
+**Implementation update:** the owner subsequently authorized implementation.
+The captain, native worker cohorts, shared scheduler and MiniCPM desktop setup
+are described in [Captain and workers](CAPTAIN-AND-WORKERS.md). The investigation
+instructions below are the earlier handover record, not the current authorization.
+
 **Investigation handover for GPT Work**  
 **Prepared:** 13 October 2026  
 **Project:** [MisterDataScience/local-ai-environment-](https://github.com/MisterDataScience/local-ai-environment-)  

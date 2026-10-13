@@ -63,6 +63,12 @@ def main(background=False):
         processes.append(("ollama", ollama))
         record(root, processes)
         wait_ready("http://127.0.0.1:11435/api/version", ollama)
+        if config.get('captain', {}).get('enabled') and config['captain'].get('provider', 'ollama') == 'ollama':
+            shared = launch([ollama_binary(root), 'serve'], root, root / 'logs/shared-text.log',
+                            ollama_environment(root, parallel=config['captain']['max_parallel'], port=11436))
+            processes.append(('shared_text', shared))
+            record(root, processes)
+            wait_ready('http://127.0.0.1:11436/api/version', shared)
         gateway = launch([root / "control/.venv/bin/python", root / "control/gateway.py"],
                          root / "control", root / "logs/gateway.log", os.environ.copy())
         processes.append(("gateway", gateway))

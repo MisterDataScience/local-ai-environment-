@@ -14,7 +14,7 @@ from common import ollama_binary, ollama_environment, port_open, stop_process
 
 def prepare_models(root, presets, download, run, http):
     from model_team import CODER, CODER_FILE, CODER_URL, CODER_SHA256, REGISTRY_DIGESTS
-    models = list(dict.fromkeys(p['model'] for p in presets.values()))
+    models = list(dict.fromkeys(p['model'] for p in presets.values() if p.get('backend', 'ollama') == 'ollama'))
     base = 'http://127.0.0.1:11435'
     report = {}
     for model in models:
@@ -91,6 +91,22 @@ def verify_work_agent(process, env, enabled, timeout=90):
                     matches = [r for r in rules if r['permission'] in ('*', name) and r['pattern'] == '*']
                     if not matches or matches[-1]['action'] != 'ask':
                         raise RuntimeError('Coordinator media approval permissions were not loaded')
+            configured = json.loads(env.get('OPENCODE_CONFIG_CONTENT', '{}'))
+            if 'captain-coder' in configured.get('agent', {}):
+                for role in ('researcher', 'analyst', 'coder', 'writer', 'reviewer'):
+                    worker = agents.get('captain-' + role, {})
+                    if not worker or worker.get('steps') != 12:
+                        raise RuntimeError('Captain worker configuration did not load: ' + role)
+                    for tool in ('task', 'team_run', 'team_retire', 'external_directory', 'webfetch'):
+                        rules = [r for r in worker.get('permission', []) if fnmatchcase(tool, r['permission'])
+                                 and r['pattern'] == '*']
+                        if not rules or rules[-1]['action'] != 'deny':
+                            raise RuntimeError('Captain worker permission did not load: ' + tool)
+                for parent in ('plan', 'build'):
+                    rules = [r for r in agents[parent]['permission'] if fnmatchcase('team_run', r['permission'])
+                             and r['pattern'] == '*']
+                    if not rules or rules[-1]['action'] != 'allow':
+                        raise RuntimeError('Captain dispatch policy did not initialize')
             return
         except (URLError, TimeoutError, ConnectionError):
             time.sleep(0.25)

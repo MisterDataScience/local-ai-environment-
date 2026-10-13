@@ -77,6 +77,18 @@ def team_roles(config, visible):
     if not team.get('enabled', False):
         return {}
     models = config['text_models']
+    captain = config.get('captain', {})
+    if captain.get('enabled') and captain.get('single_model'):
+        identifier = captain.get('model_id')
+        if identifier not in visible or identifier not in models:
+            raise ValueError('Shared captain role unavailable')
+        shared = {role: identifier for role in ('coordinator', 'document', 'analyst', 'coder')}
+        document = team.get('roles', {}).get('document')
+        if document in visible and valid_profile(models.get(document, {})) and models[document].get('role') == 'document':
+            # Preserve the existing 32K essay/scaffold contract profile. It reuses
+            # the 4B Gaming fallback weights and executes through the serial path.
+            shared['document'] = document
+        return shared
     roles = team.get('roles', {})
     for role in ('coordinator', 'document', 'analyst', 'coder'):
         identifier = roles.get(role)

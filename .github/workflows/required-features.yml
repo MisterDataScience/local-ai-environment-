@@ -41,6 +41,19 @@ jobs:
         run: node --test $(find installer/tests -name '*.mjs' ! -name 'test_conversation_browser.mjs')
 
 
+  captain-native-runtime-build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Build the pinned MiniCPM native server without downloading model weights
+        run: |
+          git init "$RUNNER_TEMP/minicpm-runtime"
+          git -C "$RUNNER_TEMP/minicpm-runtime" fetch --depth 1 https://github.com/ggml-org/llama.cpp.git 1b70350c92563449576bcbbf552994b1d1ed847d
+          git -C "$RUNNER_TEMP/minicpm-runtime" checkout --detach FETCH_HEAD
+          cmake -S "$RUNNER_TEMP/minicpm-runtime" -B "$RUNNER_TEMP/minicpm-runtime/build" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF
+          cmake --build "$RUNNER_TEMP/minicpm-runtime/build" --config Release --target llama-server -j 4
+          "$RUNNER_TEMP/minicpm-runtime/build/bin/llama-server" --version
+
   apple-native-pdf:
     runs-on: macos-15
     timeout-minutes: 12

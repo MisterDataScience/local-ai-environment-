@@ -35,7 +35,7 @@ def api(base, path, payload=None, timeout=30):
                 "exceeds maximum context length", "maximum context length",
                 "context size exceeded", "prompt is too long", "exceed context size",
                 "prompt is longer than the context length", "exceeds the available context size"))
-            if path == "/api/chat" and error.code in (400, 413) and explicit_overflow:
+            if path in {"/api/chat", "/v1/chat/completions"} and error.code in (400, 413) and explicit_overflow:
                 raise ContextLengthError("Backend rejected the request: context length exceeded") from error
         except (ValueError, TypeError):
             pass

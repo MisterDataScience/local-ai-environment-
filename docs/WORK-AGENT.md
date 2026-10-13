@@ -1,5 +1,11 @@
 # Work agent: upstream OpenCode
 
+**13 October 2026 update:** the captain policy extends this interface with native
+temporary worker cohorts, peer messages and shared-model scheduling. The older
+specialist `task` path below remains sequential and bounded. See
+[Captain and workers](CAPTAIN-AND-WORKERS.md) for the active team behaviour,
+model choices, limits and integration with media and resource modes.
+
 The installer includes the existing **OpenCode 1.18.34** application. It does not
 implement another agent loop, editor, shell tool, permission UI or coding frontend.
 Our integration installs its official Apple Silicon binary, provides an

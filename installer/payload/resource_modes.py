@@ -6,7 +6,7 @@ from model_team import valid_profile
 
 MODES = {'gaming': 'Coordinator/small text only; search and workspace/GitHub tools available.',
          'normal': 'Model team and eligible legacy text plus images and speech; video blocked.',
-         'max': 'All configured text models, images, video and speech; sequential loading.'}
+         'max': 'All configured text models and media; shared captain text slots, exclusive media.'}
 
 
 def allowed(mode, identifier, preset, route='text'):
@@ -16,6 +16,8 @@ def allowed(mode, identifier, preset, route='text'):
         return False
     if valid_profile(preset):
         return mode == 'normal' or preset['role'] == 'coordinator'
+    if identifier == 'local-ai-captain' and preset.get('backend') == 'llama':
+        return mode == 'normal'
     models = {'qwen3:4b'} if mode == 'gaming' else {'qwen3:4b', 'qwen3:14b'}
     return preset['model'] in models
 

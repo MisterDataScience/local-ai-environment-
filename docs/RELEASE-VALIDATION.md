@@ -1,9 +1,27 @@
 # Integrated release validation
 
-**Release:** `2026-10-09-integrated-1`  
-**Date:** 9 October 2026  
-**Canonical source:** `main`  
+**Release:** `2026-10-13-captain-workers-1`
+**Date:** 13 October 2026
+**Canonical source:** `main`
 **Installer:** `downloads/Mac-Local-AI-Automated-Installer.zip`
+
+## Captain implementation
+
+The release includes native worker cohorts, a task board and peer messages,
+shared text admission, exclusive model barriers and MiniCPM desktop setup.
+Authoring tests ran 195 installer cases (5 native/environment cases skipped),
+116 gateway cases and 81 JavaScript cases: 387 passed, 5 skipped, no failures.
+They use simulated model responses and temporary local HTTP services. These
+results verify host behaviour; they do not measure local-model quality or GPU speed.
+
+The native desktop runtime build has a dedicated CI job at its pinned source
+revision; its result is pending publication. `Check Captain.command` runs real OpenCode/model dispatch, evidence
+reading, reports and retirement on the new Mac. Full installation invokes it
+alongside existing native acceptance. Owner-Mac performance, real MiniCPM tool
+reliability and five-slot memory pressure remain pending.
+
+Read [Captain and workers](CAPTAIN-AND-WORKERS.md) for the active architecture.
+The feature validation record below describes earlier integrated capabilities.
 
 ## Included changes
 

@@ -37,6 +37,7 @@ GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
                  "tool_protocol.py", "image_inputs.py", "web_tools_api.py", "reverse_image.py", "vault_tools.py", "vault_media.py", "resource_modes.py", "context_policy.py", "model_team.py", "speech.py", "speech_worker.py")
 GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_worker.py')
 GATEWAY_FILES += ('capability_discovery.py',)
+GATEWAY_FILES += ('inference_scheduler.py', 'captain_config.py', 'shared_llama.py')
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
               'office_setup.py', 'office_mcp.py', 'office_check.py', 'browser_agent.py', 'browser_setup.py',
                'tool_availability.py', 'pdf_reader.py', 'pdf_mcp.py', 'transfer_mcp.py', 'file_transfer.py', 'vault_transfer.py', 'login_startup.py',
@@ -45,6 +46,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
+TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -272,7 +274,8 @@ def install_environments(root, uv, state):
         config_path.write_text(json.dumps(config, indent=2) + "\n")
         config_path.chmod(0o600)
     config = json.loads(config_path.read_text())
-    upgraded = upgrade_team(upgrade_text_configuration(config))
+    from captain_config import upgrade as upgrade_captain
+    upgraded = upgrade_captain(upgrade_team(upgrade_text_configuration(config)))
     from voice_setup import install as install_voice
     upgraded['speech'] = install_voice(root, uv, run)
     from conversation_setup import install as install_conversation
@@ -348,6 +351,11 @@ def verify_generation(root, configuration):
         ollama = launch([ollama_binary(root), "serve"], root, root / "logs/ollama.log", ollama_environment(root))
         processes.append(ollama)
         wait_ready("http://127.0.0.1:11435/api/version", ollama)
+        if configuration.get('captain', {}).get('enabled') and configuration['captain'].get('provider', 'ollama') == 'ollama':
+            shared = launch([ollama_binary(root), 'serve'], root, root / 'logs/shared-text.log',
+                            ollama_environment(root, parallel=configuration['captain']['max_parallel'], port=11436))
+            processes.append(shared)
+            wait_ready('http://127.0.0.1:11436/api/version', shared)
         presets = configured_text_models(configuration)
         from team_setup import prepare_models
         prepare_models(root, presets, download, run, http)
@@ -425,6 +433,8 @@ def verify_generation(root, configuration):
             (root / "acceptance-report.json").write_text(json.dumps(report, indent=2) + "\n")
         from team_setup import verify_native_handoffs
         report['checks'].extend(verify_native_handoffs(root, configuration))
+        from captain_check import verify as verify_captain
+        report['checks'].extend(verify_captain(root, configuration))
         (root / "acceptance-report.json").write_text(json.dumps(report, indent=2) + "\n")
     finally:
         for process in reversed(processes):
@@ -498,7 +508,7 @@ def make_launcher(root):
                                  "\nexec .venv/bin/python remote_access.py --root " + shlex.quote(str(root)) +
                                  argument + "\n")
         remote_command.chmod(0o755)
-    for label, module in (("Check Office", "office_setup.py"), ("Scaffold Essay", "work_agent.py --scaffold"), ("Edit Essay", "work_agent.py --essay"), ("Connect Discord", "discord_setup.py"), ("Check Conversation", "conversation_check.py"), ("Start Conversation", "work_agent.py --conversation"), ("Configure Voice", "voice_setup.py"), ("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
+    for label, module in (("Check Office", "office_setup.py"), ("Check Captain", "captain_check.py"), ("Install MiniCPM Captain", "captain_setup.py --install-minicpm"), ("Scaffold Essay", "work_agent.py --scaffold"), ("Edit Essay", "work_agent.py --essay"), ("Connect Discord", "discord_setup.py"), ("Check Conversation", "conversation_check.py"), ("Start Conversation", "work_agent.py --conversation"), ("Configure Voice", "voice_setup.py"), ("Start Work Agent", "work_agent.py"), ("AI Modes", "mode_selector.py"), ("Configure AI Workspace", "workspace_setup.py"), ("Configure Reverse Image Search", "reverse_image_setup.py"), ("Disable Reverse Image Search", "reverse_image_setup.py --disable"), ("Connect GitHub", "account_tools.py"), ("Back Up AI Workspace", "vault_backup.py"),
                          ("Restore AI Workspace", "vault_backup.py --restore"), ("Archive Existing AI Files", "vault_backup.py --migrate-legacy")):
         helper = root / (label + '.command')
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
@@ -526,6 +536,8 @@ def main():
     parser.add_argument("--remote-access", action="store_true",
                         help="Install/connect Tailscale and configure private chat/media HTTPS access.")
     parser.add_argument("--web-access", action="store_true", help="Configure isolated Proton VPN search/page reading.")
+    parser.add_argument('--minicpm-captain', action='store_true',
+                        help='Build the pinned native MiniCPM runtime and use its standard mixed-Q3 model as the shared team.')
     args = parser.parse_args()
     root = args.root.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -564,6 +576,9 @@ def main():
         install_discord(root, download, run)
         configure_discord(root)
         configuration = json.loads((root / 'control/config.json').read_text())
+        if args.minicpm_captain:
+            from captain_setup import install_minicpm
+            configuration = install_minicpm(root, download)
         logging.info("Stage 6/8: hardware generation and memory handoff tests")
         fingerprint = acceptance_fingerprint(root)
         accepted_file = root / "accepted-fingerprint.txt"
