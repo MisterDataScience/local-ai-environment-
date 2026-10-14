@@ -210,7 +210,13 @@ permissions; mode invalidation; role configuration; report preservation;
 retirement; shared gateway requests; exclusive barriers; GGUF integrity and
 context allocation; usage/tool-call translation; and existing feature regressions.
 
-The tests do not run a Mac GPU, build the native MiniCPM binary here, or measure
+The follow-up audit adds hard host-side inference-step accounting, normalized
+MiniCPM image delivery, preserved native tool-call IDs, mode checks after cold
+startup, resumable standalone model downloads and checks of every text backend
+after model/media handoffs. See [Environment audit](ENVIRONMENT-AUDIT-2026-10-14.md).
+
+The authoring host does not run a Mac GPU. GitHub's macOS runner has successfully
+built the pinned native MiniCPM binary. Tests do not measure
 MiniCPM's real tool reliability, coding quality or five-slot throughput. The
 installer's native acceptance and the supplied captain check verify real model
 and OpenCode calls on the new Mac. A failure remains a failure, never an inferred

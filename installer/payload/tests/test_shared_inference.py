@@ -116,7 +116,7 @@ class SharedInferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             engine = Engine(cfg, Path(folder))
             engine.shared_llama = Mock(process=object())
-            engine.shared_last_used = 0
+            engine.shared_last_used = -engine.text_models[cfg['captain']['model_id']]['keep_alive_seconds'] - 1
             with engine.model_jobs.lease('captain', 5):
                 engine.expire_shared()
                 engine.shared_llama.stop.assert_not_called()
@@ -124,6 +124,34 @@ class SharedInferenceTests(unittest.TestCase):
             engine.shared_llama.stop.assert_called_once()
             self.assertIsNone(engine.text_profile)
             engine.executor.shutdown()
+
+    def test_mode_change_during_cold_gguf_start_prevents_stale_inference(self):
+        cfg = config()
+        cfg['captain'].update(provider='llama', single_model=True)
+        cfg['text_models']['local-ai-captain'].update(backend='llama')
+        with tempfile.TemporaryDirectory() as folder:
+            engine = Engine(cfg, Path(folder))
+            self.addCleanup(engine.executor.shutdown)
+            engine.shared_llama = Mock()
+            engine.shared_llama.start.side_effect = lambda *_: engine.change_mode('gaming')
+            body = {'model': 'local-ai-captain', 'messages': [{'role': 'user', 'content': 'A stale request'}]}
+            with patch.object(engine, 'unload_ollama'), patch('model_engine.port_open', return_value=False):
+                with self.assertRaisesRegex(RuntimeError, 'Mode switch'):
+                    engine.submit(body).result(3)
+                engine.executor.shutdown()
+            engine.shared_llama.chat.assert_not_called()
+
+    def test_backend_mismatches_and_disabled_native_presets_fail_closed(self):
+        cfg = config()
+        cfg['captain']['provider'] = 'llama'
+        with self.assertRaisesRegex(ValueError, 'must match'):
+            settings(cfg)
+        cfg['text_models']['local-ai-captain']['backend'] = 'llama'
+        settings(cfg)
+        cfg['captain']['enabled'] = False
+        from text_models import configured_text_models
+        with self.assertRaisesRegex(ValueError, 'unconfigured text backend'):
+            configured_text_models(cfg)
 
 
 if __name__ == '__main__':

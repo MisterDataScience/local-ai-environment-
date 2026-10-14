@@ -7,7 +7,29 @@ import subprocess
 import time
 from urllib.error import URLError
 from backend_http import api, port_open
-from tool_protocol import tools_for_ollama, assistant_for_openai
+from tool_protocol import tools_for_ollama, assistant_for_openai, messages_for_ollama
+
+
+def openai_messages(original, cleaned):
+    """Send validated text/pixels while retaining native call/result identities."""
+    result = []
+    for source, message in zip(original, cleaned):
+        item = {'role': message['role'], 'content': message['content']}
+        if message.get('images'):
+            item['content'] = [{'type': 'text', 'text': message['content']}, *[
+                {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + image}}
+                for image in message['images']]]
+        if message['role'] == 'tool':
+            item['tool_call_id'] = source['tool_call_id']
+        if message.get('tool_calls'):
+            item['tool_calls'] = [{'id': call['id'], 'type': 'function', 'function': {
+                'name': clean['function']['name'],
+                'arguments': json.dumps(clean['function']['arguments'], ensure_ascii=False)}}
+                for call, clean in zip(source['tool_calls'], message['tool_calls'])]
+        if 'thinking' in message:
+            item['reasoning_content'] = message['thinking']
+        result.append(item)
+    return result
 
 
 def digest(path):
@@ -96,9 +118,10 @@ class SharedLlama:
             raise RuntimeError('Shared GGUF server did not release its port')
         self.process = None
 
-    def chat(self, body, limit):
+    def chat(self, body, limit, messages=None):
         tools = tools_for_ollama(body)
-        payload = {'model': 'local-ai-captain', 'messages': body['messages'], 'stream': False,
+        cleaned = messages if messages is not None else messages_for_ollama(body['messages'])
+        payload = {'model': 'local-ai-captain', 'messages': openai_messages(body['messages'], cleaned), 'stream': False,
                    'max_tokens': limit, 'cache_prompt': True}
         if tools:
             payload['tools'] = tools
@@ -109,7 +132,18 @@ class SharedLlama:
         if not isinstance(choices, list) or not choices:
             raise RuntimeError('Local GGUF server returned no completion')
         choice = choices[0]
-        result = assistant_for_openai(choice['message'], tools)
+        message = dict(choice['message'])
+        if 'reasoning_content' in message:
+            message['thinking'] = message['reasoning_content']
+        result = assistant_for_openai(message, tools)
+        if isinstance(result, dict) and result.get('tool_calls'):
+            seen = set()
+            for call, native in zip(result['tool_calls'], message['tool_calls']):
+                identifier = native.get('id')
+                if not isinstance(identifier, str) or not 1 <= len(identifier) <= 200 or identifier in seen:
+                    raise RuntimeError('Local GGUF server returned invalid or duplicate tool call IDs')
+                seen.add(identifier)
+                call['id'] = identifier
         body['_finish_reason'] = choice.get('finish_reason', 'stop')
         usage = response.get('usage', {})
         if all(type(usage.get(k)) is int and usage[k] >= 0 for k in ('prompt_tokens', 'completion_tokens')):

@@ -44,6 +44,7 @@ def configured_text_models(config):
         model = preset.get("model")
         if preset.get('backend', 'ollama') != 'ollama' and not (
                 preset.get('backend') == 'llama' and config.get('captain', {}).get('provider') == 'llama'
+                and config.get('captain', {}).get('enabled') is True
                 and identifier == config.get('captain', {}).get('model_id')):
             raise ValueError('Unknown or unconfigured text backend')
         if not isinstance(model, str) or not model.strip() or model.endswith(":cloud"):

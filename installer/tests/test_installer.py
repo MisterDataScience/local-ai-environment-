@@ -105,6 +105,21 @@ class InstallerTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 installer.verify_text_cutoff('test-key', 'local-ai')
 
+    def test_acceptance_observes_both_ollama_backends_and_native_release(self):
+        presets = {'local-ai': {'model': 'fallback'}, 'local-ai-captain': {'model': 'shared'}}
+        cfg = {'captain': {'enabled': True, 'model_id': 'local-ai-captain', 'provider': 'ollama'}}
+        with patch.object(installer, 'http', side_effect=[{'models': []}, {'models': [{'name': 'shared'}]}]) as http:
+            installer.verify_text_residency(cfg, presets, 'local-ai-captain')
+            self.assertEqual(http.call_count, 2)
+        with patch.object(installer, 'http', side_effect=[{'models': []}, {'models': [{'name': 'shared'}]}]):
+            with self.assertRaisesRegex(RuntimeError, 'Unexpected resident'):
+                installer.verify_text_residency(cfg, presets, None)
+        cfg['captain']['provider'] = 'llama'
+        with patch.object(installer, 'http', return_value={'models': []}), patch.object(installer, 'port_open', return_value=True):
+            installer.verify_text_residency(cfg, presets, 'local-ai-captain')
+            with self.assertRaisesRegex(RuntimeError, 'GGUF residency'):
+                installer.verify_text_residency(cfg, presets, None)
+
     def test_interrupted_download_keeps_partial_for_resume(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "model"

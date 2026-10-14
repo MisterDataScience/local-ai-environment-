@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm, readFile} from 'node:fs/promises';
+import {mkdtemp, rm, readFile, symlink, readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Captain, {validateTasks} from '../captain.mjs';
@@ -151,4 +151,41 @@ test('unknown child identities and explicit essay workflows cannot dispatch a te
   await assert.rejects(f.hooks.tool.team_run.execute({tasks: [task('a')]}, f.context('essay', 'build', 'essay-user')), /existing contracts/);
   f.sessions.set('unknown', {id: 'unknown', parentID: f.root});
   await assert.rejects(f.hooks.tool.team_board.execute({}, {sessionID: 'unknown', callID: 'forged'}), /unregistered/);
+});
+
+test('report directory cannot redirect task evidence outside the project', async t => {
+  const f = await fixture(t);
+  const outside = await mkdtemp(join(tmpdir(), 'captain-outside-'));
+  t.after(() => rm(outside, {recursive: true, force: true}));
+  await symlink(outside, join(f.root, '.local-ai-team'), 'dir');
+  const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('audit')]}, f.context('report')));
+  assert.equal(result.tasks[0].status, 'failed');
+  assert.match(result.tasks[0].error, /report directory/);
+  assert.deepEqual(await readdir(outside), []);
+});
+
+test('parent cancellation fences workers even if a native prompt returns late', async t => {
+  const controller = new AbortController();
+  const f = await fixture(t, {run: async ({path, hooks}) => {
+    controller.abort();
+    await assert.rejects(hooks['tool.execute.before'](f.workerContext(path.id, 'read')), /no longer active/);
+  }});
+  const context = {...f.context('cancel'), abort: controller.signal};
+  const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('audit')]}, context));
+  assert.equal(result.tasks[0].status, 'cancelled');
+  assert(f.aborted.length >= 1);
+});
+
+test('host enforces twelve worker inference attempts and a fixed native identity', async t => {
+  const f = await fixture(t, {run: async ({path, hooks}) => {
+    const input = {sessionID: path.id, agent: 'captain-analyst',
+      model: {providerID: 'local-ai-gateway', id: 'local-ai-captain'}};
+    await assert.rejects(hooks['chat.params']({...input, agent: 'captain-coder'}), /identity changed/);
+    for (let i = 0; i < 12; i++) await hooks['chat.params'](input);
+    await assert.rejects(hooks['chat.params'](input), /inference-step budget/);
+  }});
+  const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('budget')]}, f.context('steps')));
+  assert.equal(result.tasks[0].status, 'completed');
+  const ledger = JSON.parse(await readFile(f.statePath));
+  assert.equal(Object.values(ledger.turns)[0].tasks[0].modelSteps, 12);
 });

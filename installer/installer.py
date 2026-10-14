@@ -408,16 +408,12 @@ def verify_generation(root, configuration):
             if not content.strip():
                 raise RuntimeError(f"{kind} returned an empty answer.")
             if kind.startswith("text"):
-                loaded = http("http://127.0.0.1:11435/api/ps").get("models", [])
-                expected = presets[identifier]["model"]
-                if any(model["name"] != expected for model in loaded):
-                    raise RuntimeError("A different text model remained loaded after model switching.")
+                verify_text_residency(configuration, presets, identifier)
             if kind in {"image", "video", "speech"}:
                 extension = '.wav' if kind == 'speech' else ".png" if kind == "image" else ".mp4"
                 if extension not in content:
                     raise RuntimeError(f"{kind} did not return the expected saved output.")
-                if http("http://127.0.0.1:11435/api/ps").get("models"):
-                    raise RuntimeError("Text model remained loaded after a visual job.")
+                verify_text_residency(configuration, presets, None)
                 if port_open(PORTS["comfy"]):
                     raise RuntimeError("ComfyUI remained running after its visual job.")
             report["checks"].append({"name": kind, "model_id": identifier,
@@ -439,6 +435,25 @@ def verify_generation(root, configuration):
     finally:
         for process in reversed(processes):
             stop_process(process, timeout=4200)
+
+
+def verify_text_residency(configuration, presets, identifier):
+    """Acceptance observes every owned text backend, not just primary Ollama."""
+    captain = configuration.get('captain', {})
+    shared = captain.get('enabled') and identifier == captain.get('model_id')
+    native = shared and captain.get('provider') == 'llama'
+    bases = [('primary', 'http://127.0.0.1:11435')]
+    if captain.get('enabled') and captain.get('provider', 'ollama') == 'ollama':
+        bases.append(('shared', 'http://127.0.0.1:11436'))
+    owner = 'shared' if shared else 'primary'
+    for name, base in bases:
+        loaded = http(base + '/api/ps').get('models', [])
+        expected = presets[identifier]['model'] if identifier and not native and owner == name else None
+        if any(model['name'] != expected for model in loaded):
+            raise RuntimeError('Unexpected resident text model on ' + name + ' after a model/media handoff')
+    if captain.get('enabled') and captain.get('provider') == 'llama':
+        if port_open(PORTS['shared_gguf']) != bool(native):
+            raise RuntimeError('Shared GGUF residency did not match the completed model/media handoff')
 
 
 def make_launcher(root):

@@ -39,6 +39,13 @@ jobs:
       - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/payload/tests -v
       - name: JavaScript policy and workflow checks
         run: node --test $(find installer/tests -name '*.mjs' ! -name 'test_conversation_browser.mjs')
+      - name: Real pinned OpenCode captain protocol without model weights
+        run: |
+          curl -fL --retry 3 https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64-baseline.tar.gz -o "$RUNNER_TEMP/opencode.tar.gz"
+          echo "24b0d458d21ef548b2752166303defcf7f4945b049fb4876ab78dfaf86d81b27  $RUNNER_TEMP/opencode.tar.gz" | sha256sum --check
+          mkdir "$RUNNER_TEMP/native-opencode"
+          tar -xzf "$RUNNER_TEMP/opencode.tar.gz" -C "$RUNNER_TEMP/native-opencode"
+          python scripts/check_native_captain.py --binary "$RUNNER_TEMP/native-opencode/opencode"
 
 
   captain-native-runtime-build:

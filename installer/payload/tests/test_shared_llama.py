@@ -34,8 +34,46 @@ class SharedLlamaTests(unittest.TestCase):
             result = backend.chat(body, 512)
         self.assertEqual(request.call_count, 1)
         self.assertEqual(result['tool_calls'][0]['function']['name'], 'read')
+        self.assertEqual(result['tool_calls'][0]['id'], 'native')
         self.assertEqual(body['_usage']['total_tokens'], 11)
         self.assertEqual(body['_finish_reason'], 'tool_calls')
+
+    def test_normalized_pixels_and_native_tool_history_are_preserved(self):
+        import base64
+        import io
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+        image = io.BytesIO()
+        metadata = PngInfo(); metadata.add_text('private', 'must not reach the model')
+        Image.new('RGB', (20, 20), 'red').save(image, format='PNG', pnginfo=metadata)
+        image_url = 'data:image/png;base64,' + base64.b64encode(image.getvalue()).decode()
+        body = {'messages': [
+            {'role': 'developer', 'content': 'Keep these instructions.'},
+            {'role': 'assistant', 'content': None, 'tool_calls': [
+                {'id': 'native-call-1', 'type': 'function', 'function': {'name': 'read', 'arguments': '{}'}}]},
+            {'role': 'tool', 'tool_call_id': 'native-call-1', 'content': [
+                {'type': 'text', 'text': 'Untrusted screenshot'},
+                {'type': 'image_url', 'image_url': {'url': image_url}}]}]}
+        response = {'choices': [{'message': {'role': 'assistant', 'content': 'Observed pixels'}, 'finish_reason': 'stop'}]}
+        with patch('shared_llama.api', return_value=response) as request:
+            self.assertEqual(SharedLlama({}).chat(body, 100), 'Observed pixels')
+        sent = request.call_args.args[2]['messages']
+        self.assertEqual(sent[0]['role'], 'system')
+        self.assertEqual(sent[1]['tool_calls'][0]['id'], 'native-call-1')
+        self.assertEqual(sent[2]['tool_call_id'], 'native-call-1')
+        url = sent[2]['content'][1]['image_url']['url']
+        self.assertTrue(url.startswith('data:image/jpeg;base64,'))
+        self.assertNotIn(b'must not reach the model', base64.b64decode(url.split(',', 1)[1]))
+
+    def test_duplicate_backend_call_ids_fail_without_changing_usage(self):
+        body = {'messages': [{'role': 'user', 'content': 'Read'}], 'tools': [
+            {'type': 'function', 'function': {'name': 'read', 'parameters': {'type': 'object'}}}]}
+        call = {'id': 'same-id', 'type': 'function', 'function': {'name': 'read', 'arguments': '{}'}}
+        with patch('shared_llama.api', return_value={'choices': [{'message': {
+                'role': 'assistant', 'content': '', 'tool_calls': [call, call]}, 'finish_reason': 'tool_calls'}]}):
+            with self.assertRaisesRegex(RuntimeError, 'duplicate tool call IDs'):
+                SharedLlama({}).chat(body, 100)
+        self.assertNotIn('_usage', body)
 
 
 if __name__ == '__main__':

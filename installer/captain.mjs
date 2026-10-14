@@ -1,6 +1,6 @@
 // Native OpenCode owns each worker's model/tool loop. This plugin owns task
 // identity, bounded cohorts, permissions, communication, reports and retirement.
-import {readFile, mkdir, open, rename} from 'node:fs/promises';
+import {readFile, mkdir, open, rename, lstat, realpath} from 'node:fs/promises';
 import {dirname, join, resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {workers, activeCaptains} from './captain-runtime.mjs';
@@ -70,7 +70,7 @@ export default async function Captain({client, directory}, options) {
   if (!STORES.has(statePath)) STORES.set(statePath, load(statePath));
   const store = await STORES.get(statePath);
   const {ledger, exclusive, save, activeParents} = store;
-  const reportDirectory = join(resolve(directory), '.local-ai-team');
+  const reportDirectory = join(await realpath(resolve(directory)), '.local-ai-team');
 
   async function mode() {
     const response = await fetch('http://127.0.0.1:8001/control/mode', {
@@ -106,6 +106,9 @@ export default async function Captain({client, directory}, options) {
   }
   async function artifact(id, report) {
     await mkdir(reportDirectory, {recursive: true, mode: 0o700});
+    const stat = await lstat(reportDirectory);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || await realpath(reportDirectory) !== reportDirectory)
+      fail('report directory must stay inside the selected project without symbolic links');
     const path = join(reportDirectory, id + '.json');
     const file = await open(path, 'wx', 0o600);
     try {await file.writeFile(JSON.stringify(report, null, 2) + '\n');} finally {await file.close();}
@@ -295,9 +298,18 @@ export default async function Captain({client, directory}, options) {
     async 'chat.params'(input) {
       if (input.agent?.startsWith('captain-')) {
         const binding = workers.get(input.sessionID);
-        if (!binding || binding.store !== store || binding.task.status !== 'running') fail('worker is no longer assigned');
+        if (!binding || binding.store !== store || binding.task.status !== 'running' || binding.abortSignal?.aborted)
+          fail('worker is no longer assigned');
+        if (input.agent !== 'captain-' + binding.task.role) fail('worker identity changed');
         await mode();
         if (input.model.providerID !== 'local-ai-gateway' || input.model.id !== model.slice('local-ai-gateway/'.length)) fail('worker model changed');
+        // Native agent.steps supplies a final-step instruction; it is not a
+        // hard inference barrier if a model keeps emitting tool calls.
+        await exclusive(async () => {
+          if ((binding.task.modelSteps ?? 0) >= 12) fail('worker inference-step budget reached');
+          binding.task.modelSteps = (binding.task.modelSteps ?? 0) + 1;
+          await save();
+        });
       }
     }};
 }

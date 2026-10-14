@@ -11,7 +11,6 @@ import shutil
 import subprocess
 import time
 from urllib.parse import quote
-from urllib.request import urlopen
 
 LLAMA_REVISION = '1b70350c92563449576bcbbf552994b1d1ed847d'
 LLAMA_REPOSITORY = 'https://github.com/ggml-org/llama.cpp.git'
@@ -50,19 +49,25 @@ def build_tools(root):
 def download_artifact(url, destination, checksum):
     from shared_llama import digest
     destination = Path(destination)
+    if destination.is_symlink():
+        raise ValueError('Model download paths must not be symbolic links')
     if destination.is_file() and digest(destination) == checksum:
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + '.download')
-    try:
-        with urlopen(url, timeout=60) as source, temporary.open('wb') as output:
-            for block in iter(lambda: source.read(1024 * 1024), b''):
-                output.write(block)
-        if digest(temporary) != checksum:
-            raise RuntimeError('Model download checksum mismatch')
-        temporary.replace(destination)
-    finally:
-        temporary.unlink(missing_ok=True)
+    if temporary.is_symlink():
+        raise ValueError('Model download paths must not be symbolic links')
+    # Preserve interrupted multi-gigabyte downloads. A fully downloaded file
+    # can be promoted without a range request (which could return HTTP 416).
+    if not temporary.is_file() or digest(temporary) != checksum:
+        subprocess.run(['/usr/bin/curl', '-fL', '--proto', '=https', '--proto-redir', '=https',
+                        '--retry', '3', '--retry-delay', '3', '--connect-timeout', '30',
+                        '-C', '-', '-o', str(temporary), url], check=True)
+    if digest(temporary) != checksum:
+        invalid = temporary.with_name(temporary.name + '.invalid-' + str(time.time_ns()))
+        temporary.rename(invalid)
+        raise RuntimeError('Model download checksum mismatch; invalid data preserved, not installed')
+    temporary.replace(destination)
 
 ROLES = ('researcher', 'analyst', 'coder', 'writer', 'reviewer')
 BOARD_TOOLS = ('team_board', 'team_note', 'team_message', 'team_inbox')
@@ -172,6 +177,10 @@ def install_minicpm(root, download=None):
     if not (source / '.git').exists():
         source.mkdir(parents=True, exist_ok=True)
         subprocess.run(['git', 'init', str(source)], check=True)
+    head = subprocess.run(['git', '-C', str(source), 'rev-parse', '--verify', 'HEAD'],
+                          capture_output=True, text=True)
+    if head.returncode:
+        # An interrupted initial fetch has a .git directory but no HEAD.
         subprocess.run(['git', '-C', str(source), 'fetch', '--depth', '1', LLAMA_REPOSITORY, LLAMA_REVISION], check=True)
         subprocess.run(['git', '-C', str(source), 'checkout', '--detach', 'FETCH_HEAD'], check=True)
     actual = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()

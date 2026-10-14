@@ -123,6 +123,8 @@ def verify_native_handoffs(root, config):
         raise RuntimeError('Close the work agent before native team acceptance')
     status = http('http://127.0.0.1:8001/control/mode', key=config['api_key'])
     visible = http('http://127.0.0.1:8001/v1/models', key=config['api_key'])['data']
+    from model_team import team_roles
+    roles = team_roles(config, [m['id'] for m in visible])
     settings = work_agent.configuration(config, [m['id'] for m in visible], status['mode'], root, status)
     env = work_agent.environment(root, config, settings)
     env.update(OPENCODE_SERVER_USERNAME='opencode', OPENCODE_SERVER_PASSWORD=secrets.token_urlsafe(24))
@@ -179,7 +181,7 @@ def verify_native_handoffs(root, config):
                     raise RuntimeError('Native specialist return did not satisfy its handoff contract')
                 child_messages = native('/session/' + child + '/message')
                 outputs = [m for m in child_messages if m['info']['role'] == 'assistant']
-                expected = config['model_team']['roles'][role]
+                expected = roles[role]
                 if not outputs or any(m['info']['modelID'] != expected or
                     m['info'].get('providerID') != 'local-ai-gateway' or m['info'].get('error') for m in outputs):
                     raise RuntimeError('Native specialist used an unexpected model')

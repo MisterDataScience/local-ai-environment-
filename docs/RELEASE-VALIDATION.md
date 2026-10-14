@@ -1,7 +1,7 @@
 # Integrated release validation
 
-**Release:** `2026-10-13-captain-workers-1`
-**Date:** 13 October 2026
+**Release:** `2026-10-14-captain-hardening-1`
+**Date:** 14 October 2026
 **Canonical source:** `main`
 **Installer:** `downloads/Mac-Local-AI-Automated-Installer.zip`
 
@@ -9,18 +9,23 @@
 
 The release includes native worker cohorts, a task board and peer messages,
 shared text admission, exclusive model barriers and MiniCPM desktop setup.
-Authoring tests ran 195 installer cases (5 native/environment cases skipped),
-116 gateway cases and 81 JavaScript cases: 387 passed, 5 skipped, no failures.
+Authoring tests ran 199 installer cases (5 native/environment cases skipped),
+120 gateway cases and 84 JavaScript cases: 398 passed, 5 skipped, no failures.
 They use simulated model responses and temporary local HTTP services. These
 results verify host behaviour; they do not measure local-model quality or GPU speed.
 
-The native desktop runtime build has a dedicated CI job at its pinned source
-revision; its result is pending publication. `Check Captain.command` runs real OpenCode/model dispatch, evidence
+The previous published revision passed the pinned native desktop runtime build
+and macOS PDF integration jobs. A runner-uptime-dependent idle test failed in
+that revision and is corrected here. CI now also runs the actual pinned OpenCode
+binary against synthetic local inference to verify worker overlap, native tool
+execution, reports and retirement without downloading model weights.
+`Check Captain.command` runs real OpenCode/model dispatch, evidence
 reading, reports and retirement on the new Mac. Full installation invokes it
 alongside existing native acceptance. Owner-Mac performance, real MiniCPM tool
 reliability and five-slot memory pressure remain pending.
 
 Read [Captain and workers](CAPTAIN-AND-WORKERS.md) for the active architecture.
+Read [the environment audit](ENVIRONMENT-AUDIT-2026-10-14.md) for corrections and remaining limits.
 The feature validation record below describes earlier integrated capabilities.
 
 ## Included changes

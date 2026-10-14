@@ -150,7 +150,7 @@ class TeamTests(unittest.TestCase):
                 team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
 
     def test_native_acceptance_requires_real_child_model_and_tool_result(self):
-        for fault in (None, 'no-task', 'wrong-model', 'child-tool', 'coder-no-read'):
+        for fault in (None, 'shared', 'no-task', 'wrong-model', 'child-tool', 'coder-no-read'):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as d:
                 root = Path(d)
                 (root / 'control').mkdir()
@@ -159,6 +159,14 @@ class TeamTests(unittest.TestCase):
                 (root / 'control/essay-edit-prompt.txt').write_text('Essay prompt')
                 (root / 'control/reverse-scaffold-prompt.txt').write_text('Scaffold prompt')
                 cfg = config()
+                if fault == 'shared':
+                    from captain_config import upgrade
+                    cfg = upgrade(cfg)
+                    cfg['captain']['single_model'] = True
+                    (root / 'control/captain.mjs').write_text('// test')
+                    for role in ('analyst', 'coder'):
+                        del cfg['text_models'][cfg['model_team']['roles'][role]]
+                expected_roles = team_roles(cfg, cfg['text_models'])
                 state = {'number': 0}
                 def native(request, **kwargs):
                     url = request.full_url
@@ -171,7 +179,7 @@ class TeamTests(unittest.TestCase):
                         role = 'analyst' if state['number'] == 1 else 'coder'
                         if '/child/' in url:
                             result = [{'info': {'role': 'assistant', 'providerID': 'local-ai-gateway',
-                                'modelID': 'wrong' if fault == 'wrong-model' else cfg['model_team']['roles'][role]},
+                                'modelID': 'wrong' if fault == 'wrong-model' else expected_roles[role]},
                                 'parts': [{'type': 'text', 'text': 'Result'}] +
                                          ([{'type': 'tool', 'tool': 'bash'}] if fault == 'child-tool' else
                                           [{'type': 'tool', 'tool': 'read', 'state': {'status': 'completed'}}]
@@ -188,7 +196,7 @@ class TeamTests(unittest.TestCase):
                      patch.object(team_setup.subprocess, 'Popen', return_value=Mock()), \
                      patch.object(team_setup, 'stop_process') as stop, \
                      patch.object(team_setup, 'urlopen', side_effect=native):
-                    if fault:
+                    if fault and fault != 'shared':
                         with self.assertRaises(RuntimeError): team_setup.verify_native_handoffs(root, cfg)
                     else:
                         self.assertEqual(len(team_setup.verify_native_handoffs(root, cfg)), 2)

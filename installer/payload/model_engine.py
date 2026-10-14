@@ -463,8 +463,9 @@ class Engine:
                         self.text_profile = profile
                     self.shared_llama.start(preset['num_ctx'], preset.get('thinking', False))
                     self.shared_last_used = time.monotonic()
+                self.check_policy(body, route)
                 request = body if route == 'text' else dict(body, messages=messages)
-                result = self.shared_llama.chat(request, output_limit(body, self.mode, preset))
+                result = self.shared_llama.chat(request, output_limit(body, self.mode, preset), messages)
                 if request is not body:
                     for name in ('_usage', '_finish_reason'):
                         if name in request:

@@ -25,8 +25,12 @@ def settings(config):
         raise ValueError('Captain must select a local-ai profile')
     if result['enabled'] and result['model_id'] not in config.get('text_models', {}):
         raise ValueError('Captain shared model profile is missing')
-    if result['enabled'] and config['text_models'][result['model_id']]['num_ctx'] > 16384:
-        raise ValueError('Shared captain contexts are capped at 16K per request')
+    if result['enabled']:
+        preset = config['text_models'][result['model_id']]
+        if preset.get('backend', 'ollama') != result['provider']:
+            raise ValueError('Captain provider must match its shared model backend')
+        if preset['num_ctx'] > 16384:
+            raise ValueError('Shared captain contexts are capped at 16K per request')
     return result
 
 
