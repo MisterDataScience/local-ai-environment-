@@ -116,6 +116,17 @@ class ModeTests(unittest.TestCase):
             self.engine.submit(self.body())
         self.switch('gaming')
 
+    def test_failed_audio_release_records_a_recoverable_error_instead_of_sticking_in_transition(self):
+        with patch.object(self.engine.audio, 'control', side_effect=RuntimeError('Audio process did not release')):
+            self.engine.change_mode('gaming')
+            self.engine.executor.submit(lambda: None).result(2)
+        status = self.engine.mode_status()
+        self.assertFalse(status['transitioning'])
+        self.assertIsNotNone(status['error'])
+        with self.assertRaises(RuntimeError):
+            self.engine.submit(self.body())
+        self.switch('gaming')
+
     def test_gaming_bounds_actual_inference_options(self):
         self.switch('gaming')
         self.api.side_effect = lambda url, path, *args, **kw: {'models': []} if path == '/api/ps' else {'message': {'content': 'answer'}}

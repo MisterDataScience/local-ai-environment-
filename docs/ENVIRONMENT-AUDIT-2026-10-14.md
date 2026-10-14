@@ -16,22 +16,25 @@ local-first tools, approvals, exclusive media handoffs and single installer.
 | Acceptance observed only primary Ollama | Check shared Ollama and GGUF release as well as primary residency |
 | A project report-directory symlink could redirect evidence writes | Reject non-directory or redirected report paths |
 | Native step settings were instructions rather than a hard inference limit | Persist and enforce twelve inference attempts per worker at the host hook |
+| An audio-release error could leave a mode switch permanently transitioning | Record a blocked, retryable mode error and always end the transition |
+| One shutdown failure could skip remaining model/listener cleanup | Attempt every owned cleanup and explicitly report unconfirmed releases |
 
 Additional regressions cover late worker completion after parent cancellation,
 report preservation, fixed worker identities, and checksum failures.
 
 ## Verification
 
-Authoring suites: 199 installer tests, 120 gateway tests, 84 JavaScript tests.
-398 passed; five native/environment cases skipped. The deterministic installer
+Authoring suites: 199 installer tests, 122 gateway tests, 84 JavaScript tests.
+400 passed; five native/environment cases skipped. The deterministic installer
 builder checks every shipped file and executable permission against source.
 
-The previous GitHub revision passed native macOS PDF/OCR integration and built
-the pinned MiniCPM llama-server. Its only failing test depended on fresh-runner
-uptime, now corrected. This release adds a real pinned OpenCode protocol check
-with synthetic loopback inference. It verifies overlapping native workers,
-actual read/note tool execution, saved reports and retirement. It does not
-test model judgment or GPU throughput.
+The original GitHub revision passed native macOS PDF/OCR and built the pinned
+MiniCPM llama-server, but failed the uptime-dependent idle test. After the fixes,
+`ceb8ce6` passed all three jobs, including the new real pinned OpenCode protocol
+check with synthetic loopback inference. Overlapping native workers, actual
+read/note tools, saved reports and retirement were observed. It does not test
+model judgment or GPU throughput. The final follow-up fixes mode/shutdown error
+recovery as well. [Verified CI run](https://github.com/MisterDataScience/local-ai-environment-/actions/runs/38491814429).
 
 ## Remaining hardware acceptance
 

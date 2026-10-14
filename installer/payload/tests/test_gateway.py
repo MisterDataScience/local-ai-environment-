@@ -24,6 +24,19 @@ def request(text):
 
 
 class GatewayTests(unittest.TestCase):
+    def test_cleanup_attempts_all_backends_and_closes_listeners_after_a_release_error(self):
+        engine, server, media, lock = Mock(), Mock(), Mock(), Mock()
+        engine.audio.control.side_effect = RuntimeError('Audio cleanup failed')
+        engine.stop_comfy.side_effect = RuntimeError('Comfy cleanup failed')
+        with self.assertRaisesRegex(RuntimeError, 'audio, media model'):
+            gateway.cleanup(engine, server, media, lock)
+        engine.executor.shutdown.assert_called_once_with(wait=True)
+        engine.shared_llama.stop.assert_called_once()
+        server.server_close.assert_called_once()
+        media.shutdown.assert_called_once()
+        media.server_close.assert_called_once()
+        lock.close.assert_called_once()
+
     def test_old_backend_is_rejected_before_any_listener_opens(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

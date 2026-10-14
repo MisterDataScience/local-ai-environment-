@@ -18,6 +18,28 @@ ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("gateway")
 
 
+def cleanup(engine, server, media_server, lock_file):
+    """Attempt every owned cleanup even if an earlier backend refuses release."""
+    operations = [('audio', lambda: engine.audio.control('stop')),
+                  ('listener', server.server_close),
+                  ('inference queue', lambda: engine.executor.shutdown(wait=True)),
+                  ('media model', engine.stop_comfy)]
+    if engine.shared_llama:
+        operations.append(('shared model', engine.shared_llama.stop))
+    if media_server:
+        operations.extend([('media listener', media_server.shutdown), ('media socket', media_server.server_close)])
+    operations.append(('process lock', lock_file.close))
+    failures = []
+    for name, operation in operations:
+        try:
+            operation()
+        except Exception:
+            failures.append(name)
+            LOG.error('Gateway cleanup failed for %s; continuing remaining cleanup', name)
+    if failures:
+        raise RuntimeError('Gateway could not confirm release of: ' + ', '.join(failures))
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     lock_file = (ROOT / ".gateway.lock").open("w")
@@ -68,16 +90,7 @@ def main():
         LOG.info("Waiting for queued work before shutdown; do not force-close this window.")
     finally:
         stopping.set()
-        server.engine.audio.control('stop')
-        server.server_close()
-        server.engine.executor.shutdown(wait=True)
-        server.engine.stop_comfy()
-        if server.engine.shared_llama:
-            server.engine.shared_llama.stop()
-        if media_server:
-            media_server.shutdown()
-            media_server.server_close()
-        lock_file.close()
+        cleanup(server.engine, server, media_server, lock_file)
 
 
 if __name__ == "__main__":

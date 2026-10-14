@@ -145,8 +145,8 @@ class Engine:
             self._finish_mode_change()
 
     def _finish_mode_change(self):
-        self.audio.control('stop')
         try:
+            self.audio.control('stop')
             self.stop_comfy()
             if port_open(self.comfy_port):
                 raise RuntimeError('Unmanaged ComfyUI is still running.')
