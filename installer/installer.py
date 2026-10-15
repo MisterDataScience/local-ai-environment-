@@ -46,7 +46,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
-TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py')
+TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -460,9 +460,19 @@ def make_launcher(root):
     command = root / "Start Local AI.command"
     command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
                        "\nif /usr/bin/curl --noproxy '*' --max-time 3 -fsS http://127.0.0.1:8081/health >/dev/null 2>&1; then\n"
+                       "  if [ -f captain-managed-ready.json ]; then\n"
+                       "    exec /usr/bin/open -a Safari http://127.0.0.1:4096\n"
+                       "  fi\n"
                        "  exec /usr/bin/open -a Safari http://127.0.0.1:8081\n"
                        "fi\nexec .venv/bin/python runtime.py\n")
     command.chmod(0o755)
+    captain_launcher = root / 'Open Captain.command'
+    captain_launcher.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
+        "\n.venv/bin/python -c 'from managed_captain import credentials; from pathlib import Path; "
+        "auth = credentials(Path.cwd().parent); print(\"Captain username:\", auth[\"username\"]); "
+        "print(\"Captain password:\", auth[\"password\"])'\n"
+        "exec /usr/bin/open -a Safari http://127.0.0.1:4096\n")
+    captain_launcher.chmod(0o755)
     for label, argument in (("Enable Web Access", ""), ("Disable Web Access", " --disable")):
         web_command = root / (label + ".command")
         web_command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
@@ -638,7 +648,7 @@ def main():
             logging.info("Daily launcher: %s", application)
             print("Captain core is ready at http://127.0.0.1:8081. Starts automatically at login.")
             print("Read captain-install-readiness.json for tests not yet verified on this Mac.")
-            open_local_ui()
+            open_local_ui(root)
         else:
             checkpoint(state, "installed")
             logging.info("Stage 8/8: launching Local AI")
