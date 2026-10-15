@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shlex
 import subprocess
 
 from vault_tools import directory, execute, mounted_root
@@ -81,8 +82,24 @@ def choose_mount(before, after, prompt, say):
     raw = prompt('Unlocked Cryptomator volume path (not its encrypted iCloud folder): ').strip()
     if not raw:
         raise RuntimeError('No decrypted Cryptomator volume selected. Rerun the installer after unlocking it.')
-    mount = Path(raw).expanduser().absolute()
-    if mount not in after:
+    # Finder drag-and-drop to Terminal escapes spaces (AI\\ Workspace).
+    # Accept a single safely parsed path, never execute shell code.
+    try:
+        parsed = shlex.split(raw)
+    except ValueError:
+        raise RuntimeError('Invalid quoted volume path. Supply one mounted path.') from None
+    if len(parsed) != 1:
+        raise RuntimeError('Supply exactly one mounted volume path.')
+    mount = Path(parsed[0]).expanduser().absolute()
+    # Cryptomator can use an owner-selected mount location outside /Volumes
+    # and ~/Cryptomator. The base-directory scan is only for suggestions.
+    # Still require a real separate filesystem and no symlink traversal.
+    try:
+        valid = (mount.is_dir() and not mount.is_symlink() and mount.resolve() == mount
+                 and os.path.ismount(mount) and mount.stat().st_dev != mount.parent.stat().st_dev)
+    except OSError:
+        valid = False
+    if not valid:
         raise RuntimeError('That path is not a verified macOS mounted volume. No vault was registered.')
     if prompt('Confirm this is the unlocked Cryptomator drive. Type YES: ').strip() != 'YES':
         raise RuntimeError('Cryptomator volume was not confirmed. No vault was registered.')

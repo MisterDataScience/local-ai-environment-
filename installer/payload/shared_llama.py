@@ -41,9 +41,11 @@ def digest(path):
 
 
 class SharedLlama:
-    def __init__(self, config):
+    def __init__(self, config, log_path=None):
         self.config = config
         self.process = None
+        self.running_slots = None
+        self.log_path = Path(log_path) if log_path is not None else None
         self.verified = {}
         self.base = 'http://127.0.0.1:11437'
 
@@ -69,11 +71,18 @@ class SharedLlama:
             raise ValueError('Selected llama-server is not executable')
         return result
 
-    def command(self, context, thinking=False):
+    def slots(self, parallel):
+        slots = self.config['max_parallel'] if parallel is None else parallel
+        if type(slots) is not int or not 1 <= slots <= self.config['max_parallel']:
+            raise ValueError('Shared GGUF parallel slots must be within the configured Captain limit')
+        return slots
+
+    def command(self, context, thinking=False, parallel=None):
+        slots = self.slots(parallel)
         files = self.files()
         command = [files['binary'], '--model', files['model'], '--host', '127.0.0.1', '--port', '11437',
-                   '--parallel', str(self.config['max_parallel']),
-                   '--ctx-size', str(context * self.config['max_parallel']),
+                   '--parallel', str(slots),
+                   '--ctx-size', str(context * slots),
                    '--kv-unified-per-slot', str(context),
                    '--alias', 'local-ai-captain', '--jinja', '--cont-batching', '--no-context-shift',
                    '--no-webui', '--chat-template-kwargs', json.dumps({'enable_thinking': thinking})]
@@ -81,20 +90,33 @@ class SharedLlama:
             command += ['--mmproj', files['mmproj']]
         return command
 
-    def start(self, context, thinking=False):
+    def start(self, context, thinking=False, parallel=None):
+        slots = self.slots(parallel)
         if self.process and self.process.poll() is None:
+            if self.running_slots != slots:
+                raise RuntimeError('Running shared GGUF slot count differs from requested resource mode')
             return
         if port_open(11437):
             raise RuntimeError('Shared GGUF port is occupied; no unmanaged server was stopped')
         env = {k: v for k, v in os.environ.items() if k in {'HOME', 'PATH', 'LANG', 'LC_ALL', 'TMPDIR'}}
         # Inherit the gateway process group so supervisor stop also stops this
         # server. No arbitrary argv, credentials or network tools are inherited.
-        self.process = subprocess.Popen(self.command(context, thinking), env=env,
-                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        command = self.command(context, thinking, slots)
+        if self.log_path is None:
+            self.process = subprocess.Popen(command, env=env,
+                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            # Keep native model-loading errors available without weakening file privacy.
+            self.log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            fd = os.open(self.log_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, 'ab') as log:
+                self.process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
+        self.running_slots = slots
         deadline = time.monotonic() + 300
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
-                raise RuntimeError('Local GGUF server failed to load the selected model; verify binary/model compatibility')
+                raise RuntimeError('Local GGUF server failed to load the selected model; '
+                                   'check control/logs/shared-llama.log for backend errors')
             try:
                 api(self.base, '/health', timeout=2)
                 return
@@ -117,6 +139,7 @@ class SharedLlama:
         if port_open(11437):
             raise RuntimeError('Shared GGUF server did not release its port')
         self.process = None
+        self.running_slots = None
 
     def chat(self, body, limit, messages=None):
         tools = tools_for_ollama(body)

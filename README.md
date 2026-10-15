@@ -83,6 +83,13 @@ chat tool connections. Disable it to resume normal Office/file/browser workflows
 All capabilities are included in the same installation; their safety profiles
 remain distinct. See [scope and privacy boundaries](docs/SCOPED-AUTOMATION.md).
 
+## Known pre-installation gaps
+
+See the [first-install failure audit](docs/PREINSTALL-FAILURE-AUDIT-2026-10-15.md)
+for confirmed remaining blockers, the corrected interrupt/upgrade/slot issues,
+and a first-Mac acceptance checklist. Green CI is not proof of a turnkey
+installation on the owner's 32 GB Mac.
+
 ## Verify
 
 The installer writes `~/LocalAI-Automated/captain-install-readiness.json` only

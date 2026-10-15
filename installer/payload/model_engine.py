@@ -58,7 +58,7 @@ class Engine:
         self.captain = captain_settings(config)
         self.ollama = config.get("ollama_url", "http://127.0.0.1:11434")
         self.shared_ollama = 'http://127.0.0.1:11436'
-        self.shared_llama = SharedLlama(self.captain) if self.captain['enabled'] and self.captain['provider'] == 'llama' else None
+        self.shared_llama = SharedLlama(self.captain, root / 'logs/shared-llama.log') if self.captain['enabled'] and self.captain['provider'] == 'llama' else None
         self.shared_last_used = time.monotonic()
         self.comfy = config.get("comfy_url", "http://127.0.0.1:8188")
         self.comfy_port = urlparse(self.comfy).port
@@ -461,7 +461,8 @@ class Engine:
                     if self.text_profile != profile:
                         self.unload_ollama()
                         self.text_profile = profile
-                    self.shared_llama.start(preset['num_ctx'], preset.get('thinking', False))
+                    self.shared_llama.start(preset['num_ctx'], preset.get('thinking', False),
+                                            parallel=self.parallel_slots())
                     self.shared_last_used = time.monotonic()
                 self.check_policy(body, route)
                 request = body if route == 'text' else dict(body, messages=messages)

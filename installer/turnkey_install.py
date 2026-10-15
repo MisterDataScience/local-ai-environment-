@@ -20,6 +20,7 @@ NATIVE_PENDING = (
     'sleep_wake_and_process_recovery',
     'microphone_and_macos_permissions',
     'vpn_disconnect_and_dns_leak',
+    'captain_access_from_another_tailnet_device',
     'performance_under_target_memory_pressure',
 )
 
@@ -102,6 +103,7 @@ def write_receipt(root, config, native, background, vault=None):
         'pending_physical_acceptance': list(NATIVE_PENDING),
         'deferred_permissions_and_accounts': {
             'vpn_browser': 'Requires local Docker and Proton VPN credentials; never direct-network fallback',
+            'remote_captain_ui': 'Not configured: Tailscale currently exposes WebUI/media, not the authenticated Captain Work Agent',
             'desktop_control': 'Separate scoped security mode; cannot be enabled simultaneously with the normal Captain tool profile',
             'external_provider': 'Requires terms-compliant provider permission and per-prompt approval',
             'github_account': 'Requires owner authentication',

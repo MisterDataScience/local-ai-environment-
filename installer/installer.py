@@ -76,6 +76,8 @@ def digest(path):
 def download(url, destination, checksum=None):
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink():
+        raise RuntimeError("Refusing symbolic link as install download destination: " + destination.name)
     if destination.exists():
         if checksum is None or digest(destination) == checksum:
             logging.info("Reusing %s", destination.name)
@@ -84,8 +86,25 @@ def download(url, destination, checksum=None):
         destination.rename(invalid)
         logging.warning("Preserved invalid download as %s", invalid.name)
     partial = destination.with_name(destination.name + ".part")
+    if partial.is_symlink():
+        raise RuntimeError("Refusing symlink for interrupted download " + destination.name)
+    if partial.is_file():
+        # A previous run can complete the transfer and be interrupted before
+        # the final rename. Retrying an already-complete HTTP range may return
+        # 416 and block every subsequent installation attempt.
+        if checksum and digest(partial) == checksum:
+            logging.info("Promoting already-verified interrupted download %s", destination.name)
+            partial.replace(destination)
+            return
+        if checksum is None and destination.suffix.lower() == ".zip" and zipfile.is_zipfile(partial):
+            with zipfile.ZipFile(partial) as archive:
+                if archive.testzip() is None:
+                    logging.info("Promoting complete cached ZIP %s", destination.name)
+                    partial.replace(destination)
+                    return
     logging.info("Downloading %s; interrupted downloads can resume", destination.name)
-    run(["/usr/bin/curl", "-fL", "--retry", "3", "--retry-delay", "3",
+    run(["/usr/bin/curl", "-fL", "--proto", "=https", "--proto-redir", "=https",
+         "--retry", "3", "--retry-delay", "3",
          "--connect-timeout", "30", "-C", "-", "-o", partial, url])
     if checksum and digest(partial) != checksum:
         invalid = partial.with_name(partial.name + ".invalid-" + str(time.time_ns()))
@@ -344,7 +363,7 @@ def verify_context_rejection(key, identifier, context):
 def verify_generation(root, configuration):
     import resource_modes
     if resource_modes.load(root / "control") != "max":
-        raise RuntimeError("Full hardware acceptance requires Max mode. Select Max in AI Modes, stop Local AI, then rerun the installer.")
+        raise RuntimeError("Native acceptance must run in Max mode; installer must select it temporarily.")
     processes = []
     control = root / "control"
     try:
@@ -454,6 +473,24 @@ def verify_text_residency(configuration, presets, identifier):
     if captain.get('enabled') and captain.get('provider') == 'llama':
         if port_open(PORTS['shared_gguf']) != bool(native):
             raise RuntimeError('Shared GGUF residency did not match the completed model/media handoff')
+
+
+def verify_generation_during_install(root, configuration):
+    """Installer-owned Max acceptance without permanent changes to owner modes.
+
+    Preconditions: installer lock held, preflight confirmed all app ports free.
+    This must not be called against a running service.
+    """
+    import resource_modes
+    control = root / "control"
+    saved_mode = resource_modes.load(control)
+    if saved_mode != "max":
+        resource_modes.save(control, "max")
+    try:
+        verify_generation(root, configuration)
+    finally:
+        if saved_mode != "max":
+            resource_modes.save(control, saved_mode)
 
 
 def make_launcher(root):
@@ -617,13 +654,20 @@ def main():
         accepted_file = root / "accepted-fingerprint.txt"
         if (not completed(state, "hardware-acceptance") or not accepted_file.exists()
                 or accepted_file.read_text() != fingerprint):
-            verify_generation(root, configuration)
+            verify_generation_during_install(root, configuration)
             accepted_file.write_text(fingerprint)
             checkpoint(state, "hardware-acceptance")
         else:
             logging.info("Checking the previously completed hardware acceptance report.")
         from turnkey_install import acceptance_summary
         native_acceptance = acceptance_summary(root, configuration)
+        if args.minicpm_captain:
+            import resource_modes
+            control = root / "control"
+            if not (control / "resource-mode.json").exists():
+                # Initial launch should use the more memory-conservative Normal
+                # profile. Max (five slots) remains an explicit user option.
+                resource_modes.save(control, "normal")
         logging.info("Stage 7/8: create daily launcher and record versions")
         application = make_launcher(root)
         for directory in (root / "ComfyUI", root / "control", root / "webui"):

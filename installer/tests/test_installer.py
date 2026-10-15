@@ -13,6 +13,31 @@ import installer
 
 
 class InstallerTests(unittest.TestCase):
+    def test_upgrade_native_acceptance_temporarily_sets_max_then_restores_user_mode(self):
+        import resource_modes
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'control').mkdir()
+            resource_modes.save(root / 'control', 'normal')
+            observed = []
+            def check(*args):
+                observed.append(resource_modes.load(root / 'control'))
+            with patch.object(installer, 'verify_generation', side_effect=check):
+                installer.verify_generation_during_install(root, {})
+            self.assertEqual(observed, ['max'])
+            self.assertEqual(resource_modes.load(root / 'control'), 'normal')
+
+    def test_failed_upgrade_acceptance_restores_gaming_without_fake_success(self):
+        import resource_modes
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'control').mkdir()
+            resource_modes.save(root / 'control', 'gaming')
+            with patch.object(installer, 'verify_generation', side_effect=RuntimeError('model failed')):
+                with self.assertRaisesRegex(RuntimeError, 'model failed'):
+                    installer.verify_generation_during_install(root, {})
+            self.assertEqual(resource_modes.load(root / 'control'), 'gaming')
+
     def test_compaction_uses_small_context_ceiling_and_active_model(self):
         env = common.webui_environment(Path('/test'), {'webui_secret': 'secret', 'api_key': 'key'})
         self.assertEqual(env['ENABLE_CONTEXT_COMPACTION'], 'True')
@@ -67,6 +92,34 @@ class InstallerTests(unittest.TestCase):
                 installer.download("https://example.test/model", destination, checksum)
             self.assertEqual(destination.read_bytes(), content)
             self.assertEqual(runner.call_count, 1)
+
+    def test_completed_interrupted_model_download_promotes_without_network(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / 'model.gguf'
+            partial = destination.with_name(destination.name + '.part')
+            content = b'verified-completed-model'
+            partial.write_bytes(content)
+            checksum = hashlib.sha256(content).hexdigest()
+            with patch.object(installer, 'run') as runner:
+                installer.download('https://example.test/model', destination, checksum)
+            runner.assert_not_called()
+            self.assertEqual(destination.read_bytes(), content)
+            self.assertFalse(partial.exists())
+
+    def test_cached_complete_zip_is_promoted_and_partial_symlinks_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / 'ComfyUI.zip'
+            partial = destination.with_name(destination.name + '.part')
+            with zipfile.ZipFile(partial, 'w') as archive:
+                archive.writestr('ComfyUI-v0.38.0/main.py', 'pass')
+            with patch.object(installer, 'run') as runner:
+                installer.download('https://example.test/comfy.zip', destination)
+            runner.assert_not_called()
+            self.assertTrue(zipfile.is_zipfile(destination))
+            destination.unlink()
+            partial.symlink_to(Path(temporary) / 'unrelated')
+            with self.assertRaisesRegex(RuntimeError, 'symlink'):
+                installer.download('https://example.test/model', destination)
 
     def test_stock_context_upgrade_is_once_only_and_preserves_custom_settings(self):
         import copy
