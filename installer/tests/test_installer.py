@@ -13,6 +13,31 @@ import installer
 
 
 class InstallerTests(unittest.TestCase):
+    def test_upgrade_native_acceptance_temporarily_sets_max_then_restores_user_mode(self):
+        import resource_modes
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'control').mkdir()
+            resource_modes.save(root / 'control', 'normal')
+            observed = []
+            def check(*args):
+                observed.append(resource_modes.load(root / 'control'))
+            with patch.object(installer, 'verify_generation', side_effect=check):
+                installer.verify_generation_during_install(root, {})
+            self.assertEqual(observed, ['max'])
+            self.assertEqual(resource_modes.load(root / 'control'), 'normal')
+
+    def test_failed_upgrade_acceptance_restores_gaming_without_fake_success(self):
+        import resource_modes
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'control').mkdir()
+            resource_modes.save(root / 'control', 'gaming')
+            with patch.object(installer, 'verify_generation', side_effect=RuntimeError('model failed')):
+                with self.assertRaisesRegex(RuntimeError, 'model failed'):
+                    installer.verify_generation_during_install(root, {})
+            self.assertEqual(resource_modes.load(root / 'control'), 'gaming')
+
     def test_compaction_uses_small_context_ceiling_and_active_model(self):
         env = common.webui_environment(Path('/test'), {'webui_secret': 'secret', 'api_key': 'key'})
         self.assertEqual(env['ENABLE_CONTEXT_COMPACTION'], 'True')
