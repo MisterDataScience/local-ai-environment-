@@ -10,6 +10,7 @@ import time
 
 
 AUTH_NAME = 'captain-ui-auth.json'
+READY_NAME = 'captain-managed-ready.json'
 URL = 'http://127.0.0.1:4096'
 
 
@@ -64,9 +65,8 @@ def wait_for_agent(root, process, timeout=120):
             raise RuntimeError('Managed Captain Work Agent exited; inspect logs/captain.log')
         try:
             result = agent_status(root, timeout=3)
-            # File is published only after native policy/permission/MCP checks.
-            from essay_setup import connection_file
-            if connection_file(root).is_file():
+            # The managed process publishes this only after native MCP and policy verification.
+            if (Path(root) / 'control' / READY_NAME).is_file():
                 return result
         except (OSError, RuntimeError, ValueError, KeyError) as error:
             last = error
