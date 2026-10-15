@@ -284,8 +284,9 @@ def main():
     parser.add_argument('--discord', action='store_true')
     parser.add_argument('--essay', action='store_true')
     parser.add_argument('--scaffold', action='store_true')
+    parser.add_argument('--managed', action='store_true', help='Unattended locally authenticated Captain UI')
     args = parser.parse_args()
-    if (args.essay or args.scaffold) and (args.conversation or args.discord) or (args.essay and args.scaffold):
+    if (args.essay or args.scaffold) and (args.conversation or args.discord) or (args.essay and args.scaffold) or (args.managed and (args.essay or args.scaffold or args.conversation)):
         parser.error('Essay launcher cannot be combined with a voice launcher')
     args.conversation = args.conversation or args.discord
     def interrupted(signum, frame):
@@ -328,14 +329,24 @@ def main():
         raise RuntimeError('OpenCode is missing. Rerun the Local AI installer.')
     sessions = root / 'work-agent/projects'
     sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if not args.project and not args.conversation and not args.essay and not args.scaffold:
-        value = input('Project folder to COPY, or Enter for a new empty project: ').strip()
-        args.project = Path(value).expanduser() if value else None
-    project = sessions / uuid.uuid4().hex
-    if args.project:
-        copy_project(args.project.absolute(), project)
+    if args.managed:
+        if not config.get('captain', {}).get('enabled'):
+            raise RuntimeError('Managed Work Agent requires an enabled Captain')
+        if args.project:
+            raise RuntimeError('Managed Captain uses its own stable project; do not supply --project')
+        project = sessions / 'captain-default'
+        if project.is_symlink():
+            raise RuntimeError('Managed Captain project must not be a symlink')
+        project.mkdir(mode=0o700, exist_ok=True)
     else:
-        project.mkdir(mode=0o700)
+        if not args.project and not args.conversation and not args.essay and not args.scaffold:
+            value = input('Project folder to COPY, or Enter for a new empty project: ').strip()
+            args.project = Path(value).expanduser() if value else None
+        project = sessions / uuid.uuid4().hex
+        if args.project:
+            copy_project(args.project.absolute(), project)
+        else:
+            project.mkdir(mode=0o700)
     from office_setup import configure as configure_office
     configure_office(root, project, settings, config)
     settings.setdefault('mcp', {})['projectpdf'] = {
@@ -378,23 +389,31 @@ def main():
     env = environment(root, config, settings)
     # A new repository has no source hooks, remotes or credential helpers.
     git_env = dict(env, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null')
-    subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', 'init', '-q', str(project)], env=git_env, check=True)
-    exclude = project / '.git/info/exclude'
-    exclude.parent.mkdir(parents=True, exist_ok=True)
-    with exclude.open('a') as output:
-        output.write('\n.local-ai-team/\n')
-    subprocess.run(['git', '-C', str(project), '-c', 'core.hooksPath=/dev/null', 'add', '--all'], env=git_env, check=True)
-    subprocess.run(['git', '-C', str(project), '-c', 'core.hooksPath=/dev/null',
-                    '-c', 'user.name=Local AI', '-c', 'user.email=local-ai@localhost',
-                    '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty',
-                    '-m', 'Imported project baseline'], env=git_env, check=True)
+    if not args.managed or not (project / '.git').is_dir():
+        subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', 'init', '-q', str(project)], env=git_env, check=True)
+        exclude = project / '.git/info/exclude'
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        with exclude.open('a') as output:
+            output.write('\n.local-ai-team/\n')
+        subprocess.run(['git', '-C', str(project), '-c', 'core.hooksPath=/dev/null', 'add', '--all'], env=git_env, check=True)
+        subprocess.run(['git', '-C', str(project), '-c', 'core.hooksPath=/dev/null',
+                        '-c', 'user.name=Local AI', '-c', 'user.email=local-ai@localhost',
+                        '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty',
+                        '-m', 'Imported project baseline'], env=git_env, check=True)
     print('OpenCode project copy:', project, flush=True)
     print('Starts in Plan. Switch to Build to edit; approve each edit/command in OpenCode.', flush=True)
     print('Work and session history are LOCAL, outside the vault. This is not an OS sandbox.', flush=True)
-    git_env['OPENCODE_SERVER_PASSWORD'] = secrets.token_urlsafe(24)
-    git_env['OPENCODE_SERVER_USERNAME'] = 'opencode'
+    if args.managed:
+        from managed_captain import credentials, READY_NAME
+        (root / 'control' / READY_NAME).unlink(missing_ok=True)
+        auth = credentials(root)
+        git_env['OPENCODE_SERVER_PASSWORD'] = auth['password']
+        git_env['OPENCODE_SERVER_USERNAME'] = auth['username']
+    else:
+        git_env['OPENCODE_SERVER_PASSWORD'] = secrets.token_urlsafe(24)
+        git_env['OPENCODE_SERVER_USERNAME'] = 'opencode'
     print('OpenCode: http://127.0.0.1:4096  Username: opencode', flush=True)
-    if not args.discord:
+    if not args.discord and not args.managed:
         print('Session password:', git_env['OPENCODE_SERVER_PASSWORD'], flush=True)
     process = subprocess.Popen([str(binary), 'serve' if args.discord else 'web', '--hostname', '127.0.0.1', '--port', '4096'],
                                cwd=project, env=git_env, start_new_session=True)
@@ -418,6 +437,11 @@ def main():
         # With port 4096 verified free before startup, a prior record can only be stale.
         connection_file(root).unlink(missing_ok=True)
         publish_connection(root, git_env['OPENCODE_SERVER_PASSWORD'])
+        if args.managed:
+            from managed_captain import READY_NAME
+            ready_path = root / 'control' / READY_NAME
+            ready_path.write_text(json.dumps({'status': 'native_mcp_verified'}) + '\n')
+            ready_path.chmod(0o600)
         if essay_request is not None:
             from essay_setup import submit
             session_id = submit(git_env['OPENCODE_SERVER_PASSWORD'], essay_request, workflow='scaffold' if args.scaffold else 'essay')
@@ -474,6 +498,9 @@ def main():
             cleanup.join(timeout=2)
             conversation_server.shutdown()
             conversation_server.server_close()
+        if args.managed:
+            from managed_captain import READY_NAME
+            (root / 'control' / READY_NAME).unlink(missing_ok=True)
         print('Project preserved at:', project)
 
 

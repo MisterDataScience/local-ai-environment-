@@ -86,6 +86,22 @@ def main(background=False):
         models = http("http://127.0.0.1:8001/v1/models", key=config["api_key"])
         if not models["data"]:
             raise RuntimeError("The local-ai gateway model is unavailable.")
+        from managed_captain import wait_for_agent
+        captain_retry = 0
+        def launch_captain():
+            if port_open(4096):
+                raise RuntimeError('Captain UI port 4096 already occupied')
+            process = launch([root / 'control/.venv/bin/python', root / 'control/work_agent.py',
+                              '--root', root, '--managed'],
+                             root / 'control', root / 'logs/captain.log', os.environ.copy())
+            processes.append(('captain', process))
+            record(root, processes)
+            wait_for_agent(root, process)
+            logging.info('Native Captain Work Agent is connected and ready at http://127.0.0.1:4096')
+        if config.get('captain', {}).get('enabled'):
+            import resource_modes
+            if resource_modes.load(root / 'control') in {'normal', 'max'}:
+                launch_captain()
         context_settings = ContextSettings()
         context_warning = False
         if remote.get("enabled"):
@@ -99,10 +115,13 @@ def main(background=False):
                 atomic_json(root / "remote-acceptance-report.json",
                             {"status": "failed", "error": str(error), "other_device_browser_test": "pending"})
         if not background:
-            subprocess.run(["/usr/bin/open", "-a", "Safari", "http://127.0.0.1:8081"], check=True)
+            address = 'http://127.0.0.1:4096' if any(name == 'captain' for name, _ in processes) else 'http://127.0.0.1:8081'
+            subprocess.run(["/usr/bin/open", "-a", "Safari", address], check=True)
         from attachment_setup import configure as configure_attachments
         configure_attachments(root)
         print("\nLocal AI is running at http://127.0.0.1:8081")
+        if config.get('captain', {}).get('enabled'):
+            print('Captain Work Agent: http://127.0.0.1:4096 (private credentials in control/captain-ui-auth.json)')
         if remote.get("enabled"):
             print("Private remote chat:", remote["ui_url"])
             print("Connect Tailscale on your other devices, then open that address.")
@@ -135,15 +154,28 @@ def main(background=False):
             except Exception:
                 logging.warning('VPN service unavailable; web access remains blocked.')
         while True:
-            for name, process in processes:
+            for name, process in list(processes):
                 if process.poll() is not None:
-                    raise RuntimeError(f"{name} exited. Read {root / 'logs' / (name + '.log')}")
+                    if name == 'captain':
+                        processes.remove((name, process))
+                        record(root, processes)
+                        logging.warning('Captain exited; it will restart when the gateway is ready.')
+                    else:
+                        raise RuntimeError(f"{name} exited. Read {root / 'logs' / (name + '.log')}")
             now = time.monotonic()
             # After sleep, allow readiness to settle before restarting anything.
             if now - last_tick > 30:
                 health_failures = 0
                 logging.info('Resuming service readiness checks after suspension.')
             last_tick = now
+            if config.get('captain', {}).get('enabled') and not any(name == 'captain' for name, _ in processes) and now >= captain_retry:
+                captain_retry = now + 30
+                try:
+                    mode = http('http://127.0.0.1:8001/control/mode', key=config['api_key'], timeout=3)
+                    if mode['mode'] in {'normal', 'max'} and not mode['transitioning'] and not mode['error']:
+                        launch_captain()
+                except Exception as error:
+                    logging.warning('Managed Captain waiting for restart: %s', error)
             if config.get('web', {}).get('enabled') and now >= retry_web and (web_thread is None or not web_thread.is_alive()):
                 web_thread = threading.Thread(target=recover_web, daemon=True)
                 web_thread.start()

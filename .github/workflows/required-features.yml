@@ -32,8 +32,18 @@ jobs:
       - run: python -m compileall -q installer
       - name: Persistent batch job regressions
         run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -p test_autonomous_jobs.py -v
-      - name: Check single installer exactly matches shipped source
-        run: python scripts/build_installer.py --check
+      - name: Build and verify the installer from the checked-out source
+        run: |
+          python scripts/build_installer.py
+          python scripts/build_installer.py --check
+          for script in installer/*.command; do bash -n "$script"; done
+      - name: Upload the validated Mac installer from this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-ai-captain-installer
+          path: downloads/Mac-Local-AI-Automated-Installer.zip
+          if-no-files-found: error
+          retention-days: 14
       - run: python -m unittest discover -s scripts -p 'test_*.py' -v
       - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -v
       - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/payload/tests -v
@@ -121,3 +131,29 @@ jobs:
           print("Apple Vision OCR recognized the raster-only PDF.")
           PY
 
+
+  publish-validated-installer:
+    name: Publish the verified installer ZIP to main
+    needs: [required-features, captain-native-runtime-build, apple-native-pdf]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Regenerate and check signed-off source archive
+        run: |
+          python scripts/build_installer.py
+          python scripts/build_installer.py --check
+      - name: Update the downloadable archive only after all tests pass
+        run: |
+          if ! git diff --quiet -- downloads/Mac-Local-AI-Automated-Installer.zip; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add downloads/Mac-Local-AI-Automated-Installer.zip
+            git commit -m "build: publish tested Captain installer [skip ci]"
+            git push origin HEAD:main
+          fi
