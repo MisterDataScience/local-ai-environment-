@@ -84,6 +84,22 @@ def download(url, destination, checksum=None):
         destination.rename(invalid)
         logging.warning("Preserved invalid download as %s", invalid.name)
     partial = destination.with_name(destination.name + ".part")
+    if partial.is_symlink():
+        raise RuntimeError("Refusing symlink for interrupted download " + destination.name)
+    if partial.is_file():
+        # A previous run can complete the transfer and be interrupted before
+        # the final rename. Retrying an already-complete HTTP range may return
+        # 416 and block every subsequent installation attempt.
+        if checksum and digest(partial) == checksum:
+            logging.info("Promoting already-verified interrupted download %s", destination.name)
+            partial.replace(destination)
+            return
+        if checksum is None and destination.suffix.lower() == ".zip" and zipfile.is_zipfile(partial):
+            with zipfile.ZipFile(partial) as archive:
+                if archive.testzip() is None:
+                    logging.info("Promoting complete cached ZIP %s", destination.name)
+                    partial.replace(destination)
+                    return
     logging.info("Downloading %s; interrupted downloads can resume", destination.name)
     run(["/usr/bin/curl", "-fL", "--retry", "3", "--retry-delay", "3",
          "--connect-timeout", "30", "-C", "-", "-o", partial, url])
