@@ -99,7 +99,7 @@ def main(background=False):
             wait_for_agent(root, process)
             logging.info('Native Captain Work Agent is connected and ready at http://127.0.0.1:4096')
         if config.get('captain', {}).get('enabled'):
-            from payload import resource_modes
+            import resource_modes
             if resource_modes.load(root / 'control') in {'normal', 'max'}:
                 launch_captain()
         context_settings = ContextSettings()
