@@ -70,6 +70,15 @@ jobs:
           cmake -S "$RUNNER_TEMP/minicpm-runtime" -B "$RUNNER_TEMP/minicpm-runtime/build" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF
           cmake --build "$RUNNER_TEMP/minicpm-runtime/build" --config Release --target llama-server -j 4
           "$RUNNER_TEMP/minicpm-runtime/build/bin/llama-server" --version
+          "$RUNNER_TEMP/minicpm-runtime/build/bin/llama-server" --help > "$RUNNER_TEMP/llama-options.txt" 2>&1
+          # Native compilation alone is not enough: require every option used
+          # by the real installed Captain launch command.
+          for option in --parallel --ctx-size --kv-unified-per-slot --jinja --cont-batching --no-context-shift --no-webui --chat-template-kwargs --mmproj; do
+            if ! grep -F -q -- "$option" "$RUNNER_TEMP/llama-options.txt"; then
+              echo "Pinned llama-server is missing required runtime option: $option"
+              exit 1
+            fi
+          done
 
   apple-native-pdf:
     runs-on: macos-15
