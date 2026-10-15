@@ -344,7 +344,7 @@ def verify_context_rejection(key, identifier, context):
 def verify_generation(root, configuration):
     import resource_modes
     if resource_modes.load(root / "control") != "max":
-        raise RuntimeError("Full hardware acceptance requires Max mode. Select Max in AI Modes, stop Local AI, then rerun the installer.")
+        raise RuntimeError("Native acceptance must run in Max mode; installer must select it temporarily.")
     processes = []
     control = root / "control"
     try:
@@ -617,13 +617,32 @@ def main():
         accepted_file = root / "accepted-fingerprint.txt"
         if (not completed(state, "hardware-acceptance") or not accepted_file.exists()
                 or accepted_file.read_text() != fingerprint):
-            verify_generation(root, configuration)
+            import resource_modes
+            control = root / "control"
+            saved_mode = resource_modes.load(control)
+            if saved_mode != "max":
+                # The installer owns the service/installation locks. Max is for
+                # hardware acceptance only; restore the owner's selected mode
+                # even when a test fails. No post-upgrade mode toggle is needed.
+                resource_modes.save(control, "max")
+            try:
+                verify_generation(root, configuration)
+            finally:
+                if saved_mode != "max":
+                    resource_modes.save(control, saved_mode)
             accepted_file.write_text(fingerprint)
             checkpoint(state, "hardware-acceptance")
         else:
             logging.info("Checking the previously completed hardware acceptance report.")
         from turnkey_install import acceptance_summary
         native_acceptance = acceptance_summary(root, configuration)
+        if args.minicpm_captain:
+            import resource_modes
+            control = root / "control"
+            if not (control / "resource-mode.json").exists():
+                # Initial launch should use the more memory-conservative Normal
+                # profile. Max (five slots) remains an explicit user option.
+                resource_modes.save(control, "normal")
         logging.info("Stage 7/8: create daily launcher and record versions")
         application = make_launcher(root)
         for directory in (root / "ComfyUI", root / "control", root / "webui"):
