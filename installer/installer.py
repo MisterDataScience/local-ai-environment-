@@ -459,7 +459,9 @@ def verify_text_residency(configuration, presets, identifier):
 def make_launcher(root):
     command = root / "Start Local AI.command"
     command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
-                       "\nexec .venv/bin/python runtime.py\n")
+                       "\nif /usr/bin/curl --noproxy '*' --max-time 3 -fsS http://127.0.0.1:8081/health >/dev/null 2>&1; then\n"
+                       "  exec /usr/bin/open -a Safari http://127.0.0.1:8081\n"
+                       "fi\nexec .venv/bin/python runtime.py\n")
     command.chmod(0o755)
     for label, argument in (("Enable Web Access", ""), ("Disable Web Access", " --disable")):
         web_command = root / (label + ".command")
@@ -603,7 +605,9 @@ def main():
             accepted_file.write_text(fingerprint)
             checkpoint(state, "hardware-acceptance")
         else:
-            logging.info("Reusing the successful hardware acceptance report.")
+            logging.info("Checking the previously completed hardware acceptance report.")
+        from turnkey_install import acceptance_summary
+        native_acceptance = acceptance_summary(root, configuration)
         logging.info("Stage 7/8: create daily launcher and record versions")
         application = make_launcher(root)
         for directory in (root / "ComfyUI", root / "control", root / "webui"):
@@ -613,7 +617,6 @@ def main():
             {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "opencode": "1.18.34",
              "aioffice": configuration['office']['version'],
              "text_models": configured_text_models(configuration)}, indent=2))
-        checkpoint(state, "installed")
         if args.web_access:
             from web_access import configure as configure_web
             configure_web(root)
@@ -623,12 +626,25 @@ def main():
             from remote_access import configure
             configure(root)
             checkpoint(state, "remote-access-configured")
-        print('Cryptomator is installed. Close Local AI and run Configure AI Workspace.command to register your vault.')
-        print('Run Connect GitHub.command to add your account. Neither helper receives your vault password.')
-        logging.info("Stage 8/8: launching Local AI")
-        logging.info("Daily launcher: %s", application)
-        runtime_python = str(root / "control/.venv/bin/python")
-        os.execv(runtime_python, [runtime_python, str(root / "control/runtime.py")])
+        if args.minicpm_captain:
+            from turnkey_install import start_login_service, await_background, write_receipt, open_local_ui
+            logging.info("Stage 8/8: registering Captain login service and checking live readiness")
+            start_login_service(root)
+            background = await_background(root, configuration)
+            receipt = write_receipt(root, configuration, native_acceptance, background)
+            checkpoint(state, "installed")
+            logging.info("Captain installation core ready. Remaining physical checks: %s",
+                         ', '.join(receipt['pending_physical_acceptance']))
+            logging.info("Daily launcher: %s", application)
+            print("Captain core is ready at http://127.0.0.1:8081. Starts automatically at login.")
+            print("Read captain-install-readiness.json for tests not yet verified on this Mac.")
+            open_local_ui()
+        else:
+            checkpoint(state, "installed")
+            logging.info("Stage 8/8: launching Local AI")
+            logging.info("Daily launcher: %s", application)
+            runtime_python = str(root / "control/.venv/bin/python")
+            os.execv(runtime_python, [runtime_python, str(root / "control/runtime.py")])
     except (Exception, KeyboardInterrupt) as error:
         logging.exception("INSTALLATION STOPPED: %s", error)
         print("\nInstallation stopped. Completed files/stages are preserved.")
