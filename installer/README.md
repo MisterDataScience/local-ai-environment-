@@ -1,8 +1,8 @@
 # LOCAL AI installer
 
-The Work Agent includes a captain and up to five temporary workers. For the
-MiniCPM shared model, run **Install Local AI with MiniCPM Captain.command** from
-this same package. The standard launcher uses the existing 4B shared model.
+The Work Agent includes a captain and up to five temporary workers. The **Install Local AI.command** launcher automatically installs the chosen
+MiniCPM Captain profile. The older named MiniCPM launcher is an alias, not an
+extra step.
 See [the captain explanation](docs/CAPTAIN-AND-WORKERS.md).
 
 This is the single integrated installer for LOCAL AI. It includes vision,
@@ -24,10 +24,24 @@ while the installer downloads dependencies/models and performs native acceptance
 Installation lives under `~/LocalAI-Automated`. Existing local configuration and
 credentials are retained. No credentials or model weights are packaged here.
 
+## First-run Captain
+
+After native tests pass, the installer registers the unprivileged login
+LaunchAgent, starts the managed Captain Work Agent and opens
+http://127.0.0.1:4096 in Safari. The installer prints the local-only
+username and password. `Open Captain.command` prints them again if needed.
+The Captain UI is separate from ordinary Open WebUI chat at
+http://127.0.0.1:8081: delegation requires the Captain UI.
+
+Core readiness is recorded at `~/LocalAI-Automated/captain-install-readiness.json`.
+Physical reboot/permission/performance checks and account-bound integrations
+are never silently marked as passed.
+
 ## Daily use
 
 Launch `~/LocalAI-Automated/Start Local AI.command` or `Local AI.app`.
-`Enable Login Startup.command` registers optional background startup.
+Captain installation registers the background startup automatically.
+`Enable Login Startup.command` remains for manual repair or other profiles.
 `Create Autonomous Job.command` authorises a finite local text-file batch with
 crash-safe checkpoints and create-only Markdown output. `Autonomous Job Status.command`,
 `Stop Autonomous Job.command JOB_ID`, and `Resume Autonomous Job.command JOB_ID`
@@ -36,7 +50,8 @@ This does not authorise unrestricted unattended OpenCode tools.
 `Stop Local AI.command` requests graceful shutdown. The chat is local at
 `http://127.0.0.1:8081`; use the optional private remote-access setup for other devices.
 
-Every capability's code is included. Optional services require local activation:
+Every capability's code is included. The following account-, permission- or
+policy-bound services cannot be activated without local consent or credentials:
 
 - Vision/PDF: chat uploads and Work Agent project tools; run `Check Required Capabilities.command`.
 - Office/files: `Check Office.command` and native transfer approvals; manually unlock your vault when needed.
