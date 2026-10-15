@@ -456,6 +456,24 @@ def verify_text_residency(configuration, presets, identifier):
             raise RuntimeError('Shared GGUF residency did not match the completed model/media handoff')
 
 
+def verify_generation_during_install(root, configuration):
+    """Installer-owned Max acceptance without permanent changes to owner modes.
+
+    Preconditions: installer lock held, preflight confirmed all app ports free.
+    This must not be called against a running service.
+    """
+    import resource_modes
+    control = root / "control"
+    saved_mode = resource_modes.load(control)
+    if saved_mode != "max":
+        resource_modes.save(control, "max")
+    try:
+        verify_generation(root, configuration)
+    finally:
+        if saved_mode != "max":
+            resource_modes.save(control, saved_mode)
+
+
 def make_launcher(root):
     command = root / "Start Local AI.command"
     command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
@@ -617,19 +635,7 @@ def main():
         accepted_file = root / "accepted-fingerprint.txt"
         if (not completed(state, "hardware-acceptance") or not accepted_file.exists()
                 or accepted_file.read_text() != fingerprint):
-            import resource_modes
-            control = root / "control"
-            saved_mode = resource_modes.load(control)
-            if saved_mode != "max":
-                # The installer owns the service/installation locks. Max is for
-                # hardware acceptance only; restore the owner's selected mode
-                # even when a test fails. No post-upgrade mode toggle is needed.
-                resource_modes.save(control, "max")
-            try:
-                verify_generation(root, configuration)
-            finally:
-                if saved_mode != "max":
-                    resource_modes.save(control, saved_mode)
+            verify_generation_during_install(root, configuration)
             accepted_file.write_text(fingerprint)
             checkpoint(state, "hardware-acceptance")
         else:
