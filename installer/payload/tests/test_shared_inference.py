@@ -133,7 +133,7 @@ class SharedInferenceTests(unittest.TestCase):
             engine = Engine(cfg, Path(folder))
             self.addCleanup(engine.executor.shutdown)
             engine.shared_llama = Mock()
-            engine.shared_llama.start.side_effect = lambda *_: engine.change_mode('gaming')
+            engine.shared_llama.start.side_effect = lambda *_, **__: engine.change_mode('gaming')
             body = {'model': 'local-ai-captain', 'messages': [{'role': 'user', 'content': 'A stale request'}]}
             with patch.object(engine, 'unload_ollama'), patch('model_engine.port_open', return_value=False):
                 with self.assertRaisesRegex(RuntimeError, 'Mode switch'):
