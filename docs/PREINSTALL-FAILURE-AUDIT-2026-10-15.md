@@ -23,12 +23,17 @@ Actual Mac memory, camera/microphone and sleep/wake performance remain unknown.
 | P1 | The text-generation and Captain delegate acceptance is real only *inside the installer*; it does not prove every chat integration is selected, discoverable and usable in ordinary Open WebUI conversations (`installer/turnkey_install.py`, `installer/common.py`). | **Open.** Validate the two UIs independently and avoid labelling unselected integrations as operational. |
 | P2 | No preinstalled reference speech voice is created. Speech is installed but `verify_generation` may emit `speech-generation: not_run` if `voice-engine/voices/default.json` is absent (`installer/voice_setup.py`, `installer/installer.py`). | **Open.** It needs a user-authorised reference recording or an appropriately licensed default voice. Never say voice generation passed when untested. |
 | P2 | `torch`, `torchvision` and `torchaudio` are installed without locked versions, and ComfyUI is downloaded from a release tag without a pinned checksum (`installer/installer.py`). This reduces fresh-install reproducibility despite version pins elsewhere. | **Open.** Freeze tested ARM builds/hashes and validate dependency resolution on a clean runner. |
+| P2 | The bootstrap downloads and runs the current `astral.sh/uv/install.sh` install script rather than a version-pinned, checksum-verified executable (`installer/Install Local AI.command`). This is a supply-chain and reproducibility risk if the upstream script changes. | **Open.** Pin verified bootstrap artifacts and refuse unexpected hashes. |
 
 ## Mac-only risks (not confirmed defects)
 
 - The MiniCPM mixed-Q3 artifact + F16 projector + five 16K slots may exceed
-  desirable unified-memory pressure at full concurrency on a 32 GB Mac. CI
-  builds `llama-server` but **never loads the real GGUF weights**.
+  desirable unified-memory pressure at full concurrency on a 32 GB Mac.
+  The GitHub `macos-15` standard runner is an Apple M1 with **7 GB RAM
+  and 14 GB SSD** according to GitHub's runner reference, so the CI job
+  builds `llama-server` but **cannot load the 14+ GiB Captain GGUF weights**
+  on that runner. The real model/hardware compatibility is unmeasured.
+  Source: https://docs.github.com/en/actions/reference/runners/github-hosted-runners
 - macOS mounting, Cryptomator/iCloud synchronization, disk image signatures,
   LaunchAgent logout/login, sleep/wake, and microphone/permissions are not
   acceptance-tested on the owner's hardware.
