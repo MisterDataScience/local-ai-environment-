@@ -404,7 +404,8 @@ def main():
     print('Starts in Plan. Switch to Build to edit; approve each edit/command in OpenCode.', flush=True)
     print('Work and session history are LOCAL, outside the vault. This is not an OS sandbox.', flush=True)
     if args.managed:
-        from managed_captain import credentials
+        from managed_captain import credentials, READY_NAME
+        (root / 'control' / READY_NAME).unlink(missing_ok=True)
         auth = credentials(root)
         git_env['OPENCODE_SERVER_PASSWORD'] = auth['password']
         git_env['OPENCODE_SERVER_USERNAME'] = auth['username']
@@ -436,6 +437,11 @@ def main():
         # With port 4096 verified free before startup, a prior record can only be stale.
         connection_file(root).unlink(missing_ok=True)
         publish_connection(root, git_env['OPENCODE_SERVER_PASSWORD'])
+        if args.managed:
+            from managed_captain import READY_NAME
+            ready_path = root / 'control' / READY_NAME
+            ready_path.write_text(json.dumps({'status': 'native_mcp_verified'}) + '\n')
+            ready_path.chmod(0o600)
         if essay_request is not None:
             from essay_setup import submit
             session_id = submit(git_env['OPENCODE_SERVER_PASSWORD'], essay_request, workflow='scaffold' if args.scaffold else 'essay')
@@ -492,6 +498,9 @@ def main():
             cleanup.join(timeout=2)
             conversation_server.shutdown()
             conversation_server.server_close()
+        if args.managed:
+            from managed_captain import READY_NAME
+            (root / 'control' / READY_NAME).unlink(missing_ok=True)
         print('Project preserved at:', project)
 
 
