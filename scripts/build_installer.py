@@ -6,9 +6,9 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-14-captain-hardening-2'
+RELEASE = '2026-10-15-captain-turnkey-rc1'
 PREFIX = 'mac-local-ai-installer/'
-STAMP = (2026, 10, 14, 0, 0, 0)
+STAMP = (2026, 10, 15, 0, 0, 0)
 
 
 def contents(root):
