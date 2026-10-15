@@ -93,6 +93,34 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(destination.read_bytes(), content)
             self.assertEqual(runner.call_count, 1)
 
+    def test_completed_interrupted_model_download_promotes_without_network(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / 'model.gguf'
+            partial = destination.with_name(destination.name + '.part')
+            content = b'verified-completed-model'
+            partial.write_bytes(content)
+            checksum = hashlib.sha256(content).hexdigest()
+            with patch.object(installer, 'run') as runner:
+                installer.download('https://example.test/model', destination, checksum)
+            runner.assert_not_called()
+            self.assertEqual(destination.read_bytes(), content)
+            self.assertFalse(partial.exists())
+
+    def test_cached_complete_zip_is_promoted_and_partial_symlinks_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / 'ComfyUI.zip'
+            partial = destination.with_name(destination.name + '.part')
+            with zipfile.ZipFile(partial, 'w') as archive:
+                archive.writestr('ComfyUI-v0.38.0/main.py', 'pass')
+            with patch.object(installer, 'run') as runner:
+                installer.download('https://example.test/comfy.zip', destination)
+            runner.assert_not_called()
+            self.assertTrue(zipfile.is_zipfile(destination))
+            destination.unlink()
+            partial.symlink_to(Path(temporary) / 'unrelated')
+            with self.assertRaisesRegex(RuntimeError, 'symlink'):
+                installer.download('https://example.test/model', destination)
+
     def test_stock_context_upgrade_is_once_only_and_preserves_custom_settings(self):
         import copy
         from text_models import DEFAULT_TEXT_MODELS, configured_text_models
