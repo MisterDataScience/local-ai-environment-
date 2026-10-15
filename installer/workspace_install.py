@@ -82,8 +82,16 @@ def choose_mount(before, after, prompt, say):
     if not raw:
         raise RuntimeError('No decrypted Cryptomator volume selected. Rerun the installer after unlocking it.')
     mount = Path(raw).expanduser().absolute()
-    if mount not in after:
-        raise RuntimeError('That path is not a verified macOS mounted volume. No vault was registered.')
+    # Cryptomator can use an owner-selected mount location outside /Volumes
+    # and ~/Cryptomator. The base-directory scan is only for suggestions.
+    # Still require a real separate filesystem and no symlink traversal.
+    try:
+        valid = (mount.is_dir() and not mount.is_symlink() and mount.resolve() == mount
+                 and os.path.ismount(mount) and mount.stat().st_dev != mount.parent.stat().st_dev)
+    except OSError:
+        valid = False
+    if not valid:
+        raise RuntimeError('That path is not a verified separate macOS mounted volume. No vault was registered.')
     if prompt('Confirm this is the unlocked Cryptomator drive. Type YES: ').strip() != 'YES':
         raise RuntimeError('Cryptomator volume was not confirmed. No vault was registered.')
     return mount
