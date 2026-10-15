@@ -11,6 +11,7 @@ import subprocess
 import time
 
 from common import http
+from managed_captain import agent_status, credentials, READY_NAME
 from text_models import configured_text_models
 
 BASE_CHECKS = ('text', 'image', 'text-after-image', 'video', 'text-after-video')
@@ -64,11 +65,15 @@ def await_background(root, config, timeout=600, retry_interval=2):
                 raise RuntimeError('Captain is not listed by the running gateway')
             if not available:
                 raise RuntimeError('Gateway offers no models')
+            agent = agent_status(root, timeout=5) if captain_id else None
+            if captain_id and not (Path(root) / 'control' / READY_NAME).is_file():
+                raise RuntimeError('Captain native MCP/tool policy checks have not completed')
             status = http('http://127.0.0.1:8001/control/mode', key=config['api_key'], timeout=5)
             if status.get('error') or status.get('transitioning'):
                 raise RuntimeError('Gateway reports an unavailable or transitioning mode')
             return {'webui_health': 'passed', 'gateway_models': 'passed',
                     'captain_visible': 'passed' if captain_id else 'not_applicable',
+                    'captain_native_agents': agent if captain_id else 'not_applicable',
                     'mode': status.get('mode')}
         except (OSError, ValueError, KeyError, RuntimeError) as error:
             last_error = error
@@ -113,5 +118,9 @@ def start_login_service(root):
     return login_startup.LABEL
 
 
-def open_local_ui():
-    subprocess.run(['/usr/bin/open', '-a', 'Safari', 'http://127.0.0.1:8081'], check=True)
+def open_local_ui(root):
+    auth = credentials(root)
+    print('Captain sign-in username:', auth['username'])
+    print('Captain sign-in password:', auth['password'])
+    print('These credentials stay on this Mac. The Captain UI is only on loopback.')
+    subprocess.run(['/usr/bin/open', '-a', 'Safari', 'http://127.0.0.1:4096'], check=True)
