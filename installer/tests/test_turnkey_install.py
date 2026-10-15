@@ -86,6 +86,8 @@ class TurnkeyCaptainTests(unittest.TestCase):
             self.assertEqual(record['profile'], 'minicpm-captain')
             self.assertIn('first_login_after_reboot', record['pending_physical_acceptance'])
             self.assertIn('vpn_browser', record['deferred_permissions_and_accounts'])
+            self.assertIn('remote_captain_ui', record['deferred_permissions_and_accounts'])
+            self.assertIn('captain_access_from_another_tailnet_device', record['pending_physical_acceptance'])
             self.assertNotEqual(record['status'], 'fully_verified')
             self.assertEqual(json.loads((root / 'captain-install-readiness.json').read_text()), record)
 
