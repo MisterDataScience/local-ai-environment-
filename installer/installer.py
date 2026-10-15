@@ -76,6 +76,8 @@ def digest(path):
 def download(url, destination, checksum=None):
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink():
+        raise RuntimeError("Refusing symbolic link as install download destination: " + destination.name)
     if destination.exists():
         if checksum is None or digest(destination) == checksum:
             logging.info("Reusing %s", destination.name)
@@ -101,7 +103,8 @@ def download(url, destination, checksum=None):
                     partial.replace(destination)
                     return
     logging.info("Downloading %s; interrupted downloads can resume", destination.name)
-    run(["/usr/bin/curl", "-fL", "--retry", "3", "--retry-delay", "3",
+    run(["/usr/bin/curl", "-fL", "--proto", "=https", "--proto-redir", "=https",
+         "--retry", "3", "--retry-delay", "3",
          "--connect-timeout", "30", "-C", "-", "-o", partial, url])
     if checksum and digest(partial) != checksum:
         invalid = partial.with_name(partial.name + ".invalid-" + str(time.time_ns()))
