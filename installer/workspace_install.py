@@ -100,7 +100,7 @@ def choose_mount(before, after, prompt, say):
     except OSError:
         valid = False
     if not valid:
-        raise RuntimeError('That path is not a verified separate macOS mounted volume. No vault was registered.')
+        raise RuntimeError('That path is not a verified macOS mounted volume. No vault was registered.')
     if prompt('Confirm this is the unlocked Cryptomator drive. Type YES: ').strip() != 'YES':
         raise RuntimeError('Cryptomator volume was not confirmed. No vault was registered.')
     return mount
