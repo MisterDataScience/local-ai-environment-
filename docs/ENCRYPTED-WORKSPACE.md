@@ -7,11 +7,20 @@ nor the model receives the vault password or recovery key.
 
 ## What this release implements
 
-- The normal installer installs Cryptomator 1.19.3 for Apple Silicon using the
-  official DMG, a pinned SHA-256 and macOS signature/Gatekeeper checks. An existing
-  installation is verified and preserved, not overwritten.
-- `Configure AI Workspace.command` opens Cryptomator and registers an already
-  unlocked volume. It creates Inbox, Projects, Outputs and Archive directories.
+- The Captain installer installs Cryptomator 1.19.3 for Apple Silicon using
+  the official DMG, a pinned SHA-256 and macOS signature/Gatekeeper checks.
+  Existing apps and registered vaults are preserved.
+- **Vault registration now happens inside the one Captain installation**.
+  Cryptomator opens for one-time creation or unlock in its own GUI, where you
+  select the vault password and save the recovery key. The installer detects
+  the unlocked mounted volume, requires explicit confirmation before adopting
+  it, creates Inbox/Projects/Outputs/Archive and verifies a real workspace
+  write/read/delete operation before continuing. No separate post-install
+  `Configure AI Workspace.command` step is needed.
+- On subsequent upgrades the configured vault identity is retained; if locked,
+  the installer opens Cryptomator and requires the same existing vault to be
+  unlocked. It will never silently adopt a different mount or create unencrypted
+  fallback storage.
 - Four OpenAPI tools: list a folder, read UTF-8 text, create/revise UTF-8 text,
   and create a subfolder. A file is limited to 256 KiB. No delete, shell,
   arbitrary binary upload, recursive search or outside-folder access is exposed.
@@ -31,39 +40,41 @@ that the expected encrypted volume is still mounted. This boundary checks that
 condition per request and avoids giving a long-running generic file server a
 fallback directory. Open WebUI still owns all model tool loops and approvals.
 
-## One-time setup on the Mac
+## One-time setup inside the Captain installation
 
-1. Run the normal Local AI installer. Hardware tests initially use synthetic
-   sample prompts, outside the vault, before a workspace is registered.
-2. Stop Local AI with Control+C in its Terminal.
-3. Run `~/LocalAI-Automated/Configure AI Workspace.command`.
-4. In Cryptomator create **AI Workspace** inside your iCloud Drive. Use a unique
-   password. Leave **Remember password** and automatic unlocking disabled.
-   Write the recovery key down and keep it separately. Do not paste either
-   secret into the installer, GitHub or AI chat.
-5. In Finder, keep the encrypted iCloud vault folder downloaded on this Mac.
-   Cloud sync, quota and local availability still require iCloud to be signed in.
-6. Unlock the vault. Use a Cryptomator volume backend that mounts a separate
-   filesystem; follow Cryptomator's macOS prompts for any required components.
-   Directory-only/no-mount arrangements are deliberately rejected.
-7. Click Reveal Drive and provide the ROOT path of that unlocked volume to the
-   helper. Do not provide the encrypted iCloud folder or a subfolder. The helper
-   checks mount identity, but does not independently prove that your chosen
-   mounted filesystem is Cryptomator. Select it carefully in this one-time step.
-8. Restart Local AI. In a saved Open WebUI chat, enable **Encrypted AI Workspace**
-   under Integrations and select **Ask for approval**. Existing chat/model
-   settings may override installer defaults; verify the setting explicitly.
-9. Ask it to create `Outputs/check.md`, read it, then edit it. Deny a proposed edit
-   and verify the file is unchanged. Lock the vault and verify file tools fail.
-10. After a restart, unlock the same vault at the same mount path. If macOS
-    changes the path (for example by adding a suffix), stop Local AI and rerun
-    the configuration helper. Do not create replacement directories manually.
+The installer handles the Cryptomator application installation and registration
+itself. You no longer run another script after installing LOCAL AI.
 
-The vault is created once. Unlocking makes its decrypted contents available to
-permitted processes on that Mac. Access through Open WebUI on another device
-requires the Mac to be running with its vault unlocked. To browse the files
-independently on another device, install Cryptomator there and unlock its synced
-copy. Let iCloud finish syncing and avoid concurrent edits to the same file.
+1. Run `Install Local AI.command`. The installer opens Cryptomator during
+   installation. If there is no registered vault, use Cryptomator's **Create New
+   Vault** wizard, name the vault **AI Workspace**, and store its *encrypted*
+   folder in your existing iCloud Drive. Make sure iCloud Drive is signed in
+   and the storage is available offline.
+2. Set a separate password **inside Cryptomator**, not in Terminal or AI chat,
+   and save the recovery key privately. Keep password remembering and automatic
+   unlocking disabled. macOS may require approving an encrypted-volume backend.
+3. Unlock the new vault and choose **Reveal Drive**. Return to the installer's
+   Terminal window and press Enter. If a verified mounted volume named
+   **AI Workspace** is detected, confirm with `YES`; otherwise provide the
+   unlocked volume root path and confirm it. Never select the encrypted iCloud
+   folder, an arbitrary disk, or a plaintext directory.
+4. The installer registers the mount and checks the actual vault marker,
+   creates the required folders, writes and reads a randomly named test file,
+   verifies its content/hash and removes it. Any failure stops the installer
+   and preserves progress for rerunning rather than reporting success.
+
+**After installation**, unlocking still happens manually in Cryptomator
+after login and whenever the vault is locked. No password or recovery key is
+saved by LOCAL AI. Backups and encrypted tools operate only while it is
+unlocked, and never fall back to local plaintext folders. If the mount path
+changes after reboot, the same vault must be safely re-registered; it is not
+silently replaced. `Configure AI Workspace.command` remains available for
+intentional re-registration or repair.
+
+The mounted-volume check verifies a separately mounted volume and marker but
+cannot cryptographically certify that the selected drive comes from
+Cryptomator. Confirm it in the Cryptomator application. The real macOS/iCloud
+volume lifecycle remains unverified until tested on the owner's Mac.
 
 ## GitHub setup
 
@@ -151,9 +162,10 @@ permissions. Account traffic uses the ordinary connection; web retrieval keeps
 its VPN route. File-tool restrictions do not sandbox arbitrary Python plugins,
 code interpreters, direct OS access or other integrations.
 
-The installer can install software and register an unlocked vault, but you must
-create/unlock it in Cryptomator and select its mounted root. It never asks for,
-remembers or retrieves your password or recovery key.
+The Captain installer now **performs registration and smoke testing
+during installation**, but you must complete Cryptomator's own GUI wizard,
+unlock the volume and confirm its mount. It never asks for, remembers or
+retrieves your password or recovery key.
 
 ## Verification on the Mac
 

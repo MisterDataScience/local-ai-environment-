@@ -6,7 +6,7 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-15-captain-turnkey-rc1'
+RELEASE = '2026-10-15-captain-cryptomator-rc2'
 PREFIX = 'mac-local-ai-installer/'
 STAMP = (2026, 10, 15, 0, 0, 0)
 

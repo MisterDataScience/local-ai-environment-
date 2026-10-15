@@ -46,7 +46,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
-TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py')
+TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -603,9 +603,15 @@ def main():
         install_discord(root, download, run)
         configure_discord(root)
         configuration = json.loads((root / 'control/config.json').read_text())
+        vault_acceptance = None
         if args.minicpm_captain:
             from captain_setup import install_minicpm
             configuration = install_minicpm(root, download)
+            from workspace_install import configure_during_install
+            logging.info("Completing encrypted Cryptomator AI Workspace inside Captain installation")
+            configuration, vault_acceptance = configure_during_install(root, app)
+            if vault_acceptance.get('status') != 'passed':
+                raise RuntimeError('Encrypted workspace acceptance did not pass')
         logging.info("Stage 6/8: hardware generation and memory handoff tests")
         fingerprint = acceptance_fingerprint(root)
         accepted_file = root / "accepted-fingerprint.txt"
@@ -641,7 +647,7 @@ def main():
             logging.info("Stage 8/8: registering Captain login service and checking live readiness")
             start_login_service(root)
             background = await_background(root, configuration)
-            receipt = write_receipt(root, configuration, native_acceptance, background)
+            receipt = write_receipt(root, configuration, native_acceptance, background, vault=vault_acceptance)
             checkpoint(state, "installed")
             logging.info("Captain installation core ready. Remaining physical checks: %s",
                          ', '.join(receipt['pending_physical_acceptance']))

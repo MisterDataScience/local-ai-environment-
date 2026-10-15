@@ -26,6 +26,12 @@ credentials are retained. No credentials or model weights are packaged here.
 
 ## First-run Captain
 
+During installation, Cryptomator opens so the owner can create or unlock the
+vault inside the application. The installer detects a confirmed mounted volume,
+registers the workspace and verifies protected reads and writes. A separate
+`Configure AI Workspace.command` step is not needed. No passwords or recovery
+keys are collected by LOCAL AI, and future vault unlocking remains manual.
+
 After native tests pass, the installer registers the unprivileged login
 LaunchAgent, starts the managed Captain Work Agent and opens
 http://127.0.0.1:4096 in Safari. The installer prints the local-only
@@ -35,7 +41,8 @@ http://127.0.0.1:8081: delegation requires the Captain UI.
 
 Core readiness is recorded at `~/LocalAI-Automated/captain-install-readiness.json`.
 Physical reboot/permission/performance checks and account-bound integrations
-are never silently marked as passed.
+are never silently marked as passed. The receipt records the vault installation
+check and explicitly identifies the future manual-unlock requirement.
 
 ## Daily use
 
@@ -54,7 +61,9 @@ Every capability's code is included. The following account-, permission- or
 policy-bound services cannot be activated without local consent or credentials:
 
 - Vision/PDF: chat uploads and Work Agent project tools; run `Check Required Capabilities.command`.
-- Office/files: `Check Office.command` and native transfer approvals; manually unlock your vault when needed.
+- Office/files: installed automatically; encrypted vault registration and smoke
+  testing occur during Captain installation. Manual future unlocks and native
+  transfer approvals remain required.
 - Recurring text tasks: `Schedule AI Task.command`, then inspect `Scheduled Task Status.command`.
 - VPN/browser: `Enable Web Access.command`, then `Enable Browser.command` and its check.
 - Desktop: `Enable Desktop Control.command` and `Check Desktop Control.command`.

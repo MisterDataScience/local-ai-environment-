@@ -82,23 +82,28 @@ def await_background(root, config, timeout=600, retry_interval=2):
                        + '. Inspect logs/login-start-error.log and logs/gateway.log')
 
 
-def write_receipt(root, config, native, background):
+def write_receipt(root, config, native, background, vault=None):
     root = Path(root)
     captain = config.get('captain', {})
     if not captain.get('enabled') or captain.get('provider') != 'llama':
         raise RuntimeError('Captain installation selected, but MiniCPM was not configured')
+    if config.get('vault', {}).get('enabled') and (
+            not isinstance(vault, dict) or vault.get('status') != 'passed'):
+        raise RuntimeError('Cryptomator was configured but encrypted workspace tests did not pass')
     receipt = {
         'profile': 'minicpm-captain',
         'status': 'core_ready_with_native_followups',
         'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'native_acceptance': native,
         'background_services': background,
+        'encrypted_workspace': vault if vault is not None else {
+            'status': 'not_configured', 'reason': 'Vault setup was not included in this installation'},
+        'encrypted_workspace_login_unlock': 'owner_must_unlock_cryptomator_after_login',
         'pending_physical_acceptance': list(NATIVE_PENDING),
         'deferred_permissions_and_accounts': {
             'vpn_browser': 'Requires local Docker and Proton VPN credentials; never direct-network fallback',
             'desktop_control': 'Separate scoped security mode; cannot be enabled simultaneously with the normal Captain tool profile',
             'external_provider': 'Requires terms-compliant provider permission and per-prompt approval',
-            'encrypted_vault': 'Requires owner to create and unlock a vault',
             'github_account': 'Requires owner authentication',
         },
         'notice': ('Core Mac acceptance ran; real login/reboot, permissions, peripherals, '
