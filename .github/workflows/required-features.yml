@@ -34,7 +34,7 @@ jobs:
           curl -fL --proto '=https' --proto-redir '=https' --retry 3 \
             'https://github.com/Comfy-Org/ComfyUI/archive/6b747c0428c343e1417219641db93a4fb7cb69ae.zip' \
             -o "$RUNNER_TEMP/comfyui-source.zip"
-          sha256sum "$RUNNER_TEMP/comfyui-source.zip"
+          echo '4a144a553c77397c81f6067f3f8c8ab9dffd42889af48fb35fec2c64a71c75b2  '"$RUNNER_TEMP/comfyui-source.zip" | sha256sum --check
       - run: python -m compileall -q installer
       - name: Persistent batch job regressions
         run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -p test_autonomous_jobs.py -v
@@ -68,6 +68,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
+      - name: Verify native Apple Silicon pinned uv bootstrap archive
+        run: |
+          curl -fL --proto '=https' --proto-redir '=https' --retry 3 \
+            https://github.com/astral-sh/uv/releases/download/0.12.20/uv-aarch64-apple-darwin.tar.gz \
+            -o "$RUNNER_TEMP/uv-bootstrap.tar.gz"
+          echo '848fdeb602ff1a1baacd4f6c8b7bdc6cf1ad026a6d9cf59475fda17c179743ca  '"$RUNNER_TEMP/uv-bootstrap.tar.gz" | shasum -a 256 --check
+          tar -xOzf "$RUNNER_TEMP/uv-bootstrap.tar.gz" uv-aarch64-apple-darwin/uv > "$RUNNER_TEMP/uv"
+          chmod 700 "$RUNNER_TEMP/uv"
+          "$RUNNER_TEMP/uv" --version | grep -E '^uv 0[.]12[.]20([[:space:]]|$)'
+
       - name: Build the pinned MiniCPM native server without downloading model weights
         run: |
           git init "$RUNNER_TEMP/minicpm-runtime"
