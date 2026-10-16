@@ -123,8 +123,10 @@ def main(background=False):
         if config.get('captain', {}).get('enabled'):
             print('Captain Work Agent: http://127.0.0.1:4096 (private credentials in control/captain-ui-auth.json)')
         if remote.get("enabled"):
+            print("Private remote Captain:", remote.get("captain_url", "not configured"))
             print("Private remote chat:", remote["ui_url"])
-            print("Connect Tailscale on your other devices, then open that address.")
+            print("Connect Tailscale on Windows/iPad; use the Captain URL for the agent team.")
+            print("Captain requires its separate local Basic Auth login; no public Funnel enabled.")
         print("Select Everyday, Small or Large in the chat's model menu. Models load on a request.")
         print("Open AI Modes.command to choose Gaming, Normal or Max. This applies to all devices.")
         if config.get('vault', {}).get('enabled'):
