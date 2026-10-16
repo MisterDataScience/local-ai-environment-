@@ -239,7 +239,17 @@ def install_comfy(root, uv, state):
     environment_missing = not python.exists()
     if environment_missing:
         run([uv, "venv", "--python", "3.12", directory / ".venv"])
-    if environment_missing or not completed(state, "comfy-dependencies"):
+    deps_marker = directory / ".local-ai-dependencies.json"
+    required = {'comfy_commit': COMFY_COMMIT, 'torch': TORCH_VERSION,
+                'torchvision': TORCHVISION_VERSION, 'torchaudio': TORCHAUDIO_VERSION}
+    try:
+        installed_deps = json.loads(deps_marker.read_text())
+    except (OSError, ValueError):
+        installed_deps = None
+    needs_dependencies = (environment_missing or
+                          not completed(state, "comfy-dependencies") or
+                          installed_deps != required)
+    if needs_dependencies:
         run([uv, "pip", "install", "--python", python, f"torch=={TORCH_VERSION}",
              f"torchvision=={TORCHVISION_VERSION}", f"torchaudio=={TORCHAUDIO_VERSION}"])
         # ComfyUI upstream lists unbounded torch/torchvision. Enforce the
@@ -250,13 +260,17 @@ def install_comfy(root, uv, state):
                                f"torchaudio=={TORCHAUDIO_VERSION}\n")
         run([uv, "pip", "install", "--python", python, "-r", directory / "requirements.txt",
              "-c", constraints])
-        checkpoint(state, "comfy-dependencies")
     run([python, "-c", "import platform, torch, torchvision, torchaudio; "
          "assert platform.machine() == 'arm64'; "
          "assert (torch.__version__.split('+')[0], torchvision.__version__.split('+')[0], "
          "torchaudio.__version__.split('+')[0]) == ('2.10.0', '0.25.0', '2.10.0'); "
          "assert torch.backends.mps.is_available(), 'Apple GPU MPS is unavailable'; "
          "print('Pinned Apple GPU MPS: available')"])
+    if needs_dependencies:
+        # Mark success only AFTER all imports, exact versions and Metal MPS pass.
+        # An upgrade will not reuse the old checkpoint with stale Torch.
+        deps_marker.write_text(json.dumps(required, sort_keys=True) + "\n")
+        checkpoint(state, "comfy-dependencies")
     return directory
 
 
