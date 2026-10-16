@@ -159,7 +159,14 @@ def check(binary):
             if source.is_file() and source.suffix in {'.mjs', '.txt'}:
                 shutil.copy2(source, control / source.name)
         config = upgrade(upgrade_team(upgrade_text_configuration({'api_key': 'native-ci-key'})))
+        # Simulate a browser crossing the authenticated tailnet HTTPS proxy.
+        remote_origin = 'https://native-ci.example.ts.net:10000'
+        config['remote_access'] = {
+            'enabled': True, 'hostname': 'native-ci.example.ts.net',
+            'captain_url': remote_origin}
         settings = work_agent.configuration(config, list(config['text_models']), 'max', root, STATUS)
+        if settings.get('server', {}).get('cors') != [remote_origin]:
+            raise RuntimeError('OpenCode did not restrict remote CORS to the private Captain origin')
         env = work_agent.environment(root, config, settings)
         env.update(OPENCODE_SERVER_USERNAME='opencode', OPENCODE_SERVER_PASSWORD='native-ci-password')
         token = base64.b64encode(b'opencode:native-ci-password').decode()
@@ -177,6 +184,24 @@ def check(binary):
                 process = subprocess.Popen([str(binary), 'serve', '--hostname', '127.0.0.1', '--port', '4096'],
                     cwd=project, env=env, stdout=log, stderr=log, start_new_session=True)
                 verify_work_agent(process, env, True)
+                # Real native OpenCode, simulated incoming HTTPS reverse-proxy
+                # browser Origin and Host. Never infer that this tests Tailscale
+                # routing or an actual second-device Safari/Windows browser.
+                remote_headers = {'Authorization': 'Basic ' + token,
+                                  'Origin': remote_origin,
+                                  'Host': 'native-ci.example.ts.net:10000'}
+                with urlopen(Request('http://127.0.0.1:4096/agent',
+                                     headers=remote_headers), timeout=10) as response:
+                    remote_agents = json.load(response)
+                    cors = response.headers.get('Access-Control-Allow-Origin')
+                if not {'plan', 'build'}.issubset({a.get('name') for a in remote_agents}):
+                    raise RuntimeError('Remote-origin browser cannot see native Plan/Build')
+                if cors != remote_origin:
+                    raise RuntimeError('Native OpenCode lacks exact tailnet browser CORS: ' + repr(cors))
+                with urlopen(Request('http://127.0.0.1:4096/event',
+                                     headers=remote_headers), timeout=10) as response:
+                    if 'text/event-stream' not in response.headers.get('Content-Type', ''):
+                        raise RuntimeError('Remote-origin event stream was not established')
                 session = native('/session', {'title': 'Native captain CI'})['id']
                 answer = native('/session/' + session + '/message', {'agent': 'plan', 'parts': [
                     {'type': 'text', 'text': 'Native captain protocol check. Dispatch the two supplied workers and retire them.'}]})
