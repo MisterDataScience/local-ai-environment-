@@ -34,6 +34,7 @@ def main(background=False):
     from discord_runtime import DiscordSupervisor
     discord = DiscordSupervisor(root, config)
     processes = []
+    idle_guard = None
     def interrupted(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, interrupted)
@@ -42,6 +43,14 @@ def main(background=False):
         from service_lifecycle import recover, record, publish_runtime
         recover(root)
         publish_runtime(root)
+        # Prevent idle sleep during headless sessions without persisting any
+        # system power-policy changes. Manual Sleep and shutdown still work.
+        from power_guard import begin as begin_idle_guard
+        try:
+            idle_guard = begin_idle_guard()
+            logging.info("Headless idle-sleep prevention active for this supervisor.")
+        except OSError as error:
+            logging.warning("Idle-sleep prevention could not start: %s", error)
         for service, port in PORTS.items():
             if port_open(port):
                 raise RuntimeError(f"{service} port {port} is already occupied. No existing process was stopped.")
@@ -234,6 +243,8 @@ def main(background=False):
                     logging.info('Encrypted shutdown backup saved: %s', saved)
             except Exception:
                 logging.warning('Backup not completed. Unlock the vault and run Back Up AI Workspace.command while Local AI is stopped.')
+        from power_guard import finish as finish_idle_guard
+        finish_idle_guard(idle_guard)
         lock.close()
     return 0
 
