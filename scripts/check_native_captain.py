@@ -193,6 +193,14 @@ def check(binary):
                 remote_headers = {'Authorization': 'Basic ' + token,
                                   'Origin': remote_origin,
                                   'Host': 'native-ci.example.ts.net:10000'}
+                with urlopen(Request('http://127.0.0.1:4096/',
+                                     headers=remote_headers), timeout=10) as response:
+                    ui_type = response.headers.get('Content-Type', '')
+                    ui_final = response.geturl()
+                    ui_sample = response.read(4096).lower()
+                if not ui_final.startswith('http://127.0.0.1:4096/') or (
+                        'text/html' not in ui_type and b'<html' not in ui_sample):
+                    raise RuntimeError('Pinned OpenCode web did not serve a local Captain HTML interface')
                 with urlopen(Request('http://127.0.0.1:4096/agent',
                                      headers=remote_headers), timeout=10) as response:
                     remote_agents = json.load(response)
