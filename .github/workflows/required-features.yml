@@ -29,6 +29,12 @@ jobs:
           node-version: "24"
       - run: python -m pip install --disable-pip-version-check "Pillow>=11,<13" "requests>=2.32,<3" imageio-ffmpeg==0.6.0
       - run: python -m pip install --disable-pip-version-check --no-deps open-webui==0.11.1
+      - name: Resolve pinned ComfyUI source archive digest
+        run: |
+          curl -fL --proto '=https' --proto-redir '=https' --retry 3 \
+            'https://github.com/Comfy-Org/ComfyUI/archive/6b747c0428c343e1417219641db93a4fb7cb69ae.zip' \
+            -o "$RUNNER_TEMP/comfyui-source.zip"
+          sha256sum "$RUNNER_TEMP/comfyui-source.zip"
       - run: python -m compileall -q installer
       - name: Persistent batch job regressions
         run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -p test_autonomous_jobs.py -v
