@@ -181,7 +181,8 @@ def check(binary):
         process = None
         try:
             with (root / 'opencode.log').open('w') as log:
-                process = subprocess.Popen([str(binary), 'serve', '--hostname', '127.0.0.1', '--port', '4096'],
+                process = subprocess.Popen([str(binary), 'serve', '--hostname', '127.0.0.1', '--port', '4096',
+                                            '--cors', remote_origin],
                     cwd=project, env=env, stdout=log, stderr=log, start_new_session=True)
                 verify_work_agent(process, env, True)
                 # Real native OpenCode, simulated incoming HTTPS reverse-proxy
