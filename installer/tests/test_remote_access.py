@@ -142,6 +142,35 @@ class RemoteAccessTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 remote.wait_for_connection(timeout=1)
 
+    def test_private_captain_requires_two_real_authentication_outcomes(self):
+        settings = {'hostname': HOST, 'captain_url': f'https://{HOST}:10000'}
+        unauthorized = HTTPError(settings['captain_url'] + '/agent', 401, 'Authentication required', {}, None)
+        client = Mock()
+        client.open.side_effect = [unauthorized, io.BytesIO(
+            b'[{"name":"plan"},{"name":"build"}]')]
+        with patch.object(remote, 'build_opener', return_value=client), \\
+             patch('managed_captain.agent_status', return_value={'captain_agent_endpoint': 'passed'}), \\
+             patch('managed_captain.credentials', return_value={
+                 'username': 'opencode', 'password': 'not-a-real-private-password'}):
+            checked = remote.verify_captain_access(Path('/tmp'), settings)
+        self.assertEqual(checked['status'], 'passed')
+        self.assertTrue(checked['login_required'])
+        first = client.open.call_args_list[0].args[0]
+        second = client.open.call_args_list[1].args[0]
+        self.assertNotIn('Authorization', first.headers)
+        self.assertIn('Authorization', second.headers)
+        self.assertEqual(first.full_url, second.full_url)
+
+    def test_remote_captain_refuses_public_or_unexpected_endpoint_and_redirects(self):
+        settings = {'hostname': HOST, 'captain_url': 'https://public.example.com'}
+        with patch('managed_captain.agent_status') as check:
+            with self.assertRaisesRegex(RuntimeError, 'does not match'):
+                remote.verify_captain_access(Path('/tmp'), settings)
+            check.assert_not_called()
+        with self.assertRaisesRegex(RuntimeError, 'redirected'):
+            remote.NoCrossOriginRedirect().redirect_request(None, None, 302, 'moved', {},
+                                                             'https://evil.example/')
+
     def test_https_acceptance_checks_media_isolation_and_removes_probe(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
