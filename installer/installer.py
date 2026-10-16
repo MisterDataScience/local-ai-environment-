@@ -289,7 +289,8 @@ def install_environments(root, uv, state):
     python = control / ".venv/bin/python"
     if not python.exists():
         run([uv, "venv", "--python", "3.11", control / ".venv"])
-    run([uv, "pip", "install", "--python", python, "Pillow>=11,<13", "requests>=2.32,<3", "imageio-ffmpeg==0.6.0"])
+    run([uv, "pip", "install", "--python", python,
+         "Pillow==12.0.0", "requests==2.32.5", "imageio-ffmpeg==0.6.0"])
     run([python, "-c", "import imageio_ffmpeg, subprocess; subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True)"])
     run([python, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=control)
     webui = root / "webui"
