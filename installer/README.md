@@ -39,10 +39,24 @@ username and password. `Open Captain.command` prints them again if needed.
 The Captain UI is separate from ordinary Open WebUI chat at
 http://127.0.0.1:8081: delegation requires the Captain UI.
 
+The Captain installer automatically installs and checks signed Docker Desktop,
+Proton VPN-only retrieval and Playwright, and the private Tailscale HTTPS
+route to **the real OpenCode Captain**. You approve the Docker licence inside its
+GUI, supply your own Proton WireGuard key in Terminal, and sign in to Tailscale
+when macOS asks. The installer also offers optional fine-grained GitHub token
+registration. No separate Enable Web Access, Enable Browser or Enable Remote
+Access scripts are needed for a new Captain installation.
+
+Remote Captain URL: `https://MAC.TAILNET.ts.net:10000` (private Tailscale
+Serve, separate Captain username and password). Chat: port 443; media: 8443.
+Tailscale must be installed and signed in on your iPad/Windows device too.
+The installer tests VPN, Playwright, native Captain auth, and HTTPS routes
+before reporting success. Its first-login, off-device, VPN-drop and
+32GB full-load acceptance remain unverified until the real Mac is available.
+
 Core readiness is recorded at `~/LocalAI-Automated/captain-install-readiness.json`.
-Physical reboot/permission/performance checks and account-bound integrations
-are never silently marked as passed. The receipt records the vault installation
-check and explicitly identifies the future manual-unlock requirement.
+The receipt distinguishes tested services, owner credentials and physical
+follow-up checks. It never stores the Cryptomator password/recovery key.
 
 ## Daily use
 
@@ -55,7 +69,7 @@ crash-safe checkpoints and create-only Markdown output. `Autonomous Job Status.c
 manage its independent launchd worker. See docs/AUTONOMOUS-JOBS.md.
 This does not authorise unrestricted unattended OpenCode tools.
 `Stop Local AI.command` requests graceful shutdown. The chat is local at
-`http://127.0.0.1:8081`; use the optional private remote-access setup for other devices.
+`http://127.0.0.1:8081`; remote Captain is preconfigured in the same install on Tailscale HTTPS 10000.
 
 Every capability's code is included. The following account-, permission- or
 policy-bound services cannot be activated without local consent or credentials:
@@ -65,7 +79,8 @@ policy-bound services cannot be activated without local consent or credentials:
   testing occur during Captain installation. Manual future unlocks and native
   transfer approvals remain required.
 - Recurring text tasks: `Schedule AI Task.command`, then inspect `Scheduled Task Status.command`.
-- VPN/browser: `Enable Web Access.command`, then `Enable Browser.command` and its check.
+- VPN/browser and private Tailscale: configured and tested during Captain installation;
+  the relevant Docker/Proton/Tailscale approvals are collected during installation.
 - Desktop: `Enable Desktop Control.command` and `Check Desktop Control.command`.
 - Generic external helper: `Enable External Delegation.command`, with authorised provider access and verified selectors.
 
