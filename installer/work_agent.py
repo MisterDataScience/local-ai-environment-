@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import secrets
@@ -98,6 +99,20 @@ def _apply_global_behaviour(settings):
     return settings
 
 
+def remote_server_origin(config):
+    """Allow only this installation's private Tailscale HTTPS browser origin."""
+    remote = config.get('remote_access', {})
+    if not remote.get('enabled'):
+        return None
+    hostname = remote.get('hostname', '')
+    origin = remote.get('captain_url', '')
+    if not re.fullmatch(r'[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.ts\\.net', hostname):
+        raise ValueError('Captain remote hostname is not a valid personal Tailscale DNS name')
+    if origin != f'https://{hostname}:10000':
+        raise ValueError('Captain remote origin must match the configured private HTTPS route')
+    return origin
+
+
 def configuration(config, identifiers, mode='normal', root=None, status=None):
     sys.path.insert(0, str(Path(__file__).resolve().parent / 'payload'))
     from text_models import configured_text_models, output_ceiling
@@ -128,6 +143,11 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
             'tools': {'webfetch': False, 'websearch': False, 'task': False, 'lsp': False},
             'lsp': False, 'formatter': False,
             'agent': {'build': {'steps': 12}, 'plan': {'steps': 8}}}
+    origin = remote_server_origin(config)
+    if origin:
+        # OpenCode treats off-origin requests from its browser as CORS.
+        # No wildcard, LAN hostname, or unapproved third-party origin.
+        settings['server'] = {'cors': [origin]}
     roles = team_roles(config, models)
     if not roles:
         return _apply_global_behaviour(settings)
