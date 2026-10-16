@@ -719,7 +719,8 @@ def main():
             logging.info("Stage 8/8: registering Captain login service and checking live readiness")
             start_login_service(root)
             background = await_background(root, configuration)
-            receipt = write_receipt(root, configuration, native_acceptance, background, vault=vault_acceptance)
+            receipt = write_receipt(root, configuration, native_acceptance, background,
+                                    vault=vault_acceptance, require_integrations=True)
             checkpoint(state, "installed")
             logging.info("Captain installation core ready. Remaining physical checks: %s",
                          ', '.join(receipt['pending_physical_acceptance']))
