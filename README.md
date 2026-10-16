@@ -27,6 +27,22 @@ checkpointed launchd worker. They read only a pre-authorised folder of small
 UTF-8 files and create new Markdown outputs without model tool access. This is
 not an unrestricted background OpenCode agent. See [autonomous jobs](docs/AUTONOMOUS-JOBS.md).
 
+The installer now verifies a **fixed SHA-256** for the Apple Silicon `uv`
+bootstrap, Docker Desktop 4.91.0 and the exact ComfyUI source archive.
+It pins a mutually compatible Torch/TorchVision/TorchAudio set and freezes
+remaining `uv` dependency resolution to the 16 October 2026 release window.
+Full transitive hash locking remains incomplete.
+
+The actual remote Captain on your Tailscale account is configured with an
+**explicit allowlisted HTTPS browser origin**. Native CI checks the real
+pinned OpenCode server's remote-origin API, CORS response and SSE stream.
+The Mac supervisor now holds a process-scoped idle-sleep assertion and
+repairs only its missing private Tailscale routes after reconnects. It
+will not enable public Funnel or bypass FileVault login.
+
+See [headless and remote acceptance](docs/HEADLESS-AND-REMOTE-ACCEPTANCE.md)
+for what still requires an iPad/Windows test and real reboot/sleep checks.
+
 **Installation candidate only; owner-Mac end-to-end acceptance remains required.**
 Local authoring tests do not establish GPU performance, microphone quality,
 actual VPN tunnel-drop behavior, account approvals or memory pressure on your Mac.
