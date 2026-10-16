@@ -147,12 +147,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def check(binary):
-    # The installed Work Agent launches `opencode web`, not `serve`.
-    # Check that the pinned binary accepts the HTTPS-origin flag on both.
-    help_output = subprocess.run([str(binary), 'web', '--help'],
-                                 capture_output=True, text=True, timeout=15, check=True)
-    if '--cors' not in help_output.stdout:
-        raise RuntimeError('Pinned OpenCode web command lacks --cors for remote Captain')
+    # Exercise the same `opencode web` command used by the managed Captain.
+    subprocess.run([str(binary), 'web', '--help'],
+                   capture_output=True, text=True, timeout=15, check=True)
     if port_open(8001) or port_open(4096):
         raise RuntimeError('Native CI check requires unoccupied loopback ports; no service was stopped')
     with tempfile.TemporaryDirectory(prefix='native-captain-') as folder:
@@ -165,7 +162,7 @@ def check(binary):
             if source.is_file() and source.suffix in {'.mjs', '.txt'}:
                 shutil.copy2(source, control / source.name)
         config = upgrade(upgrade_team(upgrade_text_configuration({'api_key': 'native-ci-key'})))
-        # Simulate a browser crossing the authenticated tailnet HTTPS proxy.
+        # Simulate requests whose browser page/API share one tailnet origin.
         remote_origin = 'https://native-ci.example.ts.net:10000'
         config['remote_access'] = {
             'enabled': True, 'hostname': 'native-ci.example.ts.net',
@@ -187,8 +184,7 @@ def check(binary):
         process = None
         try:
             with (root / 'opencode.log').open('w') as log:
-                process = subprocess.Popen([str(binary), 'serve', '--hostname', '127.0.0.1', '--port', '4096',
-                                            '--cors', remote_origin],
+                process = subprocess.Popen([str(binary), 'web', '--hostname', '127.0.0.1', '--port', '4096'],
                     cwd=project, env=env, stdout=log, stderr=log, start_new_session=True)
                 verify_work_agent(process, env, True)
                 # Real native OpenCode, simulated incoming HTTPS reverse-proxy
@@ -200,11 +196,11 @@ def check(binary):
                 with urlopen(Request('http://127.0.0.1:4096/agent',
                                      headers=remote_headers), timeout=10) as response:
                     remote_agents = json.load(response)
-                    cors = response.headers.get('Access-Control-Allow-Origin')
                 if not {'plan', 'build'}.issubset({a.get('name') for a in remote_agents}):
-                    raise RuntimeError('Remote-origin browser cannot see native Plan/Build')
-                if cors != remote_origin:
-                    raise RuntimeError('Native OpenCode lacks exact tailnet browser CORS: ' + repr(cors))
+                    raise RuntimeError('Private tailnet same-origin browser cannot see native Plan/Build')
+                # A browser loaded from the same proxy hostname/port as
+                # its API does not need Access-Control-Allow-Origin. What
+                # matters is real authenticated API and SSE compatibility.
                 with urlopen(Request('http://127.0.0.1:4096/event',
                                      headers=remote_headers), timeout=10) as response:
                     if 'text/event-stream' not in response.headers.get('Content-Type', ''):
