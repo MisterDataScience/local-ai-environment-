@@ -29,6 +29,11 @@ from model_team import upgrade_team
 from context_policy import require_backend_version
 from context_settings import ContextSettings
 COMFY_RELEASE = "v0.38.0"
+# Immutable source revision behind v0.38.0. Never download floating refs/tags.
+COMFY_COMMIT = "6b747c0428c343e1417219641db93a4fb7cb69ae"
+TORCH_VERSION = "2.10.0"
+TORCHVISION_VERSION = "0.25.0"
+TORCHAUDIO_VERSION = "2.10.0"
 WEBUI_RELEASE = "0.11.1"
 OLLAMA_CONTEXT_RELEASE = '0.40.0'
 OLLAMA_CONTEXT_SHA256 = '60dd339e77fdc8afe3286c51ff1fd8eb4f467ec178f33f4a85ec69dac6f2b9dd'
@@ -146,7 +151,7 @@ def acceptance_fingerprint(root):
     for name in ('voices/default.json', 'voices/default.wav', 'installed.json', 'conversation-installed.json'):
         path = root / 'voice-engine' / name
         hashes.append(digest(path) if path.is_file() else 'missing:' + name)
-    return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
+    return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, COMFY_COMMIT, TORCH_VERSION, TORCHVISION_VERSION, TORCHAUDIO_VERSION, WEBUI_RELEASE]).encode()).hexdigest()
 
 
 def preflight(root):
@@ -221,7 +226,7 @@ def install_comfy(root, uv, state):
     directory = root / "ComfyUI"
     if not (directory / "main.py").exists():
         archive = root / "cache/ComfyUI.zip"
-        download(f"https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/{COMFY_RELEASE}.zip", archive)
+        download(f"https://github.com/Comfy-Org/ComfyUI/archive/{COMFY_COMMIT}.zip", archive)
         with tempfile.TemporaryDirectory(dir=root / "cache") as temporary:
             extract_zip(archive, temporary)
             sources = [p for p in Path(temporary).iterdir() if p.is_dir() and (p / "main.py").is_file()]
@@ -233,10 +238,23 @@ def install_comfy(root, uv, state):
     if environment_missing:
         run([uv, "venv", "--python", "3.12", directory / ".venv"])
     if environment_missing or not completed(state, "comfy-dependencies"):
-        run([uv, "pip", "install", "--python", python, "torch", "torchvision", "torchaudio"])
-        run([uv, "pip", "install", "--python", python, "-r", directory / "requirements.txt"])
+        run([uv, "pip", "install", "--python", python, f"torch=={TORCH_VERSION}",
+             f"torchvision=={TORCHVISION_VERSION}", f"torchaudio=={TORCHAUDIO_VERSION}"])
+        # ComfyUI upstream lists unbounded torch/torchvision. Enforce the
+        # mutually compatible tested version trio for both install operations.
+        constraints = directory / ".local-ai-torch-constraints.txt"
+        constraints.write_text(f"torch=={TORCH_VERSION}\\n"
+                               f"torchvision=={TORCHVISION_VERSION}\\n"
+                               f"torchaudio=={TORCHAUDIO_VERSION}\\n")
+        run([uv, "pip", "install", "--python", python, "-r", directory / "requirements.txt",
+             "-c", constraints])
         checkpoint(state, "comfy-dependencies")
-    run([python, "-c", "import platform, torch; assert platform.machine() == 'arm64'; assert torch.backends.mps.is_available(), 'Apple GPU MPS is unavailable'; print('Apple GPU MPS: available')"])
+    run([python, "-c", "import platform, torch, torchvision, torchaudio; "
+         "assert platform.machine() == 'arm64'; "
+         "assert (torch.__version__.split('+')[0], torchvision.__version__.split('+')[0], "
+         "torchaudio.__version__.split('+')[0]) == ('2.10.0', '0.25.0', '2.10.0'); "
+         "assert torch.backends.mps.is_available(), 'Apple GPU MPS is unavailable'; "
+         "print('Pinned Apple GPU MPS: available')"])
     return directory
 
 
