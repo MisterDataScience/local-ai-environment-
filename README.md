@@ -33,9 +33,10 @@ It pins a mutually compatible Torch/TorchVision/TorchAudio set and freezes
 remaining `uv` dependency resolution to the 16 October 2026 release window.
 Full transitive hash locking remains incomplete.
 
-The actual remote Captain on your Tailscale account is configured with an
-**explicit allowlisted HTTPS browser origin**. Native CI checks the real
-pinned OpenCode server's remote-origin API, CORS response and SSE stream.
+The actual remote Captain's web page and API share **one private
+Tailscale HTTPS origin**, with no public LAN listener. Native CI exercises
+the pinned OpenCode `web` command using a simulated tailnet hostname,
+authenticated native agents and its server-sent event stream.
 The Mac supervisor now holds a process-scoped idle-sleep assertion and
 repairs only its missing private Tailscale routes after reconnects. It
 will not enable public Funnel or bypass FileVault login.
