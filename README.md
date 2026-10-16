@@ -31,7 +31,9 @@ The installer now verifies a **fixed SHA-256** for the Apple Silicon `uv`
 bootstrap, Docker Desktop 4.91.0 and the exact ComfyUI source archive.
 It pins a mutually compatible Torch/TorchVision/TorchAudio set and freezes
 remaining `uv` dependency resolution to the 16 October 2026 release window.
-Full transitive hash locking remains incomplete.
+ComfyUI now has an 85-package transitive hash lock for macOS 15+ ARM64,
+Python 3.12. Other environments are not fully hash-locked. See
+[dependency lock scope](docs/DEPENDENCY-LOCKS.md).
 
 The actual remote Captain's web page and API share **one private
 Tailscale HTTPS origin**, with no public LAN listener. Native CI exercises

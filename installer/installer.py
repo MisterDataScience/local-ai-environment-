@@ -109,9 +109,16 @@ def download(url, destination, checksum=None):
                     partial.replace(destination)
                     return
     logging.info("Downloading %s; interrupted downloads can resume", destination.name)
-    run(["/usr/bin/curl", "-fL", "--proto", "=https", "--proto-redir", "=https",
-         "--retry", "3", "--retry-delay", "3",
-         "--connect-timeout", "30", "-C", "-", "-o", partial, url])
+    command = ["/usr/bin/curl", "-fL", "--proto", "=https", "--proto-redir", "=https",
+               "--retry", "3", "--retry-delay", "3", "--connect-timeout", "30"]
+    try:
+        run(command + ["-C", "-", "-o", partial, url])
+    except subprocess.CalledProcessError as error:
+        # A server may reject Range, or a complete corrupt partial may return
+        # HTTP 416. Retry once without Range instead of trapping every rerun.
+        if error.returncode not in {22, 33, 36} or not partial.is_file():
+            raise
+        run(command + ["-o", partial, url])
     if checksum and digest(partial) != checksum:
         invalid = partial.with_name(partial.name + ".invalid-" + str(time.time_ns()))
         partial.rename(invalid)
@@ -223,25 +230,66 @@ def install_ollama(root):
             raise
 
 
-def install_comfy(root, uv, state):
+def ensure_comfy_source(root):
+    """Verify old installs and repair interrupted extraction without losing data."""
     directory = root / "ComfyUI"
-    if not (directory / "main.py").exists():
-        archive = root / "cache/ComfyUI.zip"
-        download(f"https://github.com/Comfy-Org/ComfyUI/archive/{COMFY_COMMIT}.zip",
-                 archive, COMFY_SHA256)
-        with tempfile.TemporaryDirectory(dir=root / "cache") as temporary:
-            extract_zip(archive, temporary)
-            sources = [p for p in Path(temporary).iterdir() if p.is_dir() and (p / "main.py").is_file()]
-            if len(sources) != 1:
-                raise RuntimeError("ComfyUI source archive layout has changed.")
-            shutil.move(str(sources[0]), directory)
+    if directory.is_symlink():
+        raise RuntimeError('ComfyUI source directory must not be a symlink')
+    archive = root / "cache/ComfyUI.zip"
+    download(f"https://github.com/Comfy-Org/ComfyUI/archive/{COMFY_COMMIT}.zip",
+             archive, COMFY_SHA256)
+    with tempfile.TemporaryDirectory(dir=root / "cache") as temporary:
+        extract_zip(archive, temporary)
+        sources = [p for p in Path(temporary).iterdir() if p.is_dir() and (p / "main.py").is_file()]
+        if len(sources) != 1:
+            raise RuntimeError("ComfyUI source archive layout has changed.")
+        source = sources[0]
+        if not directory.exists():
+            source.rename(directory)
+            return directory
+        # Validate every existing upstream file before repairing missing ones.
+        # Untracked models, outputs, workflows and custom nodes are untouched.
+        missing = []
+        for file in source.rglob('*'):
+            relative = file.relative_to(source)
+            target = directory / relative
+            if any((directory / Path(*relative.parts[:i])).is_symlink()
+                   for i in range(1, len(relative.parts) + 1)):
+                raise RuntimeError('ComfyUI source contains a symlink: ' + str(relative))
+            if file.is_dir():
+                if target.exists() and not target.is_dir():
+                    raise RuntimeError('ComfyUI source directory conflicts: ' + str(relative))
+                continue
+            if target.exists():
+                if not target.is_file() or digest(target) != digest(file):
+                    raise RuntimeError('ComfyUI source differs from pinned revision; preserved: ' + str(relative))
+            else:
+                missing.append((file, target))
+        for file, target in missing:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Rename a fully written sibling so a crash never leaves half a
+            # Python source file that later looks like a user modification.
+            fd, name = tempfile.mkstemp(prefix='.local-ai-source-', dir=target.parent)
+            try:
+                with os.fdopen(fd, 'wb') as output:
+                    output.write(file.read_bytes())
+                os.replace(name, target)
+            finally:
+                Path(name).unlink(missing_ok=True)
+    return directory
+
+
+def install_comfy(root, uv, state):
+    directory = ensure_comfy_source(root)
     python = directory / ".venv/bin/python"
     environment_missing = not python.exists()
     if environment_missing:
         run([uv, "venv", "--python", "3.12", directory / ".venv"])
     deps_marker = directory / ".local-ai-dependencies.json"
+    lock = SOURCE / 'locks/comfy-macos-arm64-py312.txt'
     required = {'comfy_commit': COMFY_COMMIT, 'torch': TORCH_VERSION,
-                'torchvision': TORCHVISION_VERSION, 'torchaudio': TORCHAUDIO_VERSION}
+                'torchvision': TORCHVISION_VERSION, 'torchaudio': TORCHAUDIO_VERSION,
+                'lock_sha256': digest(lock)}
     try:
         installed_deps = json.loads(deps_marker.read_text())
     except (OSError, ValueError):
@@ -250,16 +298,10 @@ def install_comfy(root, uv, state):
                           not completed(state, "comfy-dependencies") or
                           installed_deps != required)
     if needs_dependencies:
-        run([uv, "pip", "install", "--python", python, f"torch=={TORCH_VERSION}",
-             f"torchvision=={TORCHVISION_VERSION}", f"torchaudio=={TORCHAUDIO_VERSION}"])
-        # ComfyUI upstream lists unbounded torch/torchvision. Enforce the
-        # mutually compatible tested version trio for both install operations.
-        constraints = directory / ".local-ai-torch-constraints.txt"
-        constraints.write_text(f"torch=={TORCH_VERSION}\n"
-                               f"torchvision=={TORCHVISION_VERSION}\n"
-                               f"torchaudio=={TORCHAUDIO_VERSION}\n")
-        run([uv, "pip", "install", "--python", python, "-r", directory / "requirements.txt",
-             "-c", constraints])
+        # Resolve nothing at install time: all 85 transitive packages and
+        # artifact hashes are locked for CPython 3.12 / macOS 15+ ARM64.
+        run([uv, "pip", "install", "--python", python, '--require-hashes',
+             '--only-binary', ':all:', '-r', lock])
     run([python, "-c", "import platform, torch, torchvision, torchaudio; "
          "assert platform.machine() == 'arm64'; "
          "assert (torch.__version__.split('+')[0], torchvision.__version__.split('+')[0], "

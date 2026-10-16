@@ -15,6 +15,13 @@ def begin():
         stderr=subprocess.DEVNULL)
 
 
+def maintain(process):
+    """Reacquire the idle-sleep assertion if caffeinate was terminated."""
+    if process is None or process.poll() is not None:
+        return begin()
+    return process
+
+
 def finish(process):
     if process is None or process.poll() is not None:
         return

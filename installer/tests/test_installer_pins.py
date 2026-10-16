@@ -32,9 +32,11 @@ class InstallerPinTests(unittest.TestCase):
         source = (ROOT / 'installer.py').read_text()
         self.assertEqual((installer.TORCH_VERSION, installer.TORCHVISION_VERSION,
                           installer.TORCHAUDIO_VERSION), ('2.10.0', '0.25.0', '2.10.0'))
-        self.assertIn('torch=={TORCH_VERSION}', source)
-        self.assertIn('torchvision=={TORCHVISION_VERSION}', source)
-        self.assertIn('torchaudio=={TORCHAUDIO_VERSION}', source)
+        lock = (ROOT / 'locks/comfy-macos-arm64-py312.txt').read_text()
+        self.assertIn('torch==2.10.0', lock)
+        self.assertIn('torchvision==0.25.0', lock)
+        self.assertIn('torchaudio==2.10.0', lock)
+        self.assertIn('--require-hashes', source)
         self.assertIn('Pillow==12.0.0', source)
         self.assertIn('requests==2.32.5', source)
 

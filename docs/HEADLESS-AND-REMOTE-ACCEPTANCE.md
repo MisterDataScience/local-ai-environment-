@@ -12,11 +12,15 @@ While running, the supervisor:
   keep the display awake or override intentional Sleep, shutdown or restart.
   The sleep assertion ends when the supervisor exits.
 - Opens signed Docker Desktop and waits for its local Unix-socket Engine and
-  Compose to become ready, before attempting VPN-backed browsing.
+  Compose to become ready, before attempting VPN-backed browsing. If its
+  engine or app is later quit, the VPN recovery loop reopens Docker before
+  restarting the managed VPN stack.
 - Reuses existing Proton/Gluetun images and refuses ordinary-network
   fallback if the VPN is unavailable; periodically checks and restarts only
   the managed VPN stack.
 - Opens Tailscale when remote access is enabled. Every two minutes, it checks
+  whether the app is connected and reopens it if necessary, without storing
+  sign-in credentials or selecting a different account. It then checks
   the expected tailnet hostname and private Serve routes (443, 8443, 10000),
   recreating **only missing owned routes**. Unexpected proxy targets or a
   changed hostname are left untouched. Any newly detected public Funnel rule
@@ -24,6 +28,10 @@ While running, the supervisor:
 - Restarts a crashed Captain only when the gateway is healthy and Normal/Max
   mode allows it. Its child-process ownership checks avoid terminating
   unrelated processes after a PID has been reused.
+- Includes the gateway in repeated core health checks. A persistent gateway
+  hang fails the supervisor, allowing launchd to restart after owned service
+  cleanup. A failed Captain readiness check cleans up that launch attempt
+  before a retry.
 
 These recovery paths are implemented and unit-tested, but real macOS
 login and reconnection acceptance are **pending**.

@@ -45,7 +45,9 @@ The installer uses a SHA-verified, versioned `uv` bootstrap, vendor-checked
 Docker Desktop 4.91.0, an immutable ComfyUI commit/archive checksum, and
 a pinned compatible PyTorch package trio. `UV_EXCLUDE_NEWER` prevents packages
 published after the 2026-10-16 release cutoff from changing dependency
-resolution. This is not a complete transitive-hash lock.
+resolution. ComfyUI additionally uses an 85-package transitive hash lock for
+macOS 15+ ARM64/Python 3.12. Other environments are not fully hash-locked.
+See [dependency lock scope](DEPENDENCY-LOCKS.md).
 
 Remote OpenCode's UI and API share the exact same private Tailscale HTTPS
 origin, with a native OpenCode `web` check of the authenticated API and event

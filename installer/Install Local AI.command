@@ -14,12 +14,12 @@ UV_BINARY="$AI_INSTALL_ROOT/tools/uv/uv"
 
 # A signed-off, immutable release asset replaces the upstream installer script.
 # Never execute an unverified download or accept a floating bootstrap URL.
+if [ -L "$UV_ARCHIVE" ] || [ -L "$UV_BINARY" ] || [ -L "$UV_ARCHIVE.part" ] || [ -L "$UV_BINARY.verified" ]; then
+  echo "Refusing a symbolic-link bootstrap target."
+  exit 1
+fi
 if [ ! -x "$UV_BINARY" ] || [ "$("$UV_BINARY" --version 2>/dev/null | awk '{print $1 " " $2}')" != "uv $UV_VERSION" ]; then
   echo "Installing verified uv $UV_VERSION for native Apple Silicon..."
-  if [ -L "$UV_ARCHIVE" ] || [ -L "$UV_BINARY" ] || [ -L "$UV_ARCHIVE.part" ] || [ -L "$UV_BINARY.verified" ]; then
-    echo "Refusing a symbolic-link bootstrap target."
-    exit 1
-  fi
   if [ -f "$UV_ARCHIVE" ] && [ "$(shasum -a 256 "$UV_ARCHIVE" | awk '{print $1}')" != "$UV_ARCHIVE_SHA256" ]; then
     mv "$UV_ARCHIVE" "$UV_ARCHIVE.invalid-$$"
   fi

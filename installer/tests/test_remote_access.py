@@ -197,7 +197,9 @@ class RemoteAccessTests(unittest.TestCase):
         unauthorized = HTTPError(settings['captain_url'] + '/agent', 401, 'Authentication required', {}, None)
         client = Mock()
         client.open.side_effect = [unauthorized, io.BytesIO(
-            b'[{"name":"plan"},{"name":"build"}]')]
+            b'[{"name":"plan"},{"name":"build"}]'),
+            HTTPError(settings['captain_url'] + '/', 401, 'unauthorised', {}, None),
+            io.BytesIO(b'<!doctype html><html><body>Captain</body></html>')]
         with (patch.object(remote, 'build_opener', return_value=client),
               patch('managed_captain.agent_status', return_value={'captain_agent_endpoint': 'passed'}),
               patch('managed_captain.credentials', return_value={
@@ -205,6 +207,8 @@ class RemoteAccessTests(unittest.TestCase):
             checked = remote.verify_captain_access(Path('/tmp'), settings)
         self.assertEqual(checked['status'], 'passed')
         self.assertTrue(checked['login_required'])
+        self.assertEqual(checked['html_ui'], 'passed')
+        self.assertEqual(checked['browser_approvals'], 'pending')
         first = client.open.call_args_list[0].args[0]
         second = client.open.call_args_list[1].args[0]
         self.assertNotIn('Authorization', first.headers)

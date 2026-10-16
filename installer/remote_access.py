@@ -231,7 +231,19 @@ def verify_captain_access(root, remote):
     if not isinstance(agents, list) or not {'plan', 'build'}.issubset(
             {a.get('name') for a in agents if isinstance(a, dict)}):
         raise RuntimeError('Remote endpoint does not expose the actual Captain agents')
-    return {'status': 'passed', 'login_required': True, 'off_device_test': 'pending'}
+    ui_url = remote['captain_url'] + '/'
+    try:
+        with opener.open(Request(ui_url), timeout=20):
+            raise RuntimeError('Remote Captain UI responded without authentication')
+    except HTTPError as error:
+        if error.code != 401:
+            raise RuntimeError('Remote Captain UI did not require Basic authentication') from error
+    with opener.open(Request(ui_url, headers={'Authorization': 'Basic ' + basic}), timeout=30) as response:
+        sample = response.read(16384).lower()
+        if b'<html' not in sample and b'<!doctype html' not in sample:
+            raise RuntimeError('Remote Captain did not serve its HTML interface')
+    return {'status': 'passed', 'login_required': True, 'html_ui': 'passed',
+            'off_device_test': 'pending', 'browser_approvals': 'pending'}
 
 
 def reconcile_private_routes(remote):
@@ -255,8 +267,10 @@ def reconcile_private_routes(remote):
     created = []
     try:
         for port in missing:
-            execute([CLI, 'serve', '--bg', '--yes', f'--https={port}', TARGETS[port]], timeout=60)
+            # A timed-out CLI may already have applied the route. Record the
+            # attempt first so rollback also covers that ambiguous outcome.
             created.append(port)
+            execute([CLI, 'serve', '--bg', '--yes', f'--https={port}', TARGETS[port]], timeout=60)
         after = cli_json('serve', 'status', '--json')
         check_conflicts(after, hostname)
         for port, target in TARGETS.items():

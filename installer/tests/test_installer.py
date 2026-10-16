@@ -22,11 +22,12 @@ class InstallerTests(unittest.TestCase):
             (comfy / '.venv/bin/python').write_text('fake installed Python')
             state = root / 'install-state.json'
             installer.checkpoint(state, 'comfy-dependencies')
-            with patch.object(installer, 'run') as runner:
+            with patch.object(installer, 'ensure_comfy_source', return_value=comfy), \
+                 patch.object(installer, 'run') as runner:
                 installer.install_comfy(root, Path('/tmp/uv'), state)
                 first = [call.args[0] for call in runner.call_args_list]
-                self.assertTrue(any('torch==2.10.0' in cmd for cmd in first))
-                self.assertTrue(any('-c' in cmd for cmd in first))
+                self.assertTrue(any('--require-hashes' in cmd for cmd in first))
+                self.assertTrue(any('--only-binary' in cmd for cmd in first))
                 runner.reset_mock()
                 installer.install_comfy(root, Path('/tmp/uv'), state)
                 # Second run only checks existing exact versions and MPS.
@@ -47,7 +48,8 @@ class InstallerTests(unittest.TestCase):
             def failing_run(command, **_):
                 if command[0] == comfy / '.venv/bin/python':
                     raise RuntimeError('MPS compatibility failed')
-            with patch.object(installer, 'run', side_effect=failing_run):
+            with patch.object(installer, 'ensure_comfy_source', return_value=comfy), \
+                 patch.object(installer, 'run', side_effect=failing_run):
                 with self.assertRaisesRegex(RuntimeError, 'MPS compatibility failed'):
                     installer.install_comfy(root, Path('/tmp/uv'), state)
             self.assertFalse((comfy / '.local-ai-dependencies.json').exists())

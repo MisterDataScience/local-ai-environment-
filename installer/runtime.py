@@ -14,6 +14,38 @@ from common import PORTS, http, launch, ollama_binary, ollama_environment, port_
 from context_settings import ContextSettings
 
 
+def recover_web(root):
+    """Reopen Docker after a quit/crash before repairing the VPN namespace."""
+    from web_access import status, start
+    try:
+        if status(root).get('status') == 'ready':
+            return
+    except (OSError, ValueError, RuntimeError):
+        pass
+    from docker_setup import start_installed_docker
+    start_installed_docker(timeout=300)
+    start(root)
+
+
+def recover_remote(remote):
+    """Reopen the signed-in Tailscale app; never sign in or change its account."""
+    from remote_access import APP, cli_json, reconcile_private_routes
+    try:
+        running = cli_json('status', '--json').get('BackendState') == 'Running'
+    except (OSError, ValueError, subprocess.SubprocessError):
+        running = False
+    if not running and APP.is_dir() and not APP.is_symlink():
+        subprocess.run(['/usr/bin/open', '-a', str(APP)], check=True, timeout=20)
+    # Reconciliation still checks hostname, conflicts and public Funnel.
+    return reconcile_private_routes(remote)
+
+
+def check_core_health():
+    for url in ('http://127.0.0.1:11435/api/version',
+                'http://127.0.0.1:8081/health', 'http://127.0.0.1:8001/health'):
+        http(url, timeout=3)
+
+
 def main(background=False):
     root = Path(__file__).resolve().parent.parent
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -115,7 +147,13 @@ def main(background=False):
                              root / 'control', root / 'logs/captain.log', os.environ.copy())
             processes.append(('captain', process))
             record(root, processes)
-            wait_for_agent(root, process)
+            try:
+                wait_for_agent(root, process)
+            except BaseException:
+                stop_process(process, timeout=10)
+                processes.remove(('captain', process))
+                record(root, processes)
+                raise
             logging.info('Native Captain Work Agent is connected and ready at http://127.0.0.1:4096')
         if config.get('captain', {}).get('enabled'):
             import resource_modes
@@ -167,12 +205,11 @@ def main(background=False):
         last_tick = time.monotonic()
         retry_web = 0
         retry_remote = 0
+        retry_idle_guard = 0
         web_thread = None
-        def recover_web():
+        def retry_web_stack():
             try:
-                from web_access import status, start
-                if status(root).get('status') != 'ready':
-                    start(root)
+                recover_web(root)
             except Exception:
                 logging.warning('VPN service unavailable; web access remains blocked.')
         while True:
@@ -185,6 +222,13 @@ def main(background=False):
                     else:
                         raise RuntimeError(f"{name} exited. Read {root / 'logs' / (name + '.log')}")
             now = time.monotonic()
+            if now >= retry_idle_guard:
+                retry_idle_guard = now + 60
+                try:
+                    from power_guard import maintain
+                    idle_guard = maintain(idle_guard)
+                except OSError as error:
+                    logging.warning('Idle-sleep prevention waiting for recovery: %s', error)
             # After sleep, allow readiness to settle before restarting anything.
             if now - last_tick > 30:
                 health_failures = 0
@@ -200,13 +244,10 @@ def main(background=False):
                     logging.warning('Managed Captain waiting for restart: %s', error)
             if remote.get('enabled') and now >= retry_remote:
                 retry_remote = now + 120
-                from remote_access import reconcile_private_routes
                 try:
-                    current_routes = cli_json('serve', 'status', '--json')
                     # A newly enabled public Funnel endpoint is a security
                     # emergency. Stop serving rather than retry into exposure.
-                    assert_private_ports(current_routes, remote['hostname'])
-                    repaired = reconcile_private_routes(remote)
+                    repaired = recover_remote(remote)
                     if repaired:
                         logging.info('Restored %s private Tailscale routes after reconnect.', len(repaired))
                         from remote_access import verify_remote_access
@@ -218,12 +259,11 @@ def main(background=False):
                 except (OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
                     logging.warning('Tailscale recovery is unavailable: %s', error)
             if config.get('web', {}).get('enabled') and now >= retry_web and (web_thread is None or not web_thread.is_alive()):
-                web_thread = threading.Thread(target=recover_web, daemon=True)
+                web_thread = threading.Thread(target=retry_web_stack, daemon=True)
                 web_thread.start()
                 retry_web = now + 60
             try:
-                http('http://127.0.0.1:11435/api/version', timeout=3)
-                http('http://127.0.0.1:8081/health', timeout=3)
+                check_core_health()
                 health_failures = 0
             except Exception:
                 health_failures += 1
