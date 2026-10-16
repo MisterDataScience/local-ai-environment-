@@ -14,9 +14,9 @@ UV_BINARY="$AI_INSTALL_ROOT/tools/uv/uv"
 
 # A signed-off, immutable release asset replaces the upstream installer script.
 # Never execute an unverified download or accept a floating bootstrap URL.
-if [ ! -x "$UV_BINARY" ] || [ "$("$UV_BINARY" --version)" != "uv $UV_VERSION" ]; then
+if [ ! -x "$UV_BINARY" ] || [ "$("$UV_BINARY" --version 2>/dev/null | awk '{print $1 " " $2}')" != "uv $UV_VERSION" ]; then
   echo "Installing verified uv $UV_VERSION for native Apple Silicon..."
-  if [ -L "$UV_ARCHIVE" ] || [ -L "$UV_BINARY" ]; then
+  if [ -L "$UV_ARCHIVE" ] || [ -L "$UV_BINARY" ] || [ -L "$UV_ARCHIVE.part" ] || [ -L "$UV_BINARY.verified" ]; then
     echo "Refusing a symbolic-link bootstrap target."
     exit 1
   fi
@@ -37,7 +37,7 @@ if [ ! -x "$UV_BINARY" ] || [ "$("$UV_BINARY" --version)" != "uv $UV_VERSION" ];
   # Do not unpack archive paths, symlinks, or other untrusted contents.
   /usr/bin/tar -xOzf "$UV_ARCHIVE" "uv-aarch64-apple-darwin/uv" > "$UV_BINARY.verified"
   chmod 700 "$UV_BINARY.verified"
-  if [ "$("$UV_BINARY.verified" --version)" != "uv $UV_VERSION" ]; then
+  if [ "$("$UV_BINARY.verified" --version 2>/dev/null | awk '{print $1 " " $2}')" != "uv $UV_VERSION" ]; then
     echo "Verified uv binary reported an unexpected version. Installation stopped."
     exit 1
   fi
