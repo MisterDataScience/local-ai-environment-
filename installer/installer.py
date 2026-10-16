@@ -31,6 +31,7 @@ from context_settings import ContextSettings
 COMFY_RELEASE = "v0.38.0"
 # Immutable source revision behind v0.38.0. Never download floating refs/tags.
 COMFY_COMMIT = "6b747c0428c343e1417219641db93a4fb7cb69ae"
+COMFY_SHA256 = "4a144a553c77397c81f6067f3f8c8ab9dffd42889af48fb35fec2c64a71c75b2"
 TORCH_VERSION = "2.10.0"
 TORCHVISION_VERSION = "0.25.0"
 TORCHAUDIO_VERSION = "2.10.0"
@@ -226,7 +227,8 @@ def install_comfy(root, uv, state):
     directory = root / "ComfyUI"
     if not (directory / "main.py").exists():
         archive = root / "cache/ComfyUI.zip"
-        download(f"https://github.com/Comfy-Org/ComfyUI/archive/{COMFY_COMMIT}.zip", archive)
+        download(f"https://github.com/Comfy-Org/ComfyUI/archive/{COMFY_COMMIT}.zip",
+                 archive, COMFY_SHA256)
         with tempfile.TemporaryDirectory(dir=root / "cache") as temporary:
             extract_zip(archive, temporary)
             sources = [p for p in Path(temporary).iterdir() if p.is_dir() and (p / "main.py").is_file()]
