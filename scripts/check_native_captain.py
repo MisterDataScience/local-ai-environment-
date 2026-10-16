@@ -147,6 +147,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def check(binary):
+    # The installed Work Agent launches `opencode web`, not `serve`.
+    # Check that the pinned binary accepts the HTTPS-origin flag on both.
+    help_output = subprocess.run([str(binary), 'web', '--help'],
+                                 capture_output=True, text=True, timeout=15, check=True)
+    if '--cors' not in help_output.stdout:
+        raise RuntimeError('Pinned OpenCode web command lacks --cors for remote Captain')
     if port_open(8001) or port_open(4096):
         raise RuntimeError('Native CI check requires unoccupied loopback ports; no service was stopped')
     with tempfile.TemporaryDirectory(prefix='native-captain-') as folder:
