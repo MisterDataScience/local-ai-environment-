@@ -106,7 +106,7 @@ def remote_server_origin(config):
         return None
     hostname = remote.get('hostname', '')
     origin = remote.get('captain_url', '')
-    if not re.fullmatch(r'[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.ts\\.net', hostname):
+    if not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)*\.ts\.net', hostname):
         raise ValueError('Captain remote hostname is not a valid personal Tailscale DNS name')
     if origin != f'https://{hostname}:10000':
         raise ValueError('Captain remote origin must match the configured private HTTPS route')
