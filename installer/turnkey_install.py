@@ -97,7 +97,7 @@ def await_background(root, config, timeout=600, retry_interval=2):
                        + '. Inspect logs/login-start-error.log and logs/gateway.log')
 
 
-def write_receipt(root, config, native, background, vault=None):
+def write_receipt(root, config, native, background, vault=None, *, require_integrations=False):
     root = Path(root)
     captain = config.get('captain', {})
     if not captain.get('enabled') or captain.get('provider') != 'llama':
@@ -105,6 +105,10 @@ def write_receipt(root, config, native, background, vault=None):
     if config.get('vault', {}).get('enabled') and (
             not isinstance(vault, dict) or vault.get('status') != 'passed'):
         raise RuntimeError('Cryptomator was configured but encrypted workspace tests did not pass')
+    if require_integrations:
+        for name in ('web', 'browser', 'remote_access'):
+            if not config.get(name, {}).get('enabled'):
+                raise RuntimeError('Captain installation did not provision mandatory integration: ' + name)
     for category, flag, verification in (
             ('VPN web', 'web', 'vpn_web'),
             ('Playwright browser', 'browser', 'vpn_playwright'),
