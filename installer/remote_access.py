@@ -31,7 +31,7 @@ def execute(command, capture=False, timeout=60):
 
 
 def cli_json(*args):
-    return json.loads(execute([CLI, *args], capture=True))
+    return json.loads(execute([CLI, *args], capture=True, timeout=12))
 
 
 def connected_hostname(status):
@@ -232,6 +232,44 @@ def verify_captain_access(root, remote):
             {a.get('name') for a in agents if isinstance(a, dict)}):
         raise RuntimeError('Remote endpoint does not expose the actual Captain agents')
     return {'status': 'passed', 'login_required': True, 'off_device_test': 'pending'}
+
+
+def reconcile_private_routes(remote):
+    """Repair missing owned Serve routes after a Tailscale restart.
+
+    Never replaces a different target, clears an unrelated Serve service,
+    enables Funnel, or changes hostname without the owner's involvement.
+    """
+    if not remote.get('enabled'):
+        return []
+    hostname = connected_hostname(cli_json('status', '--json'))
+    if hostname != remote['hostname']:
+        raise RuntimeError('Tailscale hostname changed; cannot silently reassign access routes.')
+    before = cli_json('serve', 'status', '--json')
+    check_conflicts(before, hostname)
+    missing = [port for port, target in TARGETS.items()
+               if before.get('Web', {}).get(f'{hostname}:{port}', {}).get('Handlers') !=
+               {'/': {'Proxy': target}}]
+    if not missing:
+        return []
+    created = []
+    try:
+        for port in missing:
+            execute([CLI, 'serve', '--bg', '--yes', f'--https={port}', TARGETS[port]], timeout=60)
+            created.append(port)
+        after = cli_json('serve', 'status', '--json')
+        check_conflicts(after, hostname)
+        for port, target in TARGETS.items():
+            if after.get('Web', {}).get(f'{hostname}:{port}', {}).get('Handlers') != {'/': {'Proxy': target}}:
+                raise RuntimeError('Serve reconciliation did not restore the expected private route')
+    except BaseException:
+        for port in reversed(created):
+            try:
+                execute([CLI, 'serve', '--bg', '--yes', f'--https={port}', 'off'], timeout=30)
+            except subprocess.SubprocessError:
+                pass
+        raise
+    return created
 
 
 def verify_remote_access(root, remote):
