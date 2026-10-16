@@ -54,11 +54,14 @@ def wait_ready(url, process, timeout=180):
     raise RuntimeError(f"Service did not become ready within {timeout} seconds: {url}")
 
 
-def stop_process(process, timeout=90):
+def stop_process(process, timeout=90, group_id=None):
     if process is None:
         return
+    if group_id is not None and (group_id != os.getpid() or os.getpgrp() != group_id):
+        raise ValueError('Only a private caller-owned process group may be stopped')
+    group = process.pid if group_id is None else group_id
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        os.killpg(group, signal.SIGTERM)
     except ProcessLookupError:
         pass
     try:
@@ -66,7 +69,7 @@ def stop_process(process, timeout=90):
     except subprocess.TimeoutExpired:
         # The gateway may be releasing a renderer. Allow graceful cleanup first.
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(group, signal.SIGKILL)
         except ProcessLookupError:
             pass
         process.wait(timeout=15)

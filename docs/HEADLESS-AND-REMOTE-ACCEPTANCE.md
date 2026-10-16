@@ -28,6 +28,12 @@ While running, the supervisor:
 - Restarts a crashed Captain only when the gateway is healthy and Normal/Max
   mode allows it. Its child-process ownership checks avoid terminating
   unrelated processes after a PID has been reused.
+- Probes Captain's authenticated `/agent` control API every 30 seconds with
+  a three-second timeout. Three consecutive failures retire its owned process
+  group. The existing launcher retries after a 30-second cooldown, subject to
+  gateway readiness and Normal/Max mode. Startup and wake get 60 seconds of
+  grace. A successful probe resets the failure count. Generation duration and
+  pending approvals are not used as failure signals.
 - Includes the gateway in repeated core health checks. A persistent gateway
   hang fails the supervisor, allowing launchd to restart after owned service
   cleanup. A failed Captain readiness check cleans up that launch attempt
@@ -79,3 +85,34 @@ Use the existing local `~/LocalAI-Automated/logs/` files:
 `captain-install-readiness.json` and `remote-acceptance-report.json`.
 Treat every off-device/reboot/physical result as pending until observed.
 Do not paste logs containing secrets into public issues.
+
+## Captain freeze watchdog validation
+
+The managed OpenCode server now inherits its wrapper's private process group.
+The supervisor can stop that owned group even when the wrapper itself cannot
+forward a signal. Manually invoked unmanaged Work Agents keep their existing
+independent process group. A managed launch outside a private wrapper group is
+refused to protect the shell and unrelated processes.
+
+The watchdog never selects a process by a listening port. It acts only on the
+Captain subprocess retained by this supervisor. A failed/transitioning gateway
+or Gaming mode resets the failure streak and blocks watchdog restarts. Wake
+grace compares elapsed wall and monotonic time so slow Tailscale work is not
+mistaken for sleep. A large forward system-clock correction may also grant
+grace. Existing synchronous remote recovery can still delay monitoring ticks;
+moving that work off the monitoring loop remains a separate pending fix.
+
+Local regression tests exercise a real authenticated loopback HTTP server that
+stops responding, failure thresholds/resets, grace/mode boundaries, retirement
+of only the tracked Captain, and termination of a synthetic stuck wrapper plus
+its child in a real private process group. These are not native OpenCode/Mac
+freeze-recovery results. Verify actual browser reconnection, approval behavior
+and session state on the Mac before release. Interrupted turns are not replayed
+automatically; completed side effects are not resubmitted by the watchdog.
+
+Linux validation for this watchdog change: 265 installer tests discovered
+(261 passed, four Apple-only tests skipped), 127 gateway tests passed and 84
+JavaScript tests passed. Compilation, shell syntax and the local installer
+archive verification passed. The ten watchdog-specific regressions include the
+real HTTP and process-group tests above. Hosted CI remains unused and the
+published installer remains unchanged until the native release gates pass.

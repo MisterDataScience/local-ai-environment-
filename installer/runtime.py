@@ -46,6 +46,22 @@ def check_core_health():
         http(url, timeout=3)
 
 
+def check_captain_watchdog(root, processes, watchdog, mode, *, now, resumed=False):
+    """Retire only this supervisor's Captain; normal launch policy restarts it."""
+    process = next((p for name, p in processes if name == 'captain'), None)
+    if not watchdog.check(root, process, mode, now=now, resumed=resumed):
+        return False
+    logging.warning('Restarting the owned Captain after repeated control API failures.')
+    # Allow the wrapper's 10s native cleanup to finish before escalating against
+    # its private group. Unrelated servers on port 4096 are never selected here.
+    stop_process(process, timeout=30)
+    processes.remove(('captain', process))
+    from service_lifecycle import record
+    record(root, processes)
+    watchdog.check(root, None, None, now=time.monotonic())
+    return True
+
+
 def main(background=False):
     root = Path(__file__).resolve().parent.parent
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -137,7 +153,8 @@ def main(background=False):
         models = http("http://127.0.0.1:8001/v1/models", key=config["api_key"])
         if not models["data"]:
             raise RuntimeError("The local-ai gateway model is unavailable.")
-        from managed_captain import wait_for_agent
+        from managed_captain import wait_for_agent, CaptainWatchdog, resumed_from_sleep
+        captain_watchdog = CaptainWatchdog()
         captain_retry = 0
         def launch_captain():
             if port_open(4096):
@@ -150,7 +167,7 @@ def main(background=False):
             try:
                 wait_for_agent(root, process)
             except BaseException:
-                stop_process(process, timeout=10)
+                stop_process(process, timeout=30)
                 processes.remove(('captain', process))
                 record(root, processes)
                 raise
@@ -203,6 +220,7 @@ def main(background=False):
         print('Background operation active.' if background else 'Press Control+C here to shut down.')
         health_failures = 0
         last_tick = time.monotonic()
+        last_wall_tick = time.time()
         retry_web = 0
         retry_remote = 0
         retry_idle_guard = 0
@@ -230,10 +248,23 @@ def main(background=False):
                 except OSError as error:
                     logging.warning('Idle-sleep prevention waiting for recovery: %s', error)
             # After sleep, allow readiness to settle before restarting anything.
-            if now - last_tick > 30:
+            resumed = now - last_tick > 30
+            wall_now = time.time()
+            captain_resumed = resumed_from_sleep(last_tick, last_wall_tick, now, wall_now)
+            last_wall_tick = wall_now
+            if resumed:
                 health_failures = 0
                 logging.info('Resuming service readiness checks after suspension.')
             last_tick = now
+            captain_process = next((p for name, p in processes if name == 'captain'), None)
+            if captain_process is not None:
+                try:
+                    captain_mode = http('http://127.0.0.1:8001/control/mode', key=config['api_key'], timeout=3)
+                except (OSError, RuntimeError, ValueError, KeyError):
+                    captain_mode = None
+                if check_captain_watchdog(root, processes, captain_watchdog, captain_mode,
+                                          now=now, resumed=captain_resumed):
+                    captain_retry = time.monotonic() + 30
             if config.get('captain', {}).get('enabled') and not any(name == 'captain' for name, _ in processes) and now >= captain_retry:
                 captain_retry = now + 30
                 try:
@@ -241,6 +272,7 @@ def main(background=False):
                     if mode['mode'] in {'normal', 'max'} and not mode['transitioning'] and not mode['error']:
                         launch_captain()
                 except Exception as error:
+                    captain_retry = time.monotonic() + 30
                     logging.warning('Managed Captain waiting for restart: %s', error)
             if remote.get('enabled') and now >= retry_remote:
                 retry_remote = now + 120

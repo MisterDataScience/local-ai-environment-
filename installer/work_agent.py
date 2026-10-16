@@ -113,6 +113,16 @@ def remote_server_origin(config):
     return origin
 
 
+def launch_native(command, project, environment, *, managed=False):
+    # Keep managed OpenCode/MCP descendants in the wrapper's private group.
+    # A watchdog can then terminate the whole owned tree even if the wrapper
+    # itself is stuck and cannot forward the shutdown signal.
+    if managed and os.getpgrp() != os.getpid():
+        raise RuntimeError('Managed Captain must be launched in its own supervisor-owned process group')
+    return subprocess.Popen(command, cwd=project, env=environment,
+                            start_new_session=not managed)
+
+
 def configuration(config, identifiers, mode='normal', root=None, status=None):
     sys.path.insert(0, str(Path(__file__).resolve().parent / 'payload'))
     from text_models import configured_text_models, output_ceiling
@@ -440,7 +450,7 @@ def main():
     # HTTPS origin, so no cross-origin browser exemption is required here.
     command = [str(binary), 'serve' if args.discord else 'web',
                '--hostname', '127.0.0.1', '--port', '4096']
-    process = subprocess.Popen(command, cwd=project, env=git_env, start_new_session=True)
+    process = launch_native(command, project, git_env, managed=args.managed)
     conversation_server = None
     discord_process = None
     try:
@@ -503,9 +513,13 @@ def main():
     finally:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
         if discord_process:
             stop_process(discord_process, timeout=10)
-        stop_process(process, timeout=10)
+        if args.managed:
+            stop_process(process, timeout=10, group_id=os.getpid())
+        else:
+            stop_process(process, timeout=10)
         from file_workflows import clear_project
         clear_project(root, process.pid)
         from essay_setup import clear_connection
