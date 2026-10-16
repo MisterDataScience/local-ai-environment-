@@ -697,6 +697,13 @@ def main():
             logging.info("Captain integrations: authenticated tailnet for chat, media and Captain")
             configure_remote(root)
             checkpoint(state, "remote-access-configured")
+            # Account consent also lives in the one installer. Empty input leaves
+            # the optional account integration disabled; it must not be reported
+            # as a functioning GitHub connection.
+            from account_tools import configure as configure_github
+            logging.info("Captain integrations: optional owner-authorised GitHub account")
+            github_configured = configure_github(root)
+            checkpoint(state, "github-consent-completed")
             configuration = json.loads((root / 'control/config.json').read_text())
         else:
             if args.web_access:
