@@ -28,6 +28,23 @@ class WorkAgentTests(unittest.TestCase):
         self.assertFalse(cfg['autoupdate'])
         self.assertEqual(cfg['share'], 'disabled')
 
+    def test_remote_browser_origin_is_exactly_the_private_tailnet(self):
+        cfg = {'text_models': DEFAULT_TEXT_MODELS, 'remote_access': {
+            'enabled': True, 'hostname': 'mac-mini.tailnet-name.ts.net',
+            'captain_url': 'https://mac-mini.tailnet-name.ts.net:10000'}}
+        settings = w.configuration(cfg, ['local-ai'])
+        self.assertEqual(settings['server']['cors'],
+                         ['https://mac-mini.tailnet-name.ts.net:10000'])
+        self.assertNotIn('*', settings['server']['cors'])
+        for address in ('https://untrusted.example.com:10000',
+                        'http://mac-mini.tailnet-name.ts.net:10000',
+                        'https://mac-mini.tailnet-name.ts.net:443',
+                        'https://different.ts.net:10000'):
+            with self.subTest(address=address):
+                cfg['remote_access']['captain_url'] = address
+                with self.assertRaises(ValueError):
+                    w.configuration(cfg, ['local-ai'])
+
     def test_global_behaviour_is_passive_and_does_not_register_new_tools(self):
         from common import GLOBAL_BEHAVIOUR
         cfg = w.configuration({'text_models': DEFAULT_TEXT_MODELS}, ['local-ai'])
