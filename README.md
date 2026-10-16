@@ -49,6 +49,8 @@ authenticated native agents and its server-sent event stream.
 The Mac supervisor now holds a process-scoped idle-sleep assertion and
 repairs only its missing private Tailscale routes after reconnects. It
 will not enable public Funnel or bypass FileVault login.
+Tailscale recovery and HTTPS checks run in one supervised background worker,
+so slow repairs do not hold up health monitoring or the Captain watchdog.
 
 See [headless and remote acceptance](docs/HEADLESS-AND-REMOTE-ACCEPTANCE.md)
 for what still requires an iPad/Windows test and real reboot/sleep checks.

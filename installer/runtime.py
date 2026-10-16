@@ -12,6 +12,15 @@ import threading
 
 from common import PORTS, http, launch, ollama_binary, ollama_environment, port_open, stop_process, wait_ready, webui_environment
 from context_settings import ContextSettings
+from remote_recovery import RemoteRecovery, recover_remote
+
+
+class RemoteSecurityStop(BaseException):
+    """Security shutdown must bypass ordinary connectivity retry handlers."""
+
+
+def stop_for_public_funnel(signum, frame):
+    raise RemoteSecurityStop('Public Tailscale Funnel detected; stopping private services')
 
 
 def recover_web(root):
@@ -25,19 +34,6 @@ def recover_web(root):
     from docker_setup import start_installed_docker
     start_installed_docker(timeout=300)
     start(root)
-
-
-def recover_remote(remote):
-    """Reopen the signed-in Tailscale app; never sign in or change its account."""
-    from remote_access import APP, cli_json, reconcile_private_routes
-    try:
-        running = cli_json('status', '--json').get('BackendState') == 'Running'
-    except (OSError, ValueError, subprocess.SubprocessError):
-        running = False
-    if not running and APP.is_dir() and not APP.is_symlink():
-        subprocess.run(['/usr/bin/open', '-a', str(APP)], check=True, timeout=20)
-    # Reconciliation still checks hostname, conflicts and public Funnel.
-    return reconcile_private_routes(remote)
 
 
 def check_core_health():
@@ -88,10 +84,12 @@ def main(background=False):
     discord = DiscordSupervisor(root, config)
     processes = []
     idle_guard = None
+    remote_worker = RemoteRecovery(root, remote)
     def interrupted(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGHUP, interrupted)
+    signal.signal(signal.SIGUSR1, stop_for_public_funnel)
     try:
         from service_lifecycle import recover, record, publish_runtime
         recover(root)
@@ -178,16 +176,7 @@ def main(background=False):
                 launch_captain()
         context_settings = ContextSettings()
         context_warning = False
-        if remote.get("enabled"):
-            from remote_access import verify_remote_access
-            try:
-                verify_remote_access(root, remote)
-                logging.info("Private HTTPS chat and media checks passed. Test another device next.")
-            except Exception as error:
-                logging.warning("Remote checks did not pass: %s. Local chat is still running.", error)
-                from remote_access import atomic_json
-                atomic_json(root / "remote-acceptance-report.json",
-                            {"status": "failed", "error": str(error), "other_device_browser_test": "pending"})
+        remote_worker.tick()
         if not background:
             address = 'http://127.0.0.1:4096' if any(name == 'captain' for name, _ in processes) else 'http://127.0.0.1:8081'
             subprocess.run(["/usr/bin/open", "-a", "Safari", address], check=True)
@@ -222,7 +211,6 @@ def main(background=False):
         last_tick = time.monotonic()
         last_wall_tick = time.time()
         retry_web = 0
-        retry_remote = 0
         retry_idle_guard = 0
         web_thread = None
         def retry_web_stack():
@@ -231,6 +219,8 @@ def main(background=False):
             except Exception:
                 logging.warning('VPN service unavailable; web access remains blocked.')
         while True:
+            # Polling never performs network I/O or waits for route repair.
+            remote_worker.tick()
             for name, process in list(processes):
                 if process.poll() is not None:
                     if name == 'captain':
@@ -274,22 +264,6 @@ def main(background=False):
                 except Exception as error:
                     captain_retry = time.monotonic() + 30
                     logging.warning('Managed Captain waiting for restart: %s', error)
-            if remote.get('enabled') and now >= retry_remote:
-                retry_remote = now + 120
-                try:
-                    # A newly enabled public Funnel endpoint is a security
-                    # emergency. Stop serving rather than retry into exposure.
-                    repaired = recover_remote(remote)
-                    if repaired:
-                        logging.info('Restored %s private Tailscale routes after reconnect.', len(repaired))
-                        from remote_access import verify_remote_access
-                        verify_remote_access(root, remote)
-                except RuntimeError as error:
-                    if 'Public Funnel is enabled' in str(error):
-                        raise RuntimeError('Public Tailscale Funnel detected; stopping private services') from error
-                    logging.warning('Remote Captain waiting for private tailnet recovery: %s', error)
-                except (OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
-                    logging.warning('Tailscale recovery is unavailable: %s', error)
             if config.get('web', {}).get('enabled') and now >= retry_web and (web_thread is None or not web_thread.is_alive()):
                 web_thread = threading.Thread(target=retry_web_stack, daemon=True)
                 web_thread.start()
@@ -316,6 +290,9 @@ def main(background=False):
                 discord.stop()
                 logging.warning('Discord waiting for the gateway.')
             time.sleep(2)
+    except RemoteSecurityStop:
+        logging.error('Public Tailscale Funnel detected; stopping private services.')
+        return 1
     except KeyboardInterrupt:
         print("\nShutting down. An active generation will finish or time out before memory is released.")
     except Exception as error:
@@ -326,6 +303,11 @@ def main(background=False):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+        try:
+            remote_worker.close()
+        except (OSError, subprocess.SubprocessError):
+            logging.warning('Remote worker cleanup failed; continuing owned-service shutdown.')
         discord.stop()
         for name, process in reversed(processes):
             stop_process(process, timeout=4200 if name == "gateway" else 90)

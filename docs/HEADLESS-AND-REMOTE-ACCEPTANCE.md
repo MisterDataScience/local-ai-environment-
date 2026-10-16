@@ -18,12 +18,13 @@ While running, the supervisor:
 - Reuses existing Proton/Gluetun images and refuses ordinary-network
   fallback if the VPN is unavailable; periodically checks and restarts only
   the managed VPN stack.
-- Opens Tailscale when remote access is enabled. Every two minutes, it checks
+- Opens Tailscale when remote access is enabled. One background worker checks
   whether the app is connected and reopens it if necessary, without storing
   sign-in credentials or selecting a different account. It then checks
   the expected tailnet hostname and private Serve routes (443, 8443, 10000),
   recreating **only missing owned routes**. Unexpected proxy targets or a
-  changed hostname are left untouched. Any newly detected public Funnel rule
+  changed hostname are left untouched. Each completed attempt has a two-minute
+  cooldown, and attempts never overlap. Any newly detected public Funnel rule
   on managed ports forces the supervisor to stop instead of remaining exposed.
 - Restarts a crashed Captain only when the gateway is healthy and Normal/Max
   mode allows it. Its child-process ownership checks avoid terminating
@@ -81,7 +82,7 @@ log into the Mac. An always-on remote Mac also requires stable AC and network.
 
 Use the existing local `~/LocalAI-Automated/logs/` files:
 `login-start-error.log`, `gateway.log`, `captain.log`,
-`shared-llama.log` and `install.log`, plus
+`shared-llama.log`, `remote-recovery.log` and `install.log`, plus
 `captain-install-readiness.json` and `remote-acceptance-report.json`.
 Treat every off-device/reboot/physical result as pending until observed.
 Do not paste logs containing secrets into public issues.
@@ -99,8 +100,8 @@ Captain subprocess retained by this supervisor. A failed/transitioning gateway
 or Gaming mode resets the failure streak and blocks watchdog restarts. Wake
 grace compares elapsed wall and monotonic time so slow Tailscale work is not
 mistaken for sleep. A large forward system-clock correction may also grant
-grace. Existing synchronous remote recovery can still delay monitoring ticks;
-moving that work off the monitoring loop remains a separate pending fix.
+grace. Tailscale recovery and remote HTTPS verification now run in a separate
+worker process, so their network/CLI waits no longer delay monitoring ticks.
 
 Local regression tests exercise a real authenticated loopback HTTP server that
 stops responding, failure thresholds/resets, grace/mode boundaries, retirement
@@ -116,3 +117,41 @@ JavaScript tests passed. Compilation, shell syntax and the local installer
 archive verification passed. The ten watchdog-specific regressions include the
 real HTTP and process-group tests above. Hosted CI remains unused and the
 published installer remains unchanged until the native release gates pass.
+
+## Nonblocking Tailscale recovery
+
+The supervisor polls one background repair process without waiting for its
+network or CLI work. It starts that process after local services are ready.
+The initial pre-start public-Funnel guard remains synchronous, before services
+are exposed. The guided installer's mandatory private-access checks still
+gate its readiness receipt.
+
+The worker reopens the installed Tailscale app, checks the exact configured
+hostname and reconciles only missing owned routes. It verifies private HTTPS
+on its first successful run, after a repair, and after any prior failed check.
+Transient failures leave local health monitoring and the Captain watchdog
+running. A new attempt starts no sooner than 120 seconds after the previous
+one finishes. No provider credentials or proxy overrides are inherited by the
+worker.
+
+A public Funnel rule has its own fatal result type/exit code. The worker also
+signals its verified direct parent so shutdown can interrupt a busy monitoring
+loop. The supervisor's security-stop signal bypasses ordinary retry handlers;
+completed worker status provides a second detection path. An unrelated or
+reused PID is not notified. Hostname conflicts never select a new account or
+overwrite another service's routes.
+
+On shutdown the supervisor stops the worker's private process group, allowing
+a bounded cleanup grace before escalation. The worker also cancels its group
+if its parent disappears. Existing route rollback remains in place. A failure
+stopping the worker does not skip the remaining local-service shutdown.
+Installer and worker reports use unique, private atomic temporary files.
+
+Linux validation: 13 new regressions passed, including a real stalled worker
+while health checks continue, a real fatal-notification signal, concurrent
+report writers, no overlapping repairs, cooldown/retry and parent/shutdown
+boundaries. The full installer suite passed 274 tests with four Apple-only
+skips (278 discovered); 127 gateway and 84 JavaScript tests passed. Compilation,
+shell syntax and local installer archive verification passed. Actual macOS
+Tailscale crash/reconnect/shutdown acceptance remains pending. Hosted CI was
+not triggered and no replacement installer was published.

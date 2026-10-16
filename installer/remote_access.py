@@ -10,6 +10,7 @@ import time
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler, urlopen
 from urllib.error import HTTPError
 import uuid
+import tempfile
 
 TAILSCALE_VERSION = "1.102.4"
 TAILSCALE_PACKAGE = f"https://pkgs.tailscale.com/stable/Tailscale-{TAILSCALE_VERSION}-macos.pkg"
@@ -20,6 +21,10 @@ CLI = APP / "Contents/MacOS/Tailscale"
 CAPTAIN_PORT = 10000
 TARGETS = {443: "http://127.0.0.1:8081", 8443: "http://127.0.0.1:8002",
            CAPTAIN_PORT: "http://127.0.0.1:4096"}
+
+
+class PublicFunnelError(RuntimeError):
+    """A managed port is public: stop local serving rather than retry."""
 
 
 def execute(command, capture=False, timeout=60):
@@ -46,7 +51,7 @@ def connected_hostname(status):
 def assert_private_ports(serve, hostname):
     for endpoint, enabled in serve.get("AllowFunnel", {}).items():
         if enabled and any(endpoint.endswith(f":{port}") for port in TARGETS):
-            raise RuntimeError("Public Funnel is enabled on a Local AI port. Remote setup refuses public access.")
+            raise PublicFunnelError("Public Funnel is enabled on a Local AI port. Remote setup refuses public access.")
 
 
 def check_conflicts(serve, hostname):
@@ -67,10 +72,15 @@ def check_conflicts(serve, hostname):
 
 def atomic_json(path, value):
     path = Path(path)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, indent=2) + "\n")
-    temporary.chmod(0o600)
-    temporary.replace(path)
+    # Installer and the remote recovery worker can verify concurrently. Each
+    # writer needs its own private temporary file, not a shared .tmp pathname.
+    fd, name = tempfile.mkstemp(prefix='.' + path.name + '-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w') as output:
+            output.write(json.dumps(value, indent=2) + "\n")
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
 
 
 def install_client(root):
