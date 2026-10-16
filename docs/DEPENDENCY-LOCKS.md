@@ -38,10 +38,75 @@ overwritten or falsely marked as the pinned revision. Extra models, workflows,
 outputs and custom nodes remain intact. A deliberate future source-version
 upgrade needs a migration policy for modified upstream files.
 
-Other environments, including Open WebUI and auxiliary tools, retain direct
-version pins and the release cutoff where uv is used. They are not all
-transitively hash-locked. Docker container selection is release-locked as described below.
-Do not describe the entire installer as bit-for-bit reproducible.
+# Remaining Python environments
+
+All Python package-install paths in the Captain installer now consume exact,
+artifact-hashed locks. The locks target macOS 15+ ARM64 and the environment's
+Python minor version:
+
+| Environment | Lock | Packages |
+| --- | --- | ---: |
+| Control/gateway and private CMake | `control-macos-arm64-py311.txt` | 8 |
+| Open WebUI | `webui-macos-arm64-py311.txt` | 263 |
+| Shared speech/transcription | `voice-macos-arm64-py312.txt` | 66 |
+| Speech build backend | `voice-build-macos-arm64-py312.txt` | 2, also included in the voice lock |
+
+`dependency_locks.py` checks the native OS, architecture and Python minor
+before package changes. It uses `uv pip sync --require-hashes` on these
+application-owned virtual environments, followed by `uv pip check`. Repeat
+installation reconciles versions and removes unlisted packages even when an
+old checkpoint exists. User files, models and WebUI data live outside those
+virtual environments. Hand-installed Python extensions inside them are not
+preserved. Daily startup does not install or update Python packages.
+
+Control and WebUI are wheel-only. The only source-build exception is MLX Audio
+at existing commit `200aac3c64e5140dbe0daa4570dcb129f0f7afc9` (version 0.5.8).
+Its archive SHA-256 is
+`92a1075616ecc5fefff6ac07280565b28d52162644e7a75ebd99d2a696ac64e9`.
+The installer first installs hash-checked setuptools 80.9.0 and wheel 0.45.1,
+then builds without isolation, so build dependencies cannot float. All other
+voice packages require wheels. TTS and conversation use the same complete
+lock, preventing successive installs from resolving different shared versions.
+Both model receipts include runtime and build lock hashes, invalidating old
+load checks after a lock change. Deployed locks also enter the installer's
+native acceptance fingerprint. Failed dependency/load checks stop installation.
+
+The old CMake fallback requested `cmake==3.31.8`, which is absent from PyPI.
+The control lock now selects the available 3.31.10 universal2 wheel. Captain
+uses that private CMake regardless of a different version on the Mac's PATH.
+
+The new locks were generated with uv 0.12.20 and cutoff
+2026-10-16T11:00:00Z. To regenerate control/WebUI, use the ComfyUI command
+pattern with the corresponding `.in`/`.txt` paths and `--python-version 3.11`.
+For voice use Python 3.12 and add `--no-binary mlx-audio` to the compile
+command. The separate build lock uses the wheel-only command. Review changes
+as a managed release, preserving compatible MLX source, model revisions,
+backend versions and the complete dependency closure.
+
+Local evidence for this change:
+
+- Hash-enforcing recursive install plans resolved for all three environments,
+  targeting their exact macOS platform and Python minor version.
+- All eight actual control wheels were downloaded and SHA-256 verified into a
+  staging directory. Mac binaries were not executed.
+- The actual pinned MLX archive built successfully on Linux using only the two
+  locked build tools, without isolated dependency resolution. This validates
+  packaging, not MLX imports, Metal or speech inference.
+- A real uv installation removed an unlisted test package. A deliberately
+  changed wheel then failed its SHA-256 check, preserving the previously
+  installed package.
+- Eight new regressions cover lock completeness, install ordering, repeat
+  reconciliation, deployed locks, acceptance invalidation, platform refusal
+  and failed-install receipts. The installer suite passed 287 tests with four
+  Apple-only skips (291 discovered).
+
+WebUI/voice Mac wheels have resolvable plans; their complete artifact downloads
+and native imports have not been exercised here. Clean/repeat installation,
+WebUI startup and all three voice worker checks still require the physical Mac.
+Python interpreter patch releases, native OS frameworks and locally built
+output bytes are outside the package locks. Do not describe the entire
+installer as bit-for-bit reproducible. Docker container selection is
+release-locked as described below.
 
 # Hosted CI budget
 

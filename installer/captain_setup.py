@@ -42,18 +42,19 @@ def build_tools(root):
             time.sleep(3)
         else:
             raise RuntimeError('Apple Command Line Tools are not ready; finish installation and rerun this installer')
-    cmake = shutil.which('cmake')
-    if cmake:
-        return cmake
+    # Use the same managed build tool on every Mac, regardless of PATH.
     binary = root / 'control/.venv/bin/cmake'
-    if not binary.is_file():
-        uv = root / 'tools/uv/uv'
-        python = root / 'control/.venv/bin/python'
-        if not uv.is_file() or not python.is_file():
-            raise RuntimeError('Install the base Local AI environment before its native model runtime')
-        subprocess.run([str(uv), 'pip', 'install', '--python', str(python), 'cmake==3.31.8'], check=True)
+    uv = root / 'tools/uv/uv'
+    python = root / 'control/.venv/bin/python'
+    if not uv.is_file() or not python.is_file():
+        raise RuntimeError('Install the base Local AI environment before its native model runtime')
+    from dependency_locks import install_locked
+    def checked(command, **kwargs):
+        return subprocess.run([str(p) for p in command], check=True, **kwargs)
+    install_locked(uv, python, 'control', checked)
     if not binary.is_file():
         raise RuntimeError('Private CMake installation did not produce its executable')
+    subprocess.run([str(binary), '--version'], check=True)
     return str(binary)
 
 

@@ -52,7 +52,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
-TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py', 'power_guard.py', 'remote_recovery.py')
+TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py', 'power_guard.py', 'remote_recovery.py', 'dependency_locks.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -155,6 +155,9 @@ def completed(path, stage):
 def acceptance_fingerprint(root):
     hashes = [digest(root / "control" / name) for name in
               GATEWAY_FILES + TEAM_FILES + ("workflows/image.json", "workflows/video.json", "config.json", "comfy_vault/__init__.py")]
+    # Changing a deployed dependency lock invalidates earlier native acceptance.
+    for path in sorted((root / 'control/locks').glob('*.txt')):
+        hashes.append(digest(path))
     # Registering/changing the reference must invalidate an earlier not_run speech check.
     for name in ('voices/default.json', 'voices/default.wav', 'installed.json', 'conversation-installed.json'):
         path = root / 'voice-engine' / name
@@ -334,6 +337,7 @@ def install_environments(root, uv, state):
         shutil.copy2(SOURCE / name, control / name)
     for name in TEAM_FILES:
         shutil.copy2(SOURCE / name, control / name)
+    shutil.copytree(SOURCE / 'locks', control / 'locks', dirs_exist_ok=True)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     # Install only our descriptor-based save nodes; vault-mode CLI disables every
@@ -345,18 +349,22 @@ def install_environments(root, uv, state):
     python = control / ".venv/bin/python"
     if not python.exists():
         run([uv, "venv", "--python", "3.11", control / ".venv"])
-    run([uv, "pip", "install", "--python", python,
-         "Pillow==12.0.0", "requests==2.32.5", "imageio-ffmpeg==0.6.0"])
+    from dependency_locks import install_locked
+    control_receipt = install_locked(uv, python, 'control', run)
     run([python, "-c", "import imageio_ffmpeg, subprocess; subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True)"])
     run([python, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=control)
+    (control / '.local-ai-dependencies.json').write_text(json.dumps(control_receipt, sort_keys=True) + '\n')
     webui = root / "webui"
     (webui / "data").mkdir(parents=True, exist_ok=True)
     webui_missing = not (webui / ".venv/bin/python").exists()
     if webui_missing:
         run([uv, "venv", "--python", "3.11", webui / ".venv"])
-    if webui_missing or not completed(state, "webui-dependencies"):
-        run([uv, "pip", "install", "--python", webui / ".venv/bin/python", f"open-webui=={WEBUI_RELEASE}"])
-        checkpoint(state, "webui-dependencies")
+    webui_python = webui / '.venv/bin/python'
+    webui_receipt = install_locked(uv, webui_python, 'webui', run)
+    run([webui_python, '-c', "import open_webui; from importlib.metadata import version; "
+         f"assert version('open-webui') == '{WEBUI_RELEASE}'"])
+    (webui / '.local-ai-dependencies.json').write_text(json.dumps(webui_receipt, sort_keys=True) + '\n')
+    checkpoint(state, "webui-dependencies")
     from webui_local_images import harden, harden_pdf
     harden(root)
     harden_pdf(root)

@@ -103,7 +103,8 @@ class CaptainSetupTests(unittest.TestCase):
                 self.assertEqual(build_tools(root), str(root / 'control/.venv/bin/cmake'))
             installation = next(c for c in calls if 'pip' in c)
             self.assertIn(str(root / 'control/.venv/bin/python'), installation)
-            self.assertIn('cmake==3.31.8', installation)
+            self.assertTrue(any('control-macos-arm64-py311.txt' in str(p) for p in installation))
+            self.assertIn('--require-hashes', installation)
 
     def test_standalone_download_preserves_partial_and_resumes_with_checksum(self):
         import subprocess

@@ -32,7 +32,8 @@ bootstrap, Docker Desktop 4.91.0 and the exact ComfyUI source archive.
 It pins a mutually compatible Torch/TorchVision/TorchAudio set and freezes
 remaining `uv` dependency resolution to the 16 October 2026 release window.
 ComfyUI now has an 85-package transitive hash lock for macOS 15+ ARM64,
-Python 3.12. Other environments are not fully hash-locked. See
+Python 3.12. Control, Open WebUI and shared speech/transcription environments
+also use complete hashed package locks, including the speech build backend. See
 [dependency lock scope](docs/DEPENDENCY-LOCKS.md).
 
 Captain now selects **AtomicChat's abliterated MiniCPM-V 4.7** automatically:

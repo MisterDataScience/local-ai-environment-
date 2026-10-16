@@ -43,10 +43,9 @@ if [ ! -x "$UV_BINARY" ] || [ "$("$UV_BINARY" --version 2>/dev/null | awk '{prin
   fi
   mv -f "$UV_BINARY.verified" "$UV_BINARY"
 fi
-# Keep unpinned transitive dependencies on the audited release-time index
-# window. This is NOT a full --require-hashes lock, but prevents future package
-# releases from changing a fresh installation silently.
+# Package environments use complete hashed release locks. Keep the release
+# cutoff as an additional guard for any bootstrap resolver invocation.
 export UV_EXCLUDE_NEWER="2026-10-16T11:00:00Z"
-echo "Starting installation with the pinned package release window. Leave this Terminal open."
+echo "Starting Captain installation with verified dependency locks. Leave this Terminal open."
 "$AI_INSTALL_ROOT/tools/uv/uv" run --python 3.11 --no-project \
   installer.py --root "$AI_INSTALL_ROOT" --uv "$AI_INSTALL_ROOT/tools/uv/uv" --minicpm-captain "$@"

@@ -37,8 +37,9 @@ class InstallerPinTests(unittest.TestCase):
         self.assertIn('torchvision==0.25.0', lock)
         self.assertIn('torchaudio==2.10.0', lock)
         self.assertIn('--require-hashes', source)
-        self.assertIn('Pillow==12.0.0', source)
-        self.assertIn('requests==2.32.5', source)
+        control_lock = (ROOT / 'locks/control-macos-arm64-py311.txt').read_text()
+        self.assertIn('pillow==12.0.0', control_lock)
+        self.assertIn('requests==2.32.5', control_lock)
 
     def test_docker_vendor_release_cannot_float(self):
         self.assertIn('/239619/Docker.dmg', docker_setup.URL)

@@ -18,11 +18,11 @@ def install(root, uv, run):
     python = folder / '.venv/bin/python'
     if not python.exists():
         run([uv, 'venv', '--python', '3.12', folder / '.venv'])
+    from dependency_locks import install_locked
+    dependency_receipt = install_locked(uv, python, 'voice', run)
     marker = folder / 'installed.json'
-    wanted = {'model': MODEL_ID, 'model_revision': MODEL_REVISION, 'mlx_revision': MLX_REVISION}
+    wanted = {'model': MODEL_ID, 'model_revision': MODEL_REVISION, 'mlx_revision': MLX_REVISION, **dependency_receipt}
     if not marker.exists() or json.loads(marker.read_text()) != wanted or not (folder / 'model/config.json').exists():
-        run([uv, 'pip', 'install', '--python', python,
-             f'mlx-audio[tts] @ https://github.com/Blaizzy/mlx-audio/archive/{MLX_REVISION}.zip', 'soundfile==0.13.1'])
         run([python, str(root / 'control/voice_setup.py'), '--root', root, '--download'])
         env = dict(os.environ, HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
         run([python, str(root / 'control/speech_worker.py')],
