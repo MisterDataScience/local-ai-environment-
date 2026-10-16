@@ -58,24 +58,40 @@ Ordinary Open WebUI chat remains available at http://127.0.0.1:8081, but
 The installer prints the local Captain login details once; `Open Captain.command`
 can display them again without reconfiguration.
 
-Services needing third-party accounts, VPN credentials or separate
-macOS safety approval cannot be silently authorised. Their code is installed, but
-their live activation is explicitly reported as deferred, never labelled verified.
-Scoped desktop control is a separate safety mode that disables regular Captain
-tools; it is not safe to enable every profile simultaneously. See
-[deployment and activation](docs/DEPLOYMENT.md).
+**One Captain installer now provisions its intended network integrations during
+installation**. It installs/validates Docker Desktop (owner accepts its licence in
+the app), configures the signed Proton VPN-bound reader and Playwright browser
+(owner enters a WireGuard key in Terminal), installs Tailscale (owner signs in and
+approves macOS network permissions), and creates private HTTPS links to the
+**actual Captain Work Agent** plus ordinary chat and media. It verifies the live
+VPN, browser, Tailscale routes and authenticated Captain; incomplete mandatory
+checks stop installation rather than claiming success.
 
-| Capability | Activation after installation |
+The Captain is available on other devices at
+`https://YOUR-MAC.YOUR-TAILNET.ts.net:10000`, on the personal Tailscale network
+only, behind a separate local password. Open WebUI uses HTTPS 443 and media 8443.
+Each other device needs Tailscale installed and signed into the same tailnet.
+Neither the OpenCode backend nor model APIs are bound to the public internet.
+See [remote access](docs/REMOTE-ACCESS.md).
+
+| Capability | Status after the Captain installer |
 | --- | --- |
-| Vision and scanned PDFs | Chat uploads or the Work Agent project tools; select a vision-capable model |
-| DOCX/XLSX/PPTX | Work Agent and `Check Office.command` |
-| Approved file handoffs | Work Agent transfer tools; vault must be manually unlocked |
-| Background startup | `Enable Login Startup.command` |
-| Recurring text tasks | `Schedule AI Task.command`; text-only route enforced by the gateway |
-| Finite autonomous batches | `Create Autonomous Job.command`; separate explicit approval, read-only inputs, local new Markdown outputs, resumable job checkpoints |
-| VPN search and browser | `Enable Web Access.command`, then `Enable Browser.command` |
-| Scoped Mac control | `Enable Desktop Control.command`; Finder folders and Calculator only |
-| Generic external reasoning | `Enable External Delegation.command`; provider permission, selectors and exact local approvals required |
+| Vision and scanned PDFs | Installed and natively tested; chat uploads/agent PDF tools available |
+| DOCX/XLSX/PPTX | Installed and Work Agent MCP-checked |
+| Encrypted workspace | Guided Cryptomator creation/registration and file smoke test inside installation; owner unlock required after reboot |
+| Login startup | Registered automatically |
+| VPN search and browser | Local Docker, Proton Gluetun and VPN-only Playwright provisioned and checked during installation |
+| Windows/iPad remote Captain | Private Tailscale Serve and OpenCode Basic Auth provisioned and checked from Mac; test from another device remains essential |
+| GitHub connection | Secure fine-grained token requested during installation; only enabled if supplied, with chat selection/approval required |
+| Recurring/autonomous tasks | Tools installed; individual scheduled jobs still require a user to specify and authorise their task |
+| Scoped Mac control | Installed but deliberately isolated from regular Captain; separately approved control session required |
+| Generic external reasoning | Installed, but never preauthorised against a third-party service without the owner's provider permission |
+
+Desktop control and external-provider delegation use deliberately exclusive
+safety profiles. They cannot safely run with normal effectful Captain tools.
+Account/permission prompts occur **during** installation wherever possible,
+not through separate setup scripts. An unprovided external account cannot be
+honestly reported as tested. See [deployment](docs/DEPLOYMENT.md).
 
 Scoped automation is a deliberately restricted profile. When enabled it disables
 ordinary effectful tools and specialist delegation in the Work Agent, and disables
