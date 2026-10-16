@@ -57,6 +57,20 @@ class DockerSetupTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][:3], ['/usr/bin/open', '-a', str(app)])
             self.assertNotIn('accept-license', str(run.call_args_list))
 
+    def test_login_reopens_docker_and_waits_for_compose_automatically(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory) / 'Docker.app'
+            app.mkdir()
+            with (patch.object(docker_setup, 'APP', app),
+                  patch.object(docker_setup, 'docker_binary', return_value='docker'),
+                  patch.object(docker_setup, 'ready', side_effect=[
+                      RuntimeError('daemon warming'), None]) as check,
+                  patch.object(docker_setup, 'run') as open_app,
+                  patch.object(docker_setup.time, 'sleep')):
+                self.assertEqual(docker_setup.start_installed_docker(timeout=60), 'docker')
+            self.assertEqual(check.call_count, 2)
+            self.assertEqual(open_app.call_args.args[0], ['/usr/bin/open', '-a', str(app)])
+
     def test_install_confirmation_is_left_to_docker_gui(self):
         source = Path(__file__).resolve().parents[1].joinpath('docker_setup.py').read_text()
         self.assertNotIn("'--accept-license'", source)
