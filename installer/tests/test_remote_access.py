@@ -148,10 +148,10 @@ class RemoteAccessTests(unittest.TestCase):
         client = Mock()
         client.open.side_effect = [unauthorized, io.BytesIO(
             b'[{"name":"plan"},{"name":"build"}]')]
-        with patch.object(remote, 'build_opener', return_value=client), \\
-             patch('managed_captain.agent_status', return_value={'captain_agent_endpoint': 'passed'}), \\
-             patch('managed_captain.credentials', return_value={
-                 'username': 'opencode', 'password': 'not-a-real-private-password'}):
+        with (patch.object(remote, 'build_opener', return_value=client),
+              patch('managed_captain.agent_status', return_value={'captain_agent_endpoint': 'passed'}),
+              patch('managed_captain.credentials', return_value={
+                 'username': 'opencode', 'password': 'not-a-real-private-password'})):
             checked = remote.verify_captain_access(Path('/tmp'), settings)
         self.assertEqual(checked['status'], 'passed')
         self.assertTrue(checked['login_required'])
