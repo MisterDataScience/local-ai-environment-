@@ -79,10 +79,18 @@ def install_client(root):
             raise RuntimeError("An existing Tailscale app has an unexpected layout. It was not overwritten.")
         package = root / "cache" / f"Tailscale-{TAILSCALE_VERSION}-macos.pkg"
         package.parent.mkdir(parents=True, exist_ok=True)
+        if package.is_symlink():
+            raise RuntimeError('Tailscale package cache must not be a symlink')
         if not package.exists():
             partial = package.with_suffix(".pkg.part")
-            execute(["/usr/bin/curl", "-fL", "--retry", "3", "--connect-timeout", "30",
-                     "-C", "-", "-o", partial, TAILSCALE_PACKAGE], timeout=1800)
+            if partial.is_symlink():
+                raise RuntimeError('Tailscale temporary package must not be a symlink')
+            # The official package is signature-checked after downloading.
+            # A completed partial followed by a crash can cause HTTP 416 with
+            # curl -C -, so overwrite the partial on a resumed installation.
+            execute(["/usr/bin/curl", "-fL", "--proto", "=https", "--proto-redir", "=https",
+                     "--retry", "3", "--connect-timeout", "30",
+                     "-o", partial, TAILSCALE_PACKAGE], timeout=1800)
             partial.replace(package)
         signature = execute(["/usr/sbin/pkgutil", "--check-signature", package], capture=True)
         if f"Tailscale Inc. ({TAILSCALE_TEAM})" not in signature:
