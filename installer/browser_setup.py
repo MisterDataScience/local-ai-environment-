@@ -11,22 +11,16 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, ProxyHandler, build_opener
 
-from web_access import IMAGES, compose, docker_command, run, save, specification
+from web_access import (IMAGES, BROWSER_IMAGE, compose, docker_command,
+                        pull_verified_image, save, specification)
 
-IMAGE = "mcr.microsoft.com/playwright/mcp:latest"
+IMAGE = BROWSER_IMAGE
 URL = "http://127.0.0.1:8931/mcp"
 
 
 def image_digest(binary):
-    """Resolve one locally pulled image to an immutable MCR digest."""
-    run([binary, "pull", IMAGE], timeout=900)
-    details = json.loads(run([binary, "image", "inspect", IMAGE],
-                             capture_output=True, text=True, timeout=30).stdout)[0]
-    matches = [value for value in details.get("RepoDigests", [])
-               if value.startswith("mcr.microsoft.com/playwright/mcp@sha256:")]
-    if not matches:
-        raise RuntimeError("Cannot pin Microsoft's official Playwright MCP image.")
-    return matches[0]
+    """Install the managed release's browser digest, including cache repair."""
+    return pull_verified_image(binary, IMAGE)
 
 
 def mcp_probe(timeout=5):
@@ -81,8 +75,8 @@ def configure(root, *, disable=False):
         web = root / "web"
         lock_path = web / "images.json"
         images = json.loads(lock_path.read_text())
-        if not all(images.get(name) for name in IMAGES):
-            raise RuntimeError("VPN image lock is incomplete. Repair VPN web access first.")
+        if not disable and any(images.get(name) != image for name, image in IMAGES.items()):
+            raise RuntimeError("VPN images do not match this release. Rerun the Captain installer first.")
         # Guard against other processes already holding the browser endpoint.
         if not disable and not config.get("browser", {}).get("enabled"):
             from common import port_open
@@ -91,7 +85,7 @@ def configure(root, *, disable=False):
         old_compose = (web / "compose.json").read_text()
         old_images = lock_path.read_text()
         old_config = config_path.read_text()
-        if not disable and not images.get("browser"):
+        if not disable:
             images["browser"] = image_digest(docker_command())
         if not disable:
             for name in ("browser-profile", "browser-outputs"):

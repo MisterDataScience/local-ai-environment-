@@ -40,8 +40,7 @@ upgrade needs a migration policy for modified upstream files.
 
 Other environments, including Open WebUI and auxiliary tools, retain direct
 version pins and the release cutoff where uv is used. They are not all
-transitively hash-locked. Docker images are digest-recorded on the first
-installation, but their initial tag resolution is not a release-wide lock.
+transitively hash-locked. Docker container selection is release-locked as described below.
 Do not describe the entire installer as bit-for-bit reproducible.
 
 # Hosted CI budget
@@ -56,3 +55,40 @@ Skipped native checks cannot authorize publishing.
 The recovery commit includes `[skip ci]` so the PR's previous automatic
 workflow cannot start while that commit changes its triggers. No release ZIP
 is published until native verification is restored.
+
+# Managed container releases
+
+`installer/web_access.py` specifies immutable publisher manifest-index digests
+for Gluetun v3.41.0, SearXNG 2026.10.16-0ce72dd2c, the selected Python 3.12
+Alpine image and Microsoft's Playwright MCP image. No mutable tag is used to
+pull them. Registry evidence is in `CONTAINER-IMAGE-LOCK.json`, recorded on
+2026-10-16. Each index, its ARM64 child manifest and that child's configuration
+were fetched over HTTPS and independently SHA-256 checked. The configuration
+confirms Linux/ARM64. This verifies artifact identity and platform, not execution.
+
+Both pull commands and Compose explicitly select `linux/arm64`. After pulling,
+the installer checks the exact repository digest and OS/architecture before
+writing image receipts or launching the new Compose definition. It does not
+accept an arbitrary first `RepoDigests` entry. Missing images are pulled again
+by digest on reinstallation. A failed pull leaves the previous image receipt
+and Compose definition intact.
+
+`web/images.json` is an installed receipt, not an update channel. Rerunning the
+single installer replaces older image selections with this release's pins,
+including the browser when already enabled. Standalone browser configuration
+requires matching web-stack pins and installs the same pinned browser.
+Profiles, outputs and credentials are retained. Daily startup uses `--pull
+never`; it never follows a changing upstream tag. There is no automatic image
+upgrade service. Future changes require the owner's deliberate installer update.
+
+To update deliberately, resolve the desired publisher tag, hash the exact
+manifest-index response, verify its Linux/ARM64 child and configuration hashes,
+and change the constants and evidence together. Run installer and browser
+regressions, then validate actual VPN/search/reader/MCP behavior and the VPN
+kill switch on the Mac before deploying that release. Digest pins do not
+establish the absence of vulnerabilities or supply-chain compromise.
+
+Local validation for this change: 279 installer tests passed, four Apple-only
+tests skipped (283 discovered); compilation and installer archive checks passed.
+Docker Engine and the Mac are unavailable on the authoring host, so real image
+pull/inspection, container startup and integration acceptance remain pending.

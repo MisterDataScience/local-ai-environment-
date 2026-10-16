@@ -27,6 +27,31 @@ def dns(ip):
 
 
 class WebTests(unittest.TestCase):
+    def test_release_images_are_immutable_and_use_arm64(self):
+        for image in (*web_access.IMAGES.values(), web_access.BROWSER_IMAGE):
+            self.assertRegex(image, r"^[^@]+@sha256:[0-9a-f]{64}$")
+        spec = web_access.specification(dict(web_access.IMAGES, browser=web_access.BROWSER_IMAGE), True)
+        self.assertTrue(all(x["platform"] == "linux/arm64" for x in spec["services"].values()))
+
+    def test_image_pull_verifies_exact_digest_and_architecture(self):
+        image = web_access.IMAGES["vpn"]
+        valid = {"RepoDigests": [image], "Architecture": "arm64", "Os": "linux"}
+        for details in (valid, dict(valid, RepoDigests=["other@sha256:" + "a" * 64]),
+                        dict(valid, Architecture="amd64"), dict(valid, Os="windows")):
+            with self.subTest(details=details), patch.object(web_access, "run") as run:
+                run.return_value.stdout = json.dumps([details])
+                if details == valid:
+                    self.assertEqual(web_access.pull_verified_image("docker", image), image)
+                else:
+                    with self.assertRaises(RuntimeError):
+                        web_access.pull_verified_image("docker", image)
+                self.assertEqual(run.call_args_list[0].args[0],
+                                 ["docker", "pull", "--platform", "linux/arm64", image])
+        with patch.object(web_access, "run") as run:
+            with self.assertRaises(ValueError):
+                web_access.pull_verified_image("docker", "python:latest")
+            run.assert_not_called()
+
     def test_reader_http_auth_and_supported_endpoints(self):
         server = service.ThreadingHTTPServer(("127.0.0.1", 0), service.Handler)
         server.busy = threading.BoundedSemaphore(2)
@@ -200,6 +225,46 @@ class WebTests(unittest.TestCase):
                     web_client.retrieve(cfg, "search", "test")
             opener.assert_not_called()
 
+    def test_reinstall_migrates_enabled_browser_and_repairs_missing_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "control").mkdir()
+            (root / "control/config.json").write_text(json.dumps({"browser": {"enabled": True}}))
+            web = root / "web"
+            web.mkdir()
+            (web / "vpn.env").write_text("existing-key")
+            (web / "images.json").write_text('{"browser":"old:latest"}')
+            expected = dict(web_access.IMAGES, browser=web_access.BROWSER_IMAGE)
+            for attempt in range(2):
+                with patch.object(web_access, "docker_command", return_value="docker"), \
+                     patch.object(web_access, "pull_verified_image", side_effect=lambda binary, image: image) as pull, \
+                     patch.object(web_access, "start"):
+                    web_access.configure(root)
+                    self.assertEqual([call.args[1] for call in pull.call_args_list], list(expected.values()))
+                self.assertEqual(json.loads((web / "images.json").read_text()), expected)
+                spec = json.loads((web / "compose.json").read_text())
+                self.assertEqual(spec["services"]["browser"]["image"], web_access.BROWSER_IMAGE)
+
+    def test_failed_release_pull_keeps_existing_image_and_compose_receipts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "control").mkdir()
+            (root / "control/config.json").write_text('{}')
+            web = root / "web"
+            web.mkdir()
+            (web / "vpn.env").write_text("existing-key")
+            (web / "images.json").write_text('{"vpn":"previous"}')
+            (web / "compose.json").write_text('{"previous":true}')
+            with patch.object(web_access, "docker_command", return_value="docker"), \
+                 patch.object(web_access, "pull_verified_image", side_effect=RuntimeError("pull failed")), \
+                 patch.object(web_access, "start") as start:
+                with self.assertRaisesRegex(RuntimeError, "pull failed"):
+                    web_access.configure(root)
+                start.assert_not_called()
+            self.assertEqual((web / "images.json").read_text(), '{"vpn":"previous"}')
+            self.assertEqual((web / "compose.json").read_text(), '{"previous":true}')
+            self.assertEqual((root / "control/config.json").read_text(), '{}')
+
     def test_configure_preserves_config_and_records_private_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -209,9 +274,12 @@ class WebTests(unittest.TestCase):
             (root / "web/images.json").write_text(json.dumps({k: "pinned@sha256:abc" for k in web_access.IMAGES}))
             with patch.object(web_access, "docker_command", return_value="docker"), \
                  patch.object(web_access.getpass, "getpass", return_value=base64.b64encode(b"x" * 32).decode()), \
+                 patch.object(web_access, "pull_verified_image", side_effect=lambda binary, image: image), \
                  patch.object(web_access, "start"):
                 web_access.configure(root)
             cfg = json.loads((root / "control/config.json").read_text())
+            images = json.loads((root / "web/images.json").read_text())
+            self.assertEqual(images, web_access.IMAGES)
             self.assertEqual(cfg["api_key"], "old")
             self.assertEqual(cfg["text_models"], {"custom": 1})
             self.assertEqual(cfg["web"]["url"], "http://127.0.0.1:8090")

@@ -1,6 +1,8 @@
 """Static acceptance checks for optional VPN-only Playwright MCP wiring."""
 import sys
 import unittest
+from unittest.mock import patch
+import browser_setup
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +16,12 @@ class BrowserIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.images = {name: f"example/{name}@sha256:abc" for name in IMAGES}
         self.images["browser"] = "mcr.microsoft.com/playwright/mcp@sha256:abc"
+
+    def test_browser_pulls_the_release_digest(self):
+        with patch.object(browser_setup, "pull_verified_image", return_value=browser_setup.IMAGE) as pull:
+            self.assertEqual(browser_setup.image_digest("docker"), browser_setup.IMAGE)
+            pull.assert_called_once_with("docker", browser_setup.IMAGE)
+        self.assertRegex(browser_setup.IMAGE, r"@sha256:[0-9a-f]{64}$")
 
     def test_browser_disabled_by_default(self):
         spec = specification(self.images)
