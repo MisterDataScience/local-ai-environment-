@@ -435,11 +435,11 @@ def main():
     print('OpenCode: http://127.0.0.1:4096  Username: opencode', flush=True)
     if not args.discord and not args.managed:
         print('Session password:', git_env['OPENCODE_SERVER_PASSWORD'], flush=True)
+    # The pinned OpenCode `web` command does not expose the serve-only
+    # --cors CLI flag. Browser UI and API are on the SAME private Tailscale
+    # HTTPS origin, so no cross-origin browser exemption is required here.
     command = [str(binary), 'serve' if args.discord else 'web',
                '--hostname', '127.0.0.1', '--port', '4096']
-    allowed_origin = remote_server_origin(config)
-    if allowed_origin:
-        command += ['--cors', allowed_origin]
     process = subprocess.Popen(command, cwd=project, env=git_env, start_new_session=True)
     conversation_server = None
     discord_process = None
