@@ -25,7 +25,12 @@ def main(background=False):
     config = json.loads((root / "control/config.json").read_text())
     remote = config.get("remote_access", {})
     if remote.get("enabled"):
-        from remote_access import cli_json, assert_private_ports
+        from remote_access import cli_json, assert_private_ports, APP
+        if APP.is_dir() and not APP.is_symlink():
+            try:
+                subprocess.run(['/usr/bin/open', '-a', str(APP)], check=True, timeout=20)
+            except (OSError, subprocess.SubprocessError) as error:
+                logging.warning('Tailscale app could not be opened automatically: %s', error)
         # Refuse to activate the local service behind an existing public Funnel route.
         try:
             assert_private_ports(cli_json("serve", "status", "--json"), remote["hostname"])
@@ -161,6 +166,7 @@ def main(background=False):
         health_failures = 0
         last_tick = time.monotonic()
         retry_web = 0
+        retry_remote = 0
         web_thread = None
         def recover_web():
             try:
@@ -192,6 +198,25 @@ def main(background=False):
                         launch_captain()
                 except Exception as error:
                     logging.warning('Managed Captain waiting for restart: %s', error)
+            if remote.get('enabled') and now >= retry_remote:
+                retry_remote = now + 120
+                from remote_access import reconcile_private_routes
+                try:
+                    current_routes = cli_json('serve', 'status', '--json')
+                    # A newly enabled public Funnel endpoint is a security
+                    # emergency. Stop serving rather than retry into exposure.
+                    assert_private_ports(current_routes, remote['hostname'])
+                    repaired = reconcile_private_routes(remote)
+                    if repaired:
+                        logging.info('Restored %s private Tailscale routes after reconnect.', len(repaired))
+                        from remote_access import verify_remote_access
+                        verify_remote_access(root, remote)
+                except RuntimeError as error:
+                    if 'Public Funnel is enabled' in str(error):
+                        raise RuntimeError('Public Tailscale Funnel detected; stopping private services') from error
+                    logging.warning('Remote Captain waiting for private tailnet recovery: %s', error)
+                except (OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
+                    logging.warning('Tailscale recovery is unavailable: %s', error)
             if config.get('web', {}).get('enabled') and now >= retry_web and (web_thread is None or not web_thread.is_alive()):
                 web_thread = threading.Thread(target=recover_web, daemon=True)
                 web_thread.start()
