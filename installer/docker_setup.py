@@ -56,6 +56,29 @@ def ready(binary):
     run([binary, 'compose', 'version'], capture_output=True, timeout=30)
 
 
+def start_installed_docker(timeout=300):
+    """At every login, start Docker's app and wait for local Compose readiness.
+
+    The main LaunchAgent starts LOCAL AI, so no second login helper or Docker
+    Settings change is needed. Do not download, install or accept a licence.
+    """
+    if not APP.is_dir() or APP.is_symlink():
+        raise RuntimeError('Signed Docker Desktop installation is missing')
+    run(['/usr/bin/open', '-a', str(APP)], timeout=30)
+    deadline = time.monotonic() + timeout
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            binary = docker_binary()
+            ready(binary)
+            return binary
+        except (OSError, RuntimeError, KeyError, IndexError, ValueError,
+                subprocess.SubprocessError) as error:
+            last_error = error
+            time.sleep(5)
+    raise RuntimeError('Docker Desktop did not become ready after login: ' + str(last_error))
+
+
 def install(root, download, *, prompt=input, say=print, timeout=900):
     root = Path(root)
     if not APP.exists():
