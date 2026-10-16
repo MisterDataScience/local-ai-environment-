@@ -243,9 +243,9 @@ def install_comfy(root, uv, state):
         # ComfyUI upstream lists unbounded torch/torchvision. Enforce the
         # mutually compatible tested version trio for both install operations.
         constraints = directory / ".local-ai-torch-constraints.txt"
-        constraints.write_text(f"torch=={TORCH_VERSION}\\n"
-                               f"torchvision=={TORCHVISION_VERSION}\\n"
-                               f"torchaudio=={TORCHAUDIO_VERSION}\\n")
+        constraints.write_text(f"torch=={TORCH_VERSION}\n"
+                               f"torchvision=={TORCHVISION_VERSION}\n"
+                               f"torchaudio=={TORCHAUDIO_VERSION}\n")
         run([uv, "pip", "install", "--python", python, "-r", directory / "requirements.txt",
              "-c", constraints])
         checkpoint(state, "comfy-dependencies")
