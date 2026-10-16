@@ -6,7 +6,7 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-16-captain-remote-turnkey-rc4'
+RELEASE = '2026-10-16-pinned-headless-remote-rc5'
 PREFIX = 'mac-local-ai-installer/'
 STAMP = (2026, 10, 16, 0, 0, 0)
 
