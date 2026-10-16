@@ -41,6 +41,20 @@ and the audit corrections.
    `http://127.0.0.1:8081`, but Captain worker delegation is in the Work Agent.
    Launch `Local AI.app` on future logins.
 
+The installer uses a SHA-verified, versioned `uv` bootstrap, vendor-checked
+Docker Desktop 4.91.0, an immutable ComfyUI commit/archive checksum, and
+a pinned compatible PyTorch package trio. `UV_EXCLUDE_NEWER` prevents packages
+published after the 2026-10-16 release cutoff from changing dependency
+resolution. This is not a complete transitive-hash lock.
+
+Remote OpenCode now allows **only** the configured private Tailscale HTTPS
+origin, with a native OpenCode CI test for API and event-stream support.
+During supervised sessions, `caffeinate -i -s` prevents idle sleep without
+changing permanent macOS settings. The supervisor reopens Docker/Tailscale
+and restores missing *owned* private routes on reconnect, refusing Funnel.
+Real Windows/iPad browsing and reboot/sleep recovery remain pending.
+See [headless/remote acceptance](HEADLESS-AND-REMOTE-ACCEPTANCE.md).
+
 Apple Silicon, macOS 15+, 32 GB unified memory and at least 100 GB free space are
 required. Installation needs Internet access for initial dependencies and models.
 No model weights, personal files or account credentials are included in the ZIP.
