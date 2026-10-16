@@ -6,17 +6,19 @@ public upstream documentation only. **This is not an owner-Mac installation.**
 
 ## Verdict
 
-**Not yet defensible as a zero-follow-up turnkey installation.**
-The core Captain setup has tests and a managed local interface, but several
-intended integrations remain disconnected or require post-install activation.
+**Code-level integration implemented, owner-Mac acceptance still pending.**
+Captain now has signed Docker installation, VPN-only browser setup, private
+Tailscale Captain access and live integration gates inside its single entry point.
+Scoped desktop mode and external provider access intentionally need separate
+authorisation; ordinary WebUI per-chat tool selection remains distinct.
 Actual Mac memory, camera/microphone and sleep/wake performance remain unknown.
 
 ## Confirmed issues
 
 | Priority | Finding and evidence | Disposition |
 | --- | --- | --- |
-| P1 | The default Captain launcher starts `runtime.py`, which serves Captain through local-only OpenCode port **4096** (`installer/runtime.py`), while Tailscale setup explicitly exposes the Open WebUI/media proxy, **not the Captain's UI** (`installer/remote_access.py`). Other devices cannot use actual Captain orchestration through the existing remote chat URL. | **Open.** Requires a separately authenticated, tailnet-only Captain route and live off-device test. Do not directly expose port 4096 on the public network. |
-| P1 | Default installer enables the MiniCPM Captain and sets up Cryptomator, but does **not** invoke remote-access, VPN/browser, desktop-control or GitHub credential setup without separate flags/commands (`installer/installer.py`, `installer/browser_setup.py`, `installer/automation_setup.py`). | **Open.** Fold safe provisioning into the single setup journey; obtain unavoidable consent/credentials inside installation. Some modes intentionally cannot be simultaneously active. |
+| P1 | Previously, Tailscale exposed Open WebUI/media but not the actual Captain at loopback port 4096. | **Fixed in the 16 October 2026 integration branch:** separately authenticated Tailscale Serve HTTPS 10000 routes to loopback OpenCode, with route conflict, 401/authenticated-agent and rollback checks. **Still unverified:** browser/WS behaviour from a second device on the physical Mac. |
+| P1 | The Captain installer previously omitted Docker, VPN, browser and remote authentication setup, leaving separate activation scripts. | **Integrated in 16 October 2026 branch:** signed Docker installation, Proton VPN/Playwright and Tailscale/remote Captain setup run during the same installer, with private token consent and live checks. **Still unresolved:** scoped desktop mode is deliberately exclusive with normal agent tools; third-party external delegation requires provider authorisation; no full hardware run yet. |
 | P1 | The GGUF server allocated KV cache capacity for the maximum five workers even in Normal mode, which permits only two (`installer/payload/shared_llama.py`, `model_engine.py`). | **Fixed in this branch.** Launch context/slots now follow active resource mode, preserve Max capability, and log native errors privately. |
 | P1 | Hardware acceptance required the owner's current mode to already be Max; a normal-mode upgrade after code changes aborted and instructed manual mode switching (`installer/installer.py`). | **Fixed in this branch.** The stopped installer temporarily selects Max, tests and restores the chosen mode; fresh Captain installations launch in Normal to avoid allocating five slots during normal use. |
 | P1 | On interruption after download completion but before renaming `.part` to the installed artifact, the universal installer downloader called `curl -C -` again, risking HTTP 416 and permanently blocking retries (`installer/installer.py`). | **Fixed in this branch.** Already-complete checksum-validated artifacts and complete ZIP files are promoted locally; reject symlinked partials. |
