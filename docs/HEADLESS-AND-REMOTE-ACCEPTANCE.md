@@ -155,3 +155,59 @@ skips (278 discovered); 127 gateway and 84 JavaScript tests passed. Compilation,
 shell syntax and local installer archive verification passed. Actual macOS
 Tailscale crash/reconnect/shutdown acceptance remains pending. Hosted CI was
 not triggered and no replacement installer was published.
+
+
+## Native approval acceptance extension
+
+`scripts/check_native_captain.py` now runs five additional native scenarios
+through `scripts/native_approvals.py` before its existing parallel-worker test:
+
+- Build approves a temporary command once, then repeats the identical command
+  in the same session and requires a new approval. The harness removes only
+  its own first marker before the repeat, and examines only new native history.
+- Build rejects a command; its marker must stay absent and native tool history
+  must record rejection.
+- A delegated Captain coder requests approval and executes only after approval.
+- A delegated Captain coder receives rejection; no marker may be written.
+
+Every scenario requires a real pending native bash permission describing the
+exact command. The harness observes a blocked request and absent marker before
+replying. Missing and incorrect Basic authentication must fail both permission
+listing and approval replies, leaving the original prompt pending. The real
+SSE stream must deliver matching `permission.asked` and `permission.replied`
+events for the correct owner. Worker ownership is checked against the parent's
+actual child sessions, and completed workers must retire. Replayed/stale reply
+IDs must return HTTP 404. No production permission setting is relaxed.
+
+The synthetic inference endpoint only returns model messages and tool calls.
+The actual OpenCode binary must create prompts, execute or reject the command,
+publish events and record native history. Commands write a fixed marker only
+inside a newly created temporary acceptance project. No model weights, user
+project files, real account credentials or external inference are used.
+Authenticated requests include the simulated private tailnet Host/Origin used
+by the prior native check. This is not a Windows/iPad browser or live Tailscale
+test, and does not prove that a remote UI renders a worker's approval card.
+
+Local harness regressions exercise successful and rejected scenarios, deliberate
+early execution, missing effects, rejected commands that still write, duplicate
+actions, authentication bypass, wrong session ownership, repeat-turn isolation,
+synthetic worker message progression, and a real local HTTP SSE reader with
+bounded shutdown. These are tests of the acceptance harness, not native
+approval evidence. Six approval-harness tests and one archive regression passed.
+
+The final native attempt on this Linux host still exits with SIGABRT while
+running the pinned OpenCode 1.18.34 `web --help`, before the server or any of
+these scenarios starts. A clean environment showed the same startup abort.
+System-call tracing is unavailable in this environment. Do not mark native
+approval acceptance passed based on these regressions.
+
+Run on a compatible host with the pinned, checksum-verified binary:
+
+```bash
+python scripts/check_native_captain.py --binary /path/to/verified/opencode
+```
+
+The existing manual-only workflow invokes the extended check when deliberately
+dispatched; no dispatch or rerun was requested for this change. Native execution,
+then actual Windows/iPad approval and denial over Tailscale, remain release
+blockers.

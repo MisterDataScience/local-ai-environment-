@@ -16,7 +16,8 @@ import sys
 import tempfile
 import threading
 import time
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, build_opener, ProxyHandler
+import native_approvals
 
 SOURCE = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(SOURCE / 'installer'), str(SOURCE / 'installer/payload')]
@@ -50,8 +51,13 @@ class SyntheticGateway(ThreadingHTTPServer):
         self.failures = []
 
     def completion(self, body):
+        if not body.get('tools'):
+            return {'role': 'assistant', 'content': 'Local acceptance check'}
         users = '\n'.join(content_text(m.get('content')) for m in body['messages'] if m['role'] == 'user')
         previous = [m for m in body['messages'] if m['role'] == 'tool']
+        approval = native_approvals.completion(self.project, users, previous, content_text)
+        if approval is not None:
+            return approval
         worker = re.search(r'"task_id"\s*:\s*"(calc|file-check)"', users)
         if worker:
             identifier = worker[1]
@@ -173,12 +179,22 @@ def check(binary):
         env = work_agent.environment(root, config, settings)
         env.update(OPENCODE_SERVER_USERNAME='opencode', OPENCODE_SERVER_PASSWORD='native-ci-password')
         token = base64.b64encode(b'opencode:native-ci-password').decode()
-        def native(path, body=None):
+        remote_headers = {'Authorization': 'Basic ' + token, 'Origin': remote_origin,
+                          'Host': 'native-ci.example.ts.net:10000'}
+        opener = build_opener(ProxyHandler({}))
+        def api(path, body=None, headers=None):
             request = Request('http://127.0.0.1:4096' + path,
                 data=None if body is None else json.dumps(body).encode(),
-                headers={'Authorization': 'Basic ' + token, 'Content-Type': 'application/json'})
-            with urlopen(request, timeout=90) as response:
+                headers={**(remote_headers if headers is None else headers), 'Content-Type': 'application/json'})
+            with opener.open(request, timeout=60) as response:
                 return json.load(response)
+        def native(path, body=None):
+            return api(path, body)
+        def unauthorised(path, body=None, *, auth):
+            headers = {k: v for k, v in remote_headers.items() if k != 'Authorization'}
+            if auth == 'wrong':
+                headers['Authorization'] = 'Basic ' + base64.b64encode(b'opencode:wrong-password').decode()
+            return api(path, body, headers)
         server = SyntheticGateway(project)
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
         process = None
@@ -213,6 +229,7 @@ def check(binary):
                                      headers=remote_headers), timeout=10) as response:
                     if 'text/event-stream' not in response.headers.get('Content-Type', ''):
                         raise RuntimeError('Remote-origin event stream was not established')
+                native_approvals.check(native, unauthorised, remote_headers, project)
                 session = native('/session', {'title': 'Native captain CI'})['id']
                 answer = native('/session/' + session + '/message', {'agent': 'plan', 'parts': [
                     {'type': 'text', 'text': 'Native captain protocol check. Dispatch the two supplied workers and retire them.'}]})
