@@ -47,8 +47,9 @@ a pinned compatible PyTorch package trio. `UV_EXCLUDE_NEWER` prevents packages
 published after the 2026-10-16 release cutoff from changing dependency
 resolution. This is not a complete transitive-hash lock.
 
-Remote OpenCode now allows **only** the configured private Tailscale HTTPS
-origin, with a native OpenCode CI test for API and event-stream support.
+Remote OpenCode's UI and API share the exact same private Tailscale HTTPS
+origin, with a native OpenCode `web` check of the authenticated API and event
+stream. Cross-origin access is not needed for the standard remote UI.
 During supervised sessions, `caffeinate -i -s` prevents idle sleep without
 changing permanent macOS settings. The supervisor reopens Docker/Tailscale
 and restores missing *owned* private routes on reconnect, refusing Funnel.
