@@ -6,6 +6,28 @@ from shared_llama import SharedLlama, digest
 
 
 class SharedLlamaTests(unittest.TestCase):
+    def test_selected_abliterated_variant_requires_verified_adapter_for_every_slot(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            files = {}
+            for kind in ('binary', 'model', 'lora'):
+                path = root / (kind + '.gguf')
+                path.write_bytes(('fixture ' + kind).encode())
+                path.chmod(0o700)
+                files[kind] = {'path': str(path), 'sha256': digest(path)}
+            config = {'max_parallel': 5, 'variant': 'atomicchat-uncensored-lora', 'llama': files}
+            backend = SharedLlama(config)
+            for slots in (2, 5):
+                command = backend.command(8192, parallel=slots)
+                self.assertEqual(command[command.index('--lora') + 1], files['lora']['path'])
+                self.assertNotIn('--lora-init-without-apply', command)
+            Path(files['lora']['path']).write_bytes(b'tampered adapter')
+            with self.assertRaisesRegex(RuntimeError, 'artifact changed'):
+                backend.command(8192)
+            del files['lora']
+            with self.assertRaisesRegex(ValueError, 'artifact: lora'):
+                backend.command(8192)
+
     def test_context_is_per_slot_files_are_verified_and_server_stays_loopback(self):
         with tempfile.TemporaryDirectory() as folder:
             binary = Path(folder) / 'llama-server'; binary.write_text('native executable'); binary.chmod(0o755)

@@ -92,7 +92,7 @@ jobs:
           "$RUNNER_TEMP/minicpm-runtime/build/bin/llama-server" --help > "$RUNNER_TEMP/llama-options.txt" 2>&1
           # Native compilation alone is not enough: require every option used
           # by the real installed Captain launch command.
-          for option in --parallel --ctx-size --kv-unified-per-slot --jinja --cont-batching --no-context-shift --no-webui --chat-template-kwargs --mmproj; do
+          for option in --parallel --ctx-size --kv-unified-per-slot --jinja --cont-batching --no-context-shift --no-webui --chat-template-kwargs --mmproj --lora; do
             if ! grep -F -q -- "$option" "$RUNNER_TEMP/llama-options.txt"; then
               echo "Pinned llama-server is missing required runtime option: $option"
               exit 1

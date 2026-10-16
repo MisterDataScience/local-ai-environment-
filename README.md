@@ -35,6 +35,13 @@ ComfyUI now has an 85-package transitive hash lock for macOS 15+ ARM64,
 Python 3.12. Other environments are not fully hash-locked. See
 [dependency lock scope](docs/DEPENDENCY-LOCKS.md).
 
+Captain now selects **AtomicChat's abliterated MiniCPM-V 4.7** automatically:
+the pinned standard Q3 weights and original vision projector plus its mandatory
+106 MB LoRA adapter at scale 1.0. The installer downloads and verifies all
+three artifacts, and every shared Captain/worker slot loads the adapter.
+No separate activation step is required. Native Mac inference and vision
+with this adapter remain unverified. See [model selection](docs/CAPTAIN-MODEL-SELECTION.md).
+
 The actual remote Captain's web page and API share **one private
 Tailscale HTTPS origin**, with no public LAN listener. Native CI exercises
 the pinned OpenCode `web` command using a simulated tailnet hostname,

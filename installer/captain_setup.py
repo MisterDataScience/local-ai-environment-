@@ -6,7 +6,6 @@ import copy
 import json
 import os
 import platform
-import re
 import shutil
 import subprocess
 import time
@@ -15,6 +14,18 @@ from urllib.parse import quote
 LLAMA_REVISION = '1b70350c92563449576bcbbf552994b1d1ed847d'
 LLAMA_REPOSITORY = 'https://github.com/ggml-org/llama.cpp.git'
 MODEL_REPOSITORY = 'openbmb/MiniCPM-V-4.7-35B-A3B-gguf'
+MODEL_REVISION = '77ec40de8445999bf3076aeff9ff45d40a2713cc'
+MODEL_FILES = {
+    'model': ('MiniCPM-V-4_7-35B-A3B-mix_q3gud_im.gguf',
+              '51e32201f0ddaf87dbb9689ceef9e3aa1a1543a1366706aa2abbf3aabb34df6b'),
+    'mmproj': ('mmproj-model-f16.gguf',
+               'bff3b688e14c300eca273092c37c50a0ddfcc2054e079af1a0480edeed5d20f1'),
+}
+ADAPTER_REPOSITORY = 'AtomicChat/MiniCPM-V-4.7-35B-A3B-Uncensored-GGUF'
+ADAPTER_REVISION = '948c2f37e34730f8abd9b80f86642f37e8f30960'
+ADAPTER_FILENAME = 'lora/MiniCPM-V-4.7-35B-A3B-Uncensored-LoRA.gguf'
+ADAPTER_SHA256 = '035cd9c02925a0782afb3575b8135f6ae41e4317f564e2a501b22472baa19cce'
+MODEL_VARIANT = 'atomicchat-uncensored-lora'
 
 
 def build_tools(root):
@@ -139,26 +150,24 @@ def configure(config, settings, root, status):
                        'Stop after the assigned deliverable.')}
 
 
-def select_artifacts(metadata):
-    """Use immutable Hub metadata and full LFS checksums; no quant fallback."""
-    revision = metadata.get('sha', '')
-    if not re.fullmatch('[0-9a-f]{40}', revision):
-        raise RuntimeError('Official model snapshot revision is missing')
-    siblings = metadata.get('siblings', [])
-    models = [s for s in siblings if s.get('rfilename', '').lower().endswith('.gguf')
-              and 'mix_q3gud_im' in s['rfilename'].lower() and '-les' not in s['rfilename'].lower()]
-    projectors = [s for s in siblings if s.get('rfilename', '').split('/')[-1] == 'mmproj-model-f16.gguf']
-    if len(models) != 1 or len(projectors) != 1:
-        raise RuntimeError('Official standard Q3 mixed model/projector layout changed; review it before installation')
-    result = {}
-    for kind, item in [('model', models[0]), ('mmproj', projectors[0])]:
-        filename = item['rfilename']
-        checksum = item.get('lfs', {}).get('sha256', '')
-        if not re.fullmatch('[0-9a-f]{64}', checksum) or '..' in Path(filename).parts or Path(filename).is_absolute():
-            raise RuntimeError('Missing trusted model checksum or invalid artifact path')
-        result[kind] = {'filename': filename, 'sha256': checksum,
-                        'url': f'https://huggingface.co/{MODEL_REPOSITORY}/resolve/{revision}/{quote(filename, safe="/")}',
-                        'revision': revision}
+def pinned_artifact(metadata, repository, revision, filename, checksum):
+    """Require the release pin, not just a checksum chosen by a mutable main."""
+    if metadata.get('sha') != revision:
+        raise RuntimeError('Model snapshot differs from the pinned revision: ' + repository)
+    matches = [s for s in metadata.get('siblings', []) if s.get('rfilename') == filename]
+    if len(matches) != 1 or matches[0].get('lfs', {}).get('sha256') != checksum:
+        raise RuntimeError('Pinned model artifact layout changed or checksum differs: ' + filename)
+    return {'filename': filename, 'sha256': checksum, 'revision': revision,
+            'repository': repository,
+            'url': f'https://huggingface.co/{repository}/resolve/{revision}/{quote(filename, safe="/")}'}
+
+
+def select_artifacts(metadata, adapter_metadata):
+    """One selected Q3 model, original projector, mandatory ablation adapter."""
+    result = {kind: pinned_artifact(metadata, MODEL_REPOSITORY, MODEL_REVISION, filename, checksum)
+              for kind, (filename, checksum) in MODEL_FILES.items()}
+    result['lora'] = pinned_artifact(adapter_metadata, ADAPTER_REPOSITORY, ADAPTER_REVISION,
+                                     ADAPTER_FILENAME, ADAPTER_SHA256)
     return result
 
 
@@ -170,8 +179,9 @@ def install_minicpm(root, download=None):
         raise RuntimeError('Stop Local AI before changing its shared model')
     if download is None:
         download = download_artifact
-    metadata = http('https://huggingface.co/api/models/' + MODEL_REPOSITORY + '?blobs=true', timeout=60)
-    artifacts = select_artifacts(metadata)
+    metadata = http(f'https://huggingface.co/api/models/{MODEL_REPOSITORY}/revision/{MODEL_REVISION}?blobs=true', timeout=60)
+    adapter_metadata = http(f'https://huggingface.co/api/models/{ADAPTER_REPOSITORY}/revision/{ADAPTER_REVISION}?blobs=true', timeout=60)
+    artifacts = select_artifacts(metadata, adapter_metadata)
     cmake = build_tools(root)
     source = root / 'tools' / ('minicpm-llama-' + LLAMA_REVISION[:12])
     if not (source / '.git').exists():
@@ -196,18 +206,25 @@ def install_minicpm(root, download=None):
     binary = source / 'build/bin/llama-server'
     files = {'binary': {'path': str(binary), 'sha256': digest(binary), 'source_revision': LLAMA_REVISION}}
     for kind, artifact in artifacts.items():
-        destination = root / 'models/minicpm-v4.7' / artifact['filename']
+        folder = 'atomicchat-uncensored' if kind == 'lora' else ''
+        destination = root / 'models/minicpm-v4.7' / folder / artifact['filename']
         destination.parent.mkdir(parents=True, exist_ok=True)
         download(artifact['url'], destination, artifact['sha256'])
-        files[kind] = {'path': str(destination), 'sha256': artifact['sha256'], 'source_revision': artifact['revision']}
+        # Do not write a successful model selection until all three files pass
+        # their actual byte hashes, even when a custom downloader is supplied.
+        if digest(destination) != artifact['sha256']:
+            raise RuntimeError('Downloaded Captain artifact failed verification: ' + kind)
+        files[kind] = {'path': str(destination), 'sha256': artifact['sha256'],
+                       'source_revision': artifact['revision'], 'repository': artifact['repository']}
     path = root / 'control/config.json'
     config = json.loads(path.read_text())
     from captain_config import upgrade
     config = upgrade(config)
-    config['captain'].update(enabled=True, provider='llama', single_model=True, model_id='local-ai-captain', llama=files)
+    config['captain'].update(enabled=True, provider='llama', single_model=True,
+                            model_id='local-ai-captain', variant=MODEL_VARIANT, llama=files)
     config.setdefault('model_team', {})['enabled'] = True
-    config['text_models']['local-ai-captain'] = {'name': 'Captain · MiniCPM-V 4.7 35B-A3B',
-        'model': 'MiniCPM-V-4.7-35B-A3B', 'backend': 'llama', 'num_ctx': 16384,
+    config['text_models']['local-ai-captain'] = {'name': 'Captain · MiniCPM-V 4.7 · AtomicChat abliterated',
+        'model': 'MiniCPM-V-4.7-35B-A3B-AtomicChat-Uncensored', 'backend': 'llama', 'num_ctx': 16384,
         'keep_alive_seconds': 120, 'thinking': False}
     # Remove unused stock selections from the download plan. Previously installed
     # weights remain untouched; custom presets are preserved.
