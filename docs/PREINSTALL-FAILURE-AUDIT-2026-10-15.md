@@ -24,8 +24,15 @@ Actual Mac memory, camera/microphone and sleep/wake performance remain unknown.
 | P1 | On interruption after download completion but before renaming `.part` to the installed artifact, the universal installer downloader called `curl -C -` again, risking HTTP 416 and permanently blocking retries (`installer/installer.py`). | **Fixed in this branch.** Already-complete checksum-validated artifacts and complete ZIP files are promoted locally; reject symlinked partials. |
 | P1 | The text-generation and Captain delegate acceptance is real only *inside the installer*; it does not prove every chat integration is selected, discoverable and usable in ordinary Open WebUI conversations (`installer/turnkey_install.py`, `installer/common.py`). | **Open.** Validate the two UIs independently and avoid labelling unselected integrations as operational. |
 | P2 | No preinstalled reference speech voice is created. Speech is installed but `verify_generation` may emit `speech-generation: not_run` if `voice-engine/voices/default.json` is absent (`installer/voice_setup.py`, `installer/installer.py`). | **Open.** It needs a user-authorised reference recording or an appropriately licensed default voice. Never say voice generation passed when untested. |
-| P2 | `torch`, `torchvision` and `torchaudio` are installed without locked versions, and ComfyUI is downloaded from a release tag without a pinned checksum (`installer/installer.py`). This reduces fresh-install reproducibility despite version pins elsewhere. | **Open.** Freeze tested ARM builds/hashes and validate dependency resolution on a clean runner. |
-| P2 | The bootstrap downloads and runs the current `astral.sh/uv/install.sh` install script rather than a version-pinned, checksum-verified executable (`installer/Install Local AI.command`). This is a supply-chain and reproducibility risk if the upstream script changes. | **Open.** Pin verified bootstrap artifacts and refuse unexpected hashes. |
+| P2 | Previous ComfyUI/Torch installation used unversioned Torch packages and downloaded ComfyUI by a tag. | **Addressed in 16 October 2026 branch:** fixed Torch/TorchVision/TorchAudio versions, source commit and SHA-256, upgrade-marker validation, plus release-cutoff dependency resolution. Full transitive hash locking remains open. |
+| P2 | The original bootstrap executed the latest upstream `uv/install.sh` and Docker Desktop used a floating download. | **Addressed in 16 October 2026 branch:** pinned SHA-verified ARM `uv` and signed Docker 4.91.0 DMG; native Mac CI validates the exact `uv` executable. |
+
+Owner-Mac login, off-device browser approval, deliberate sleep/wake and
+power-loss recovery remain unverified. The new LaunchAgent supervisor opens
+Docker/Tailscale at login, keeps idle sleep away while running, restores missing
+private Serve routes without stealing unrelated routes, and fails on public
+Funnel. It **cannot unlock FileVault or start before the owner's macOS login**.
+See [headless acceptance](HEADLESS-AND-REMOTE-ACCEPTANCE.md).
 
 ## Mac-only risks (not confirmed defects)
 
