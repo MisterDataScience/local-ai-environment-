@@ -116,6 +116,56 @@ class RemoteAccessTests(unittest.TestCase):
             self.assertNotIn("reset", str(commands))
             self.assertFalse(json.loads(path.read_text())["remote_access"]["enabled"])
 
+    def test_reconnect_restores_only_missing_captain_https_route(self):
+        connected = {'BackendState': 'Running', 'Self': {'DNSName': HOST}}
+        before = serve_config()
+        before['Web'].pop(HOST + ':10000')
+        before['TCP'].pop('10000')
+        with patch.object(remote, 'cli_json', side_effect=[connected, before, serve_config()]), \
+             patch.object(remote, 'execute') as execute:
+            changed = remote.reconcile_private_routes({'enabled': True, 'hostname': HOST})
+        self.assertEqual(changed, [10000])
+        self.assertEqual(execute.call_count, 1)
+        self.assertEqual(execute.call_args.args[0][-1], 'http://127.0.0.1:4096')
+        self.assertIn('--https=10000', execute.call_args.args[0])
+
+    def test_reconnect_noops_for_healthy_routes(self):
+        connected = {'BackendState': 'Running', 'Self': {'DNSName': HOST}}
+        with patch.object(remote, 'cli_json', side_effect=[connected, serve_config()]), \
+             patch.object(remote, 'execute') as execute:
+            self.assertEqual(remote.reconcile_private_routes({'enabled': True, 'hostname': HOST}), [])
+        execute.assert_not_called()
+
+    def test_reconnect_never_steals_another_route_or_enables_public_funnel(self):
+        connected = {'BackendState': 'Running', 'Self': {'DNSName': HOST}}
+        conflict = serve_config()
+        conflict['Web'][HOST + ':10000']['Handlers']['/']['Proxy'] = 'http://127.0.0.1:9999'
+        public = serve_config()
+        public['AllowFunnel'] = {HOST + ':10000': True}
+        for unsafe in (conflict, public):
+            with self.subTest(config=unsafe), \
+                 patch.object(remote, 'cli_json', side_effect=[connected, unsafe]), \
+                 patch.object(remote, 'execute') as execute:
+                with self.assertRaises(RuntimeError):
+                    remote.reconcile_private_routes({'enabled': True, 'hostname': HOST})
+                execute.assert_not_called()
+
+    def test_reconnect_rollback_preserves_existing_private_routes(self):
+        connected = {'BackendState': 'Running', 'Self': {'DNSName': HOST}}
+        before = serve_config()
+        before['Web'].pop(HOST + ':10000')
+        before['TCP'].pop('10000')
+        def action(command, **kwargs):
+            if command[-1] != 'off':
+                return None
+        with patch.object(remote, 'cli_json', side_effect=[connected, before, before]), \
+             patch.object(remote, 'execute', side_effect=action) as execute:
+            with self.assertRaisesRegex(RuntimeError, 'did not restore'):
+                remote.reconcile_private_routes({'enabled': True, 'hostname': HOST})
+        off = [call.args[0] for call in execute.call_args_list if call.args[0][-1] == 'off']
+        self.assertEqual(len(off), 1)
+        self.assertIn('--https=10000', off[0])
+
     def test_untrusted_package_is_not_installed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
