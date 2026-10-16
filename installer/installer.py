@@ -46,7 +46,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
-TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py')
+TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -677,21 +677,50 @@ def main():
             {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "opencode": "1.18.34",
              "aioffice": configuration['office']['version'],
              "text_models": configured_text_models(configuration)}, indent=2))
-        if args.web_access:
+        if args.minicpm_captain:
+            # No separate post-install activation: the Captain profile installs
+            # the signed local container engine, VPN-bound browsing and private
+            # Tailscale routing before first launch. Account sign-in/licensing
+            # and WireGuard private key entry happen *during* this installer.
+            from docker_setup import install as install_docker
+            logging.info("Captain integrations: install signed Docker Desktop and local Engine")
+            install_docker(root, download)
             from web_access import configure as configure_web
+            logging.info("Captain integrations: configure VPN-only web retrieval")
             configure_web(root)
             checkpoint(state, "web-access-configured")
-        if args.remote_access:
-            logging.info("Optional remote-access stage: Tailscale sign-in and private HTTPS proxies")
-            from remote_access import configure
-            configure(root)
+            from browser_setup import configure as configure_browser
+            logging.info("Captain integrations: install and verify VPN-only Playwright MCP")
+            configure_browser(root)
+            checkpoint(state, "browser-configured")
+            from remote_access import configure as configure_remote
+            logging.info("Captain integrations: authenticated tailnet for chat, media and Captain")
+            configure_remote(root)
             checkpoint(state, "remote-access-configured")
+            # Account consent also lives in the one installer. Empty input leaves
+            # the optional account integration disabled; it must not be reported
+            # as a functioning GitHub connection.
+            from account_tools import configure as configure_github
+            logging.info("Captain integrations: optional owner-authorised GitHub account")
+            github_configured = configure_github(root)
+            checkpoint(state, "github-consent-completed")
+            configuration = json.loads((root / 'control/config.json').read_text())
+        else:
+            if args.web_access:
+                from web_access import configure as configure_web
+                configure_web(root)
+                checkpoint(state, "web-access-configured")
+            if args.remote_access:
+                from remote_access import configure as configure_remote
+                configure_remote(root)
+                checkpoint(state, "remote-access-configured")
         if args.minicpm_captain:
             from turnkey_install import start_login_service, await_background, write_receipt, open_local_ui
             logging.info("Stage 8/8: registering Captain login service and checking live readiness")
             start_login_service(root)
             background = await_background(root, configuration)
-            receipt = write_receipt(root, configuration, native_acceptance, background, vault=vault_acceptance)
+            receipt = write_receipt(root, configuration, native_acceptance, background,
+                                    vault=vault_acceptance, require_integrations=True)
             checkpoint(state, "installed")
             logging.info("Captain installation core ready. Remaining physical checks: %s",
                          ', '.join(receipt['pending_physical_acceptance']))

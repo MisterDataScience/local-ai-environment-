@@ -91,6 +91,33 @@ class TurnkeyCaptainTests(unittest.TestCase):
             self.assertNotEqual(record['status'], 'fully_verified')
             self.assertEqual(json.loads((root / 'captain-install-readiness.json').read_text()), record)
 
+    def test_captain_turnkey_receipt_requires_all_integrations_not_merely_enabled_code(self):
+        config = self.config()
+        config.update(web={'enabled': True}, browser={'enabled': True},
+                      remote_access={'enabled': True})
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with self.assertRaisesRegex(RuntimeError, 'VPN web'):
+                write_receipt(root, config, {}, {}, vault=None, require_integrations=True)
+            verified = {'vpn_web': 'passed', 'vpn_playwright': 'passed',
+                        'private_remote_captain': 'passed',
+                        'private_remote_chat_and_media': 'passed'}
+            receipt = write_receipt(root, config, {}, verified,
+                                    vault=None, require_integrations=True)
+            self.assertEqual(receipt['integration_acceptance']['private_remote_captain'], 'passed')
+            config['browser']['enabled'] = False
+            with self.assertRaisesRegex(RuntimeError, 'mandatory integration: browser'):
+                write_receipt(root, config, {}, verified, require_integrations=True)
+
+    def test_default_captain_installer_invokes_every_network_onboarding_stage(self):
+        installer = (ROOT / 'installer.py').read_text()
+        self.assertIn('install_docker(root, download)', installer)
+        self.assertIn('configure_web(root)', installer)
+        self.assertIn('configure_browser(root)', installer)
+        self.assertIn('configure_remote(root)', installer)
+        self.assertIn('configure_github(root)', installer)
+        self.assertIn('require_integrations=True', installer)
+
     def test_single_installer_selects_captain_and_runtime_contains_managed_agent(self):
         script = (ROOT / 'Install Local AI.command').read_text()
         self.assertIn('--minicpm-captain "$@"', script)

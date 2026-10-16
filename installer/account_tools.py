@@ -29,11 +29,12 @@ def connection(root):
         'info': {'id': 'local-ai-github', 'name': 'GitHub', 'description': 'Selected GitHub repositories and approved changes'}}
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--root', type=Path, required=True)
-    args = parser.parse_args()
-    root = args.root.expanduser().resolve()
+def configure(root):
+    """Accept fine-grained account consent during Captain installation.
+
+    Blank credentials are a deliberate skip and never enable account access.
+    """
+    root = Path(root).expanduser().resolve()
     from common import PORTS, port_open
     from workspace_setup import save_config
     if any(port_open(port) for port in PORTS.values()):
@@ -47,7 +48,7 @@ def main():
     print('Open WebUI receives it for authentication; the model does not. No Keychain is used.')
     token = getpass.getpass('GitHub token (blank to leave unchanged): ').strip()
     if not token:
-        return
+        return False
     if len(token) > 512 or any(c.isspace() for c in token):
         raise ValueError('Invalid token.')
     secrets = root / 'secrets'
@@ -69,6 +70,14 @@ def main():
     print('Connection configured, not yet authenticated/tested. Restart Local AI and enable GitHub in chat Integrations.')
     print('Use Ask for approval. Verify a read, a DENIED write, then an approved write in a test repository.')
     print('Approval defaults can be overridden in the UI; this is not a separate server-side approval gate.')
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--root', type=Path, required=True)
+    args = parser.parse_args()
+    configure(args.root)
 
 
 if __name__ == '__main__':

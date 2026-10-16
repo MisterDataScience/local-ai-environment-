@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
-from urllib.request import urlopen
+from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler, urlopen
 from urllib.error import HTTPError
 import uuid
 
@@ -16,7 +16,10 @@ TAILSCALE_PACKAGE = f"https://pkgs.tailscale.com/stable/Tailscale-{TAILSCALE_VER
 TAILSCALE_TEAM = "W5364U7YZB"
 APP = Path("/Applications/Tailscale.app")
 CLI = APP / "Contents/MacOS/Tailscale"
-TARGETS = {443: "http://127.0.0.1:8081", 8443: "http://127.0.0.1:8002"}
+# OpenCode remains on loopback and requires its own Basic login over private Serve.
+CAPTAIN_PORT = 10000
+TARGETS = {443: "http://127.0.0.1:8081", 8443: "http://127.0.0.1:8002",
+           CAPTAIN_PORT: "http://127.0.0.1:4096"}
 
 
 def execute(command, capture=False, timeout=60):
@@ -76,10 +79,18 @@ def install_client(root):
             raise RuntimeError("An existing Tailscale app has an unexpected layout. It was not overwritten.")
         package = root / "cache" / f"Tailscale-{TAILSCALE_VERSION}-macos.pkg"
         package.parent.mkdir(parents=True, exist_ok=True)
+        if package.is_symlink():
+            raise RuntimeError('Tailscale package cache must not be a symlink')
         if not package.exists():
             partial = package.with_suffix(".pkg.part")
-            execute(["/usr/bin/curl", "-fL", "--retry", "3", "--connect-timeout", "30",
-                     "-C", "-", "-o", partial, TAILSCALE_PACKAGE], timeout=1800)
+            if partial.is_symlink():
+                raise RuntimeError('Tailscale temporary package must not be a symlink')
+            # The official package is signature-checked after downloading.
+            # A completed partial followed by a crash can cause HTTP 416 with
+            # curl -C -, so overwrite the partial on a resumed installation.
+            execute(["/usr/bin/curl", "-fL", "--proto", "=https", "--proto-redir", "=https",
+                     "--retry", "3", "--connect-timeout", "30",
+                     "-o", partial, TAILSCALE_PACKAGE], timeout=1800)
             partial.replace(package)
         signature = execute(["/usr/sbin/pkgutil", "--check-signature", package], capture=True)
         if f"Tailscale Inc. ({TAILSCALE_TEAM})" not in signature:
@@ -122,7 +133,13 @@ def configure(root):
     if not config_path.exists():
         raise RuntimeError("Install Local AI first, then enable remote access.")
     install_client(root)
-    print("Remote access uses Tailscale permissions, without an additional WebUI password.", flush=True)
+    from managed_captain import credentials
+    if not json.loads(config_path.read_text()).get('captain', {}).get('enabled'):
+        raise RuntimeError('Private Captain routing requires the selected Captain installation.')
+    # Authentication is local, independent of tailnet ACLs. Never log it or embed
+    # it into remote addresses.
+    credentials(root)
+    print("Remote access requires your personal tailnet and Captain login.", flush=True)
     print("Use your personal tailnet: permitted devices can access the same chats and generated media.", flush=True)
     hostname = wait_for_connection()
     before = cli_json("serve", "status", "--json")
@@ -147,7 +164,8 @@ def configure(root):
                 atomic_json(backup, config)
         config["remote_access"] = {"enabled": True, "hostname": hostname,
                                    "ui_url": f"https://{hostname}",
-                                   "media_url": f"https://{hostname}:8443"}
+                                   "media_url": f"https://{hostname}:8443",
+                                   "captain_url": f"https://{hostname}:{CAPTAIN_PORT}"}
         atomic_json(config_path, config)
     except BaseException:
         # Only undo routes created by this attempt; do not reset unrelated Serve services.
@@ -158,9 +176,11 @@ def configure(root):
                 pass
         raise
     (root / "Remote AI Address.txt").write_text(
-        f"Chat: https://{hostname}\nMedia: https://{hostname}:8443/media/FILE\n"
-        "Install Tailscale on your other devices, sign in to the same account and bookmark Chat.\n"
+        f"Captain: https://{hostname}:{CAPTAIN_PORT}\nChat: https://{hostname}\nMedia: https://{hostname}:8443/media/FILE\n"
+        "Install Tailscale on your other devices and sign in to the same tailnet.\n"
+        "Captain needs its own private username and password, stored on this Mac.\n"
         "The Mac must be awake and Local AI must be running.\n")
+    print(f"Private Captain address: https://{hostname}:{CAPTAIN_PORT}", flush=True)
     print(f"Private chat address: https://{hostname}", flush=True)
     print("Restart Local AI if it was already running. Then test chat and generated media from another device.", flush=True)
     return config["remote_access"]
@@ -183,6 +203,37 @@ def disable(root):
     print("Local AI remote routes disabled. Tailscale and unrelated routes were left in place.", flush=True)
 
 
+class NoCrossOriginRedirect(HTTPRedirectHandler):
+    """Refuse URL redirects when Captain credentials are supplied."""
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        raise RuntimeError('Captain HTTPS endpoint redirected; credentials were not forwarded')
+
+
+def verify_captain_access(root, remote):
+    """Check the authenticated tailnet endpoint, not just localhost OpenCode."""
+    from managed_captain import credentials, agent_status
+    if remote.get('captain_url') != f"https://{remote['hostname']}:{CAPTAIN_PORT}":
+        raise RuntimeError('Remote Captain endpoint does not match private tailnet hostname.')
+    agent_status(root)
+    url = remote['captain_url'] + '/agent'
+    opener = build_opener(ProxyHandler({}), NoCrossOriginRedirect())
+    try:
+        with opener.open(Request(url), timeout=20):
+            raise RuntimeError('Remote Captain responded without authentication')
+    except HTTPError as error:
+        if error.code != 401:
+            raise RuntimeError('Remote Captain did not require Basic authentication') from error
+    from base64 import b64encode
+    auth = credentials(root)
+    basic = b64encode((auth['username'] + ':' + auth['password']).encode()).decode()
+    with opener.open(Request(url, headers={'Authorization': 'Basic ' + basic}), timeout=30) as response:
+        agents = json.load(response)
+    if not isinstance(agents, list) or not {'plan', 'build'}.issubset(
+            {a.get('name') for a in agents if isinstance(a, dict)}):
+        raise RuntimeError('Remote endpoint does not expose the actual Captain agents')
+    return {'status': 'passed', 'login_required': True, 'off_device_test': 'pending'}
+
+
 def verify_remote_access(root, remote):
     """Self-check private HTTPS routing. Does not replace a test from another device."""
     if not remote.get("enabled"):
@@ -195,6 +246,7 @@ def verify_remote_access(root, remote):
     for port, target in TARGETS.items():
         if serve.get("Web", {}).get(f"{hostname}:{port}", {}).get("Handlers") != {"/": {"Proxy": target}}:
             raise RuntimeError("Private proxy configuration is missing. Rerun Enable Remote Access.command.")
+    captain = verify_captain_access(root, remote)
     with urlopen(remote["ui_url"] + "/health", timeout=30) as response:
         health = json.load(response)
     if not health.get("status"):
@@ -216,7 +268,9 @@ def verify_remote_access(root, remote):
                     raise RuntimeError("Unexpected media-only endpoint response.") from error
         atomic_json(root / "remote-acceptance-report.json", {
             "checked_at": time.time(), "status": "passed", "ui_url": remote["ui_url"],
-            "media_url": remote["media_url"], "scope": "Mac-side HTTPS and media isolation checks",
+            "media_url": remote["media_url"], "captain_url": remote['captain_url'],
+            "captain_authentication": captain,
+            "scope": "Mac-side private Captain, HTTPS and media-isolation checks",
             "other_device_browser_test": "pending"})
     finally:
         probe.unlink(missing_ok=True)

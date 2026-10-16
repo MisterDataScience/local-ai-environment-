@@ -10,28 +10,46 @@ SearXNG and the reader share **Gluetun's network namespace**, with no second net
 
 For ordinary chat, the launcher registers an authenticated server-side OpenAPI connection, Local AI VPN retrieval. It exposes `vpn_search_web`, `vpn_read_page` and, when configured, `vpn_reverse_image`. Enable it in the chat's Integrations menu, or attach it to a model. Open WebUI owns selection, execution, approvals and continuation; the gateway no longer runs its own tool loop. Source URLs/text and truncation/read-error labels are returned as untrusted data; whether the model cites them correctly is model-dependent. Live WebUI integration remains unverified. Explicit `/search` and `/read` remain unchanged.
 
-## First installation: exact order
+## First Captain installation
 
-1. Install **Docker Desktop for Apple Silicon** using [Docker's official Mac instructions](https://docs.docker.com/desktop/setup/install/mac-install/). It is free for personal use under Docker's published terms. This helper does not install Docker itself or create a Homebrew installation.
-2. Open Docker Desktop and finish its one-time macOS approvals. Wait for the engine to run. Use a local Docker context, not SSH/TCP or a remote daemon. Enable Docker to start at login for easier daily use.
-3. Begin with **2 GB VM memory and 2 CPUs** in Docker's resource settings. This is a starting budget to measure, not a tested guarantee. Container limits total 896 MiB; Linux VM and Docker overhead are additional. The earlier 0.5–1 GB total-infrastructure estimate is not established.
-4. Sign in to your free Proton account and open [WireGuard configuration](https://account.proton.me/u/0/vpn/WireGuard). Generate a configuration for a **free server** and keep it on the Mac. Do not enable paid port-forwarding options. Its `PrivateKey` is sensitive: do not paste it in chat or GitHub.
-5. Download the updated automated ZIP, then extract it into Downloads as `mac-local-ai-installer`.
-6. Run in Terminal:
+The **single `Install Local AI.command`** now installs and verifies Docker Desktop,
+the Proton VPN/reader stack, and the VPN-only Playwright browser automatically.
+There is no separate `Install Local AI with Web Access.command`, `Enable Web
+Access.command`, or `Enable Browser.command` activation step after a new
+Captain installation.
 
-   ```bash
-   /bin/bash "$HOME/Downloads/mac-local-ai-installer/Install Local AI with Web Access.command"
-   ```
+The one-time unavoidable owner actions occur **during** installation:
 
-   To also include private access from your other devices:
+1. The installer checks the official Apple Silicon Docker app's developer
+   signature and macOS Gatekeeper acceptance. If missing, it installs Docker
+   with Apple's standard administrator approval. Read and accept Docker's
+   subscription terms **inside Docker Desktop**. The installer waits for a
+   functioning local Unix-socket Engine and Compose; it never accepts the
+   licence on your behalf or silently uses a remote daemon.
+2. Open [your Proton WireGuard account](https://account.proton.me/u/0/vpn/WireGuard)
+   and create a **free-server WireGuard configuration**. Enter only the
+   `PrivateKey` in the installer Terminal's hidden prompt. Never post it in
+   GitHub or ChatGPT.
+3. The installer pulls the VPN, search/reader and Playwright images, stores
+   their actual immutable digests, starts the local VPN namespace, verifies
+   the authenticated reader and real Playwright MCP connection, then
+   configures Tailscale for remote access to the actual Captain.
 
-   ```bash
-   /bin/bash "$HOME/Downloads/mac-local-ai-installer/Install Local AI with Web Access.command" --remote-access
-   ```
+A failed Docker engine, VPN start or Playwright MCP test stops the Captain
+installation. The installer reports success only when these integrations
+and the authenticated Captain remote service pass its Mac-side checks.
+Live search accuracy, DNS/tunnel-drop tests, and off-device browser
+acceptance still need to be checked on the target Mac.
 
-7. When asked locally, paste **only the `PrivateKey` value**. Terminal does not display it. The helper validates its format and stores it privately. It pulls the three official container images, records immutable image digests and creates the Compose stack. It selects free Proton servers without a fixed country filter. SearXNG/Python versions are selected at first setup and frozen by digest; reruns do not silently upgrade them.
-8. The helper checks the authenticated reader health endpoint and records `web-acceptance-report.json`. Readiness means Gluetun reports healthy. It does **not** establish working search or validated tunnel-drop/DNS privacy. Those report fields remain `pending`.
-9. In Local AI, test `/search Python official tutorial`, then `/read https://www.python.org/ What is this website?`. Check source links and actual retrieved content. Repeat with Small and Everyday text presets. Long pages are truncated to a bounded input budget, not fully indexed.
+ComfyUI and the AI model server do not route through Proton: the tunnel
+is only for authorised AI web retrieval and remote browser operations.
+SearXNG, the reader and Playwright share Gluetun's isolated namespace;
+there is **no host-browser or normal-network fallback**.
+
+You can test `/search Python official tutorial` and
+`/read https://www.python.org/ What is this website?` from WebUI.
+Its OpenAPI integrations still need selection in ordinary Open WebUI
+chats; the main Captain has Playwright MCP provisioned at startup.
 
 ## Optional Yandex reverse image search
 

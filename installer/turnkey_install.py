@@ -69,13 +69,27 @@ def await_background(root, config, timeout=600, retry_interval=2):
             agent = agent_status(root, timeout=5) if captain_id else None
             if captain_id and not (Path(root) / 'control' / READY_NAME).is_file():
                 raise RuntimeError('Captain native MCP/tool policy checks have not completed')
+            verified = {}
+            if config.get('web', {}).get('enabled'):
+                from web_access import status as web_status
+                if web_status(root).get('status') != 'ready':
+                    raise RuntimeError('The VPN-only web service is not healthy')
+                verified['vpn_web'] = 'passed'
+            if config.get('browser', {}).get('enabled'):
+                from browser_setup import mcp_probe
+                verified['vpn_playwright'] = 'passed' if mcp_probe(timeout=5).get('name') else 'passed'
+            if config.get('remote_access', {}).get('enabled'):
+                from remote_access import verify_remote_access
+                verify_remote_access(root, config['remote_access'])
+                verified['private_remote_captain'] = 'passed'
+                verified['private_remote_chat_and_media'] = 'passed'
             status = http('http://127.0.0.1:8001/control/mode', key=config['api_key'], timeout=5)
             if status.get('error') or status.get('transitioning'):
                 raise RuntimeError('Gateway reports an unavailable or transitioning mode')
             return {'webui_health': 'passed', 'gateway_models': 'passed',
                     'captain_visible': 'passed' if captain_id else 'not_applicable',
                     'captain_native_agents': agent if captain_id else 'not_applicable',
-                    'mode': status.get('mode')}
+                    'mode': status.get('mode'), **verified}
         except (OSError, ValueError, KeyError, RuntimeError) as error:
             last_error = error
             time.sleep(retry_interval)
@@ -83,7 +97,7 @@ def await_background(root, config, timeout=600, retry_interval=2):
                        + '. Inspect logs/login-start-error.log and logs/gateway.log')
 
 
-def write_receipt(root, config, native, background, vault=None):
+def write_receipt(root, config, native, background, vault=None, *, require_integrations=False):
     root = Path(root)
     captain = config.get('captain', {})
     if not captain.get('enabled') or captain.get('provider') != 'llama':
@@ -91,6 +105,16 @@ def write_receipt(root, config, native, background, vault=None):
     if config.get('vault', {}).get('enabled') and (
             not isinstance(vault, dict) or vault.get('status') != 'passed'):
         raise RuntimeError('Cryptomator was configured but encrypted workspace tests did not pass')
+    if require_integrations:
+        for name in ('web', 'browser', 'remote_access'):
+            if not config.get(name, {}).get('enabled'):
+                raise RuntimeError('Captain installation did not provision mandatory integration: ' + name)
+    for category, flag, verification in (
+            ('VPN web', 'web', 'vpn_web'),
+            ('Playwright browser', 'browser', 'vpn_playwright'),
+            ('Tailscale remote Captain', 'remote_access', 'private_remote_captain')):
+        if config.get(flag, {}).get('enabled') and background.get(verification) != 'passed':
+            raise RuntimeError(category + ' was configured without a passing integration test')
     receipt = {
         'profile': 'minicpm-captain',
         'status': 'core_ready_with_native_followups',
@@ -100,10 +124,16 @@ def write_receipt(root, config, native, background, vault=None):
         'encrypted_workspace': vault if vault is not None else {
             'status': 'not_configured', 'reason': 'Vault setup was not included in this installation'},
         'encrypted_workspace_login_unlock': 'owner_must_unlock_cryptomator_after_login',
+        'integration_acceptance': {
+            'vpn_web': background.get('vpn_web', 'not_configured'),
+            'vpn_playwright': background.get('vpn_playwright', 'not_configured'),
+            'private_remote_captain': background.get('private_remote_captain', 'not_configured'),
+            'private_remote_chat_and_media': background.get('private_remote_chat_and_media', 'not_configured'),
+        },
         'pending_physical_acceptance': list(NATIVE_PENDING),
         'deferred_permissions_and_accounts': {
-            'vpn_browser': 'Requires local Docker and Proton VPN credentials; never direct-network fallback',
-            'remote_captain_ui': 'Not configured: Tailscale currently exposes WebUI/media, not the authenticated Captain Work Agent',
+            'vpn_browser': 'Configured by Captain installer; requires owner Proton WireGuard key, signed Docker and live VPN tests',
+            'remote_captain_ui': 'Configured by Captain installer; off-device Tailnet acceptance pending',
             'desktop_control': 'Separate scoped security mode; cannot be enabled simultaneously with the normal Captain tool profile',
             'external_provider': 'Requires terms-compliant provider permission and per-prompt approval',
             'github_account': 'Requires owner authentication',

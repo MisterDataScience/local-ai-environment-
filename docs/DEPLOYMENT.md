@@ -22,7 +22,18 @@ and the audit corrections.
    unlock in its own GUI. Confirm the decrypted mounted volume in Terminal.
    The installer registers and validates the encrypted workspace without
    a second post-install setup helper.
-6. Once native acceptance passes, the installer registers login startup,
+6. Still **inside this one installer**, Docker Desktop is installed/verified.
+   Approve its administrator permissions and accept Docker's published licence
+   within its app. Enter the Proton Free WireGuard private key through the
+   hidden Terminal prompt. The installer provisions the VPN reader and
+   VPN-only Playwright browser, starts them and performs live readiness checks.
+7. Tailscale installs and opens. Approve its macOS network extension, sign into
+   your personal tailnet and approve Tailscale HTTPS if prompted. The installer
+   configures three private routes, including the **actual Captain**
+   `https://MAC.TAILNET.ts.net:10000`. You may also provide a fine-grained
+   GitHub token during installation. Missing account credentials do not
+   silently turn into a configured connection.
+8. Once native and network acceptance passes, the installer registers login startup,
    starts the managed Captain Work Agent at `http://127.0.0.1:4096`,
    checks the authenticated agent endpoint and opens Safari. Local login
    credentials are shown in Terminal; `Open Captain.command` displays them
@@ -49,9 +60,9 @@ requires manual unlock after future logins. The installer must not describe thes
 | Start at login | Automatically registered by the Captain installer after native acceptance. A real logout/login check is still required. |
 | Recurring text inference | Run `Schedule AI Task.command`; inspect `Scheduled Task Status.command`. Tool/command routes are blocked and cutoffs are reported as incomplete. |
 | Finite autonomous document batch | Run `Create Autonomous Job.command` and explicitly approve the exact source folder, model and per-file instruction. Manage it through the dedicated Status/Stop/Resume commands. See `AUTONOMOUS-JOBS.md`. No unattended model tool calls. |
-| VPN browser | Set up Docker/Proton through `Enable Web Access.command`, then `Enable Browser.command`. Run `Check Browser.command` and verify tunnel failure stops browsing. |
-| Scoped desktop | Run `Enable Desktop Control.command`, then `Check Desktop Control.command`. Open the Work Agent to use locally approved Finder/Calculator sessions. |
-| Generic external helper | Enable and verify VPN browser first, then run `Enable External Delegation.command`. Provider permission and verified selectors are required. Every exact outgoing prompt needs local approval. |
+| VPN browser | Docker, Proton VPN and Playwright are installed, configured and checked **during** the Captain installer. A VPN-drop/leak stress test remains for the Mac. |
+| Scoped desktop | The restricted code and policy are installed; activation must be separately approved in its isolated control session because it disables normal Captain effectful tools. |
+| Generic external helper | VPN browser is provisioned, but third-party provider automation requires explicit permission, verified selectors and approval for every outgoing prompt. |
 
 Scoped desktop/external automation disables other effectful model tools while
 enabled. Run `Disable Scoped Automation.command` and restart to restore normal
@@ -63,9 +74,11 @@ stop; local rearm does not reactivate old sessions.
 The Captain installer writes `captain-install-readiness.json` in the
 installation root only after encrypted workspace registration and live read/write
 testing, required native text/media tests, the actual Captain worker delegation
-test and the authenticated managed Work Agent/Chat UI startup checks pass. Failed checks abort installation and retain logs for repair.
-The receipt identifies deferred account-bound services and unverified physical
-journeys; it does not claim the whole system has been proven.
+test, the authenticated managed Work Agent/Chat UI startup checks, and
+**live VPN, Playwright and private Tailscale Captain/Chat/media route verification** all pass. Failed checks abort installation and retain logs for repair.
+The receipt identifies account-bound deferred services and unverified physical
+journeys (especially off-device Captain, reboot, memory pressure and VPN-drop);
+it does not claim the whole system has been proven.
 
 The installed `Start Local AI.command` opens the already-running Captain when
 the login supervisor is healthy rather than launching a duplicate backend.

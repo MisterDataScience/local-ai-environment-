@@ -48,9 +48,14 @@ def main(background=False):
         if config.get("web", {}).get("enabled"):
             from web_access import start as start_web
             try:
+                # At login Docker Desktop may not yet be running. Bring it up
+                # before OpenCode verifies its VPN-only Playwright MCP. This
+                # avoids a separate user-run Docker launch or login setting.
+                from docker_setup import start_installed_docker
+                start_installed_docker(timeout=300)
                 start_web(root)
-            except Exception:
-                logging.warning("VPN web service unavailable. Local AI will continue without web access.")
+            except Exception as error:
+                logging.warning("VPN web service unavailable (%s). Local AI has no direct-web fallback.", error)
         if config.get('vault', {}).get('enabled'):
             from vault_backup import snapshot
             try:
@@ -123,8 +128,10 @@ def main(background=False):
         if config.get('captain', {}).get('enabled'):
             print('Captain Work Agent: http://127.0.0.1:4096 (private credentials in control/captain-ui-auth.json)')
         if remote.get("enabled"):
+            print("Private remote Captain:", remote.get("captain_url", "not configured"))
             print("Private remote chat:", remote["ui_url"])
-            print("Connect Tailscale on your other devices, then open that address.")
+            print("Connect Tailscale on Windows/iPad; use the Captain URL for the agent team.")
+            print("Captain requires its separate local Basic Auth login; no public Funnel enabled.")
         print("Select Everyday, Small or Large in the chat's model menu. Models load on a request.")
         print("Open AI Modes.command to choose Gaming, Normal or Max. This applies to all devices.")
         if config.get('vault', {}).get('enabled'):
