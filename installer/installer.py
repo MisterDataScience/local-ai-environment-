@@ -46,7 +46,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
-TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py')
+TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py', 'village.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -578,6 +578,11 @@ def make_launcher(root):
         helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
                           '\nexec .venv/bin/python ' + module + ' --root ' + shlex.quote(str(root)) + '\n')
         helper.chmod(0o755)
+    village_helper = root / 'Agent Village.command'
+    village_helper.write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(str(root / 'control')) +
+                              '\nexec .venv/bin/python village.py --root ' +
+                              shlex.quote(str(root / 'village')) + ' "$@"\n')
+    village_helper.chmod(0o755)
     application = Path.home() / "Applications/Local AI.app"
     if application.exists() and not (application / "Contents/local-ai-owner.txt").exists():
         raise RuntimeError("An unrelated Local AI.app already exists. No application was overwritten.")

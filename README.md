@@ -10,6 +10,13 @@ shared findings and peer messages. Compatible text requests can run concurrently
 against one model; speech and media still use exclusive model handoffs.
 Read [how the captain works](docs/CAPTAIN-AND-WORKERS.md).
 
+The [Agent Village](docs/AGENT-VILLAGE.md) now has an initial local archive,
+source-linked lesson and daughter registry, and read-only Captain routing for
+owner-classified general passages. It requires FileVault for private storage.
+Encrypted Village backup/restore, source deletion, automated founding review
+and native Mac acceptance are still pending. Do not import the real ChatGPT
+export until those remaining privacy and recovery steps are complete.
+
 On a supported 32GB Apple Silicon Mac, **Install Local AI.command now selects
 the MiniCPM Captain profile automatically**. The older named Captain launcher is
 a compatibility alias, not a second installation step. The installer builds the

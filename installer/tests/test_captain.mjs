@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm, readFile, symlink, readdir} from 'node:fs/promises';
+import {mkdtemp, rm, readFile, symlink, readdir, writeFile, mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Captain, {validateTasks} from '../captain.mjs';
@@ -38,8 +38,10 @@ async function fixture(t, options = {}) {
     delete: async ({path}) => {deleted.push(path.id); return {data: true};},
   }};
   const statePath = join(root, 'captain.json');
+  const villageOptions = await options.village?.(root) ?? {};
   const hooks = await Captain({client, directory: root}, {statePath, modeToken: 'gateway:0:max',
-    model: 'local-ai-gateway/local-ai-captain', maxWorkers: 5, maxTasks: options.maxTasks ?? 12, webEnabled: true});
+    model: 'local-ai-gateway/local-ai-captain', maxWorkers: 5, maxTasks: options.maxTasks ?? 12,
+    webEnabled: true, ...villageOptions});
   await hooks['chat.message']({sessionID: root}, {message: {id: 'user'}, parts: messages.get(root)[0].parts});
   function context(callID, agent = 'build', parentID = 'user') {
     messages.get(root).push({info: {id: 'assistant-' + callID, role: 'assistant', agent, parentID},
@@ -87,6 +89,35 @@ test('duplicate work, invalid profiles, excess workers and overlapping writers f
   assert.throws(() => validateTasks([task('a', 'coder'), task('b', 'coder')]), /one editing/);
   assert.throws(() => validateTasks([task('a', 'admin')]), /invalid role/);
   assert.throws(() => validateTasks(Array.from({length: 6}, (_, i) => task('t' + i))), /submit 1/);
+});
+
+test('Village selects an active R daughter, falls back for C, and freezes the identity packet', async t => {
+  const f = await fixture(t, {
+    village: async root => {
+      const villageRoot = join(root, 'village');
+      await mkdir(villageRoot);
+      await writeFile(join(villageRoot, 'village.sqlite'), '');
+      const script = join(root, 'mock-village.cjs');
+      await writeFile(script, `const [, , , , command, identity, value] = process.argv;
+const result = command === 'host-route' ? (value.includes(' R ') ? 'coder.r' : 'coder.general')
+  : command === 'host-packet' ? {id: identity, role: 'coder', revision: 1,
+    instruction: identity === 'coder.r' ? 'Use R expertise.' : '', lessons: [],
+    allowed_collections: ['general']} : [];
+process.stdout.write(JSON.stringify(result));`);
+      return {villageRoot, villagePython: process.execPath, villageScript: script};
+    },
+    run: async ({assignment}) => {
+      if (assignment.task_id === 'r') {
+        assert.equal(assignment.specialist.id, 'coder.r');
+        assert.equal(assignment.specialist.revision, 1);
+      } else assert.equal(assignment.specialist.id, 'coder.general');
+    }
+  });
+  const tasks = [{...task('r', 'coder'), objective: 'Fix an R function'}];
+  const first = JSON.parse(await f.hooks.tool.team_run.execute({tasks}, f.context('r')));
+  assert.equal(first.tasks[0].status, 'completed');
+  const second = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [{...task('c', 'coder'), objective: 'Fix a C function'}]}, f.context('c')));
+  assert.equal(second.tasks[0].status, 'completed');
 });
 
 test('attempt budgets and replay IDs survive errors and a fresh plugin instance', async t => {
