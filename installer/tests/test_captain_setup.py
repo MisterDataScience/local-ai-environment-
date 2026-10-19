@@ -29,6 +29,10 @@ class CaptainSetupTests(unittest.TestCase):
                 self.assertNotIn('task', worker['permission'])
             self.assertEqual(settings['agent']['captain-coder']['permission']['edit'], 'ask')
             self.assertNotIn('edit', settings['agent']['captain-reviewer']['permission'])
+            self.assertEqual(settings['agent']['captain-reviewer']['permission']['village_facilities'], 'allow')
+            self.assertEqual(settings['agent']['captain-coder']['permission']['village_publish'], 'ask')
+            self.assertNotIn('village_practice_prepare', settings['agent']['captain-coder']['permission'])
+            self.assertFalse(settings['tools']['village_publish'])
             self.assertFalse(settings['tools']['team_run'])  # host policy enables after initialization
 
     def test_scoped_automation_cannot_activate_the_team(self):

@@ -496,6 +496,7 @@ def revise_lesson(cx, lid, *, claim, status, approval):
 
 
 def main(argv=None):
+    from village_infrastructure import AREAS, register_commands, dispatch
     parser = argparse.ArgumentParser(description="Owner operated Agent Village, no background jobs")
     parser.add_argument("--root", type=Path, default=Path.home() / "LocalAI-Automated/village")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -536,10 +537,20 @@ def main(argv=None):
         host = commands.add_parser(name)
         host.add_argument("specialist_or_role")
         host.add_argument("value")
+    register_commands(commands)
     args = parser.parse_args(argv)
     cx = connect(args.root)
     try:
-        if args.command == "import":
+        if args.command in AREAS:
+            result = dispatch(cx, args.root, args)
+        elif args.command == "host-facilities":
+            raw = sys.stdin.buffer.read(131073)
+            if len(raw) > 131072:
+                raise ValueError("Host facilities request is too large")
+            # Import under another name: the existing argparse variable is host.
+            from village_infrastructure import host as facility_host
+            result = facility_host(cx, args.root, json.loads(raw))
+        elif args.command == "import":
             print(json.dumps({"source": str(args.source), "bytes": args.source.stat().st_size,
                               "destination": str(args.root), "confirmed": args.confirm}))
             result = import_file(cx, args.root, args.source, confirm=args.confirm)
@@ -587,7 +598,7 @@ def main(argv=None):
             result = search(cx, args.specialist_or_role, args.value)
         else:
             result = read(cx, args.specialist_or_role, args.value)
-        print(json.dumps(result, ensure_ascii=False))
+        print(json.dumps(result, ensure_ascii=False, indent=2 if args.command in AREAS else None))
     finally:
         cx.close()
 

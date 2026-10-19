@@ -1,5 +1,40 @@
 # Integrated release validation
 
+## Village infrastructure preview, 19 October 2026
+
+Development release `2026-10-19-village-infrastructure-preview` extends the
+Agent Village branch; it is not a new deployment variant or a claim that
+`main` or the owner's Mac has been updated. The same canonical ZIP is rebuilt.
+
+The facilities add approved, versioned workshop content; project-scoped durable
+notices and suggestions; and practice cases that pin a workshop revision and
+fabricated input hashes. The host supplies identity and project scope. Native
+approval is required for Build publishing and preparation, and final workshop
+approval remains an owner CLI action. No contributed code is executed by the
+storage service. Practice folders are not OS sandboxes.
+
+Local checks:
+
+- Village/archive and facilities Python: 18 passed. Covers exact approval and
+  replacement, withdrawal, project isolation, explicit practice-copy links,
+  replay receipts across restart, current scope/revision checks, concurrent
+  revocation, bounded inputs, inert malicious source, and migration rollback.
+- Captain setup Python: nine passed; installer Python: 26 passed.
+- Captain and existing OpenCode policy JavaScript: 46 passed. Includes the real
+  Python/SQLite subprocess bridge with synthetic native sessions and approval
+  doubles, rejected/missing approval, Plan refusal and approval-time mode change.
+- Installer build, full contents/permissions/manifest comparison, deterministic
+  rebuild, Python compilation and JavaScript syntax checks are required for the
+  preview artifact. Results are recorded with the pull request.
+
+Existing encrypted Village export/restore and source deletion are unfinished.
+Native Mac installation, actual OpenCode approval UI and local-model use remain
+pending; follow [the acceptance sequence](VILLAGE-INFRASTRUCTURE.md#acceptance-on-your-mac).
+No hosted CI run was dispatched for this change. The earlier release records
+below are historical evidence, not certification of this preview.
+
+## Earlier integrated release
+
 **Release:** `2026-10-14-captain-hardening-2`
 **Date:** 14 October 2026
 **Canonical source:** `main`

@@ -17,6 +17,11 @@ Encrypted Village backup/restore, source deletion, automated founding review
 and native Mac acceptance are still pending. Do not import the real ChatGPT
 export until those remaining privacy and recovery steps are complete.
 
+The Village also has a shared **workshop**, persistent project **noticeboard**,
+**suggestion box**, and **practice cases**. Contributions retain evidence and
+approval history. Read [how to use the Village infrastructure](docs/VILLAGE-INFRASTRUCTURE.md)
+for ordinary Captain requests, exact owner approval commands and practice workflows.
+
 On a supported 32GB Apple Silicon Mac, **Install Local AI.command now selects
 the MiniCPM Captain profile automatically**. The older named Captain launcher is
 a compatibility alias, not a second installation step. The installer builds the

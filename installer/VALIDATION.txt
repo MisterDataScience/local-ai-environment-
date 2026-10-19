@@ -1,3 +1,14 @@
+Village infrastructure preview 2026-10-19:
+18 Village/archive/facility Python tests, nine Captain setup tests, 26 installer
+tests and 46 Captain/OpenCode policy JavaScript tests pass locally. Coverage
+includes the actual Python/SQLite bridge using synthetic native sessions and
+approval doubles, exact workshop approval, project isolation, explicit practice
+links, replay, scope revocation, migration rollback and inert artifact storage.
+Native Mac/OpenCode approvals are NOT RUN. Practice folders are not OS sandboxes.
+Encrypted Village backup/restore and source deletion remain unfinished. Use only
+fabricated or approved general material. See docs/VILLAGE-INFRASTRUCTURE.md and
+docs/RELEASE-VALIDATION.md for commands, acceptance steps and precise scope.
+
 Integrated release 2026-10-09-integrated-1:
 162 installer Python checks: 158 passed, four Apple-only tests skipped on Linux.
 104 payload Python tests passed. 74 JavaScript checks passed. The pinned WebUI

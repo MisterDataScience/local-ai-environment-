@@ -5,6 +5,11 @@ bounded Captain routing to the existing five worker permission templates. It has
 no daemon, schedule, model training, automatic reviews or promotions. The raw
 archive and SQLite database stay outside Git and outside the synchronised vault.
 
+The [Village infrastructure guide](VILLAGE-INFRASTRUCTURE.md) covers the workshop,
+persistent project noticeboard, suggestion box and practice ground, including
+natural-language requests and exact owner approval commands. No conversation
+export is needed to try them with fabricated data.
+
 ## Storage and privacy
 
 The operational directory is `~/LocalAI-Automated/village`. Private imports and

@@ -5,6 +5,18 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Captain, {validateTasks} from '../captain.mjs';
 import {workers} from '../captain-runtime.mjs';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {fileURLToPath} from 'node:url';
+const python = promisify(execFile);
+
+async function realVillage(root) {
+  const villageRoot = join(root, 'village');
+  const script = join(root, 'synthetic-village.py');
+  const installer = fileURLToPath(new URL('../', import.meta.url));
+  await writeFile(script, `import sys\nsys.path.insert(0, ${JSON.stringify(installer)})\nimport village\noriginal = village.connect\nvillage.connect = lambda root: original(root, test_encrypted=True)\nvillage.main()\n`);
+  return {villageRoot, villagePython: 'python', villageScript: script};
+}
 
 const task = (id, role = 'analyst') => ({id, role, objective: 'Investigate ' + id,
   constraints: 'Use supplied evidence; no unrelated work.', evidence: 'Source evidence for ' + id,
@@ -118,6 +130,69 @@ process.stdout.write(JSON.stringify(result));`);
   assert.equal(first.tasks[0].status, 'completed');
   const second = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [{...task('c', 'coder'), objective: 'Fix a C function'}]}, f.context('c')));
   assert.equal(second.tasks[0].status, 'completed');
+});
+
+test('Village facilities run through real Python storage and require native approval for exact content', async t => {
+  const f = await fixture(t, {village: realVillage});
+  const approvals = [];
+  const context = f.context('publish-checklist');
+  context.ask = async request => {approvals.push(request);};
+  const proposal = {area: 'workshop', title: 'Check two inputs', body: 'Small synthetic checklist',
+    kind: 'checklist', content: 'Check input A and input B.', tags: ['inputs'], evidence: ['Synthetic fixture only.'], item_id: '', state: ''};
+  const pending = JSON.parse(await f.hooks.tool.village_publish.execute(proposal, context));
+  assert.equal(approvals[0].permission, 'village_publish');
+  assert.equal(approvals[0].metadata.proposal.content, proposal.content);
+  assert.equal(pending.state, 'pending');
+  const cards = {area: 'workshop', query: '', item_id: ''};
+  assert.deepEqual(JSON.parse(await f.hooks.tool.village_facilities.execute(cards, f.context('list-pending'))), []);
+  await python('python', ['-c', `import sys;sys.path.insert(0,sys.argv[1]);import village;import village_infrastructure as i;c=village.connect(sys.argv[2],test_encrypted=True);i.initialize(c);i.owner_decision(c,'workshop',sys.argv[3],'approved',sys.argv[4],'synthetic owner review',revision=1);c.close()`,
+    fileURLToPath(new URL('../', import.meta.url)), join(f.root, 'village'), pending.id, pending.digest]);
+  const approved = JSON.parse(await f.hooks.tool.village_facilities.execute({...cards, item_id: pending.id}, f.context('read-approved')));
+  assert.equal(approved.content, proposal.content);
+  assert.equal(approved.executable, false);
+  const prep = f.context('prepare'); prep.ask = async request => {approvals.push(request);};
+  const practice = JSON.parse(await f.hooks.tool.village_practice_prepare.execute({item_id: pending.id,
+    brief: 'Compare input A and B.', checks: 'Record what was checked.', fixtures_json: '{"sample.txt":"A and B"}'}, prep));
+  assert.equal(practice.executed, false);
+  assert.equal(await readFile(join(practice.workspace, 'candidate.txt'), 'utf8'), proposal.content);
+  assert.equal(approvals[1].permission, 'village_practice_prepare');
+  const again = JSON.parse(await f.hooks.tool.village_publish.execute(proposal, context));
+  assert.equal(again.id, pending.id);
+  assert.equal(again.revision, 1);
+});
+
+test('facility mutation rejects Plan, missing or rejected native approval and state changes during approval', async t => {
+  const f = await fixture(t, {village: realVillage});
+  const payload = {area: 'suggestions', title: 'A useful helper', body: 'Investigate on request.', evidence: []};
+  const plan = f.context('plan-write', 'plan');
+  plan.ask = async () => {throw Error('must not ask in Plan');};
+  await assert.rejects(f.hooks.tool.village_publish.execute(payload, plan), /require Build/);
+  await assert.rejects(f.hooks.tool.village_publish.execute(payload, f.context('missing-native')), /approval service/);
+  const denied = f.context('denied'); denied.ask = async () => {throw Error('native owner rejected');};
+  await assert.rejects(f.hooks.tool.village_publish.execute(payload, denied), /owner rejected/);
+  const changed = f.context('changed'); changed.ask = async () => {f.status({instance_id: 'gateway', epoch: 1, mode: 'max'});};
+  await assert.rejects(f.hooks.tool.village_publish.execute(payload, changed), /mode changed/);
+  f.status({instance_id: 'gateway', epoch: 0, mode: 'max'});
+  const cards = JSON.parse(await f.hooks.tool.village_facilities.execute({area: 'suggestions', query: '', item_id: ''}, f.context('list-after-rejection')));
+  assert.deepEqual(cards, []);
+});
+
+test('worker facility identity is host assigned and practice preparation stays captain only', async t => {
+  const f = await fixture(t, {village: realVillage, run: async ({path, hooks}) => {
+    const context = f.workerContext(path.id, 'village_publish');
+    context.ask = async () => {};
+    await hooks['tool.execute.before'](context);
+    await assert.rejects(hooks.tool.village_publish.execute({area: 'suggestions', title: 'Spoofed', body: 'No', actor: 'captain'}, context), /unavailable/);
+    const entry = JSON.parse(await hooks.tool.village_publish.execute({area: 'suggestions', title: 'Useful parser', body: 'A bounded future proposal.'}, context));
+    const stored = JSON.parse(await hooks.tool.village_facilities.execute({area: 'suggestions', query: '', item_id: entry.id}, f.workerContext(path.id, 'village_facilities')));
+    assert.equal(stored.author, 'analyst.general');
+    const prep = f.workerContext(path.id, 'village_practice_prepare'); prep.ask = async () => {};
+    await assert.rejects(hooks['tool.execute.before'](prep), /outside this worker/);
+    await assert.rejects(hooks.tool.village_practice_prepare.execute({item_id: 'none', brief: 'No', checks: 'No', fixtures_json: '{}'}, prep), /captain/);
+  }});
+  await f.hooks.tool.village_status.execute({}, f.context('initialize'));
+  const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('facilities')]}, f.context('run-facilities')));
+  assert.equal(result.tasks[0].status, 'completed');
 });
 
 test('attempt budgets and replay IDs survive errors and a fresh plugin instance', async t => {

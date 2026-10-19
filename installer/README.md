@@ -5,6 +5,10 @@ MiniCPM Captain profile. The older named MiniCPM launcher is an alias, not an
 extra step.
 See [the captain explanation](docs/CAPTAIN-AND-WORKERS.md).
 
+Village workshop, noticeboard, suggestions and practice cases use the same
+installer and Captain. Read the [Village infrastructure guide](docs/VILLAGE-INFRASTRUCTURE.md)
+for first use, owner approval commands and the pending native acceptance checks.
+
 This is the single integrated installer for LOCAL AI. It includes vision,
 Apple PDF/OCR, approved file workflows, background operation, the scoped Mac
 controller and generic external reasoning, alongside the existing text,
