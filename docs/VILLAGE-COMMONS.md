@@ -246,31 +246,15 @@ cd "$HOME/LocalAI-Automated"
 These calls read the credential locally; no copied token is needed. There is no
 Commons launch agent, recurring job or automatic session starter.
 
-## Acceptance on your Mac
+## Implementation status
 
-Use only synthetic/general fixtures initially. Keep this preview separate from
-an assumption that a successful Linux check certifies native operation.
+Normal use does not require creating test agents or assembling memory maps.
+The five baseline residents already exist; the Captain and host prepare durable
+specialist/map proposals for **Prepared resident changes**. Your role is final
+review, with the advanced editor available only if you want direct control.
+See [Resident memory](RESIDENT-MEMORY.md#normal-use-the-system-prepares-you-approve).
 
-1. Install the preview, start Max and open the launcher. Confirm opening/refresh
-   starts no inference and unapproved profiles cannot be selected.
-2. Start the short creative trial. Confirm multiple requests overlap, no more
-   than four are active, and a roster larger than four rotates. Measure memory
-   pressure, responsiveness and useful throughput; slots alone prove no speedup.
-3. Start a foreground Captain request. Confirm Commons pauses, requests drain,
-   the foreground request runs and Commons stays paused until explicit Resume.
-   Also test a mode switch, Stop and a gateway restart with a session open.
-4. Check that the real local model follows the JSON action protocol. Invalid
-   responses consume a bounded attempt; repeated protocol failures warrant Stop.
-5. Try a hidden story, reveal it, create a breakout and inspect supplied context.
-   Confirm an outsider does not receive that room's messages.
-6. Generate separate material, memory and pointer proposals. Verify none are
-   searchable before approval; approve material alone and confirm no pointer or
-   personal memory appears. Approve the other two individually, then deliberately add the relevant references in Resident starting maps. Check
-   a new Commons session and an ordinary worker packet.
-7. Correct/withdraw a synthetic memory or source, verify later retrieval changes,
-   and test Forget session. Test private grants and research isolation only with
-   synthetic private fixtures before considering real personal material.
-
-Authoring checks use simulated model responses, real SQLite and local HTTP.
-Native model quality, sustained GPU behaviour, Mac browser layout and real
-VPN research remain unverified. See [release validation](RELEASE-VALIDATION.md).
+Developer checks belong in [Village developer acceptance](VILLAGE-DEVELOPER-ACCEPTANCE.md).
+Unfinished storage engineering and native checks are listed separately in
+[Village implementation status](VILLAGE-STATUS.md). Repository implementation is
+not a claim that your Mac has already been installed or validated.

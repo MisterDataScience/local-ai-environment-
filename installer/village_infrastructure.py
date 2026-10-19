@@ -351,6 +351,9 @@ def host(cx, root, envelope):
         if set(payload) - {"area", "query", "item_id"}:
             raise ValueError("Unknown browse fields")
         return browse(cx, project=project, **payload)
+    if operation=='manage':
+        from resident_management import initialize as management_initialize
+        management_initialize(cx)
     request_id = bounded(envelope["request_id"], 64, "request ID")
     request_digest = sha(encoded(envelope))
     # Serialize mutations and reserve a durable receipt in the same transaction.
@@ -367,6 +370,9 @@ def host(cx, root, envelope):
             return json.loads(old["response"])
         if operation == "publish":
             result = publish(cx, project, actor, envelope["task"], payload)
+        elif operation=='manage' and actor=='captain' and not envelope['task']:
+            from resident_management import prepare as management_prepare
+            result=management_prepare(cx,actor,payload)
         elif operation == "prepare" and actor == "captain":
             result = prepare(cx, root, project, actor, payload)
         else:

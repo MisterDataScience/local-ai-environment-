@@ -325,3 +325,28 @@ p=m.preview_map(c,sid,spec);m.approve_map(c,sid,p['spec'],p['digest'],'owner');c
   const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('mapped-worker')]}, f.context('mapped-start')));
   assert.equal(result.tasks[0].status, 'completed');
 });
+
+test('Captain prepares resident creation without manual owner configuration or publishing it', async t => {
+  const f = await fixture(t, {village: realVillage});
+  const payload = {operation: 'create', spec: {id: 'writer.humaniser', parent: 'writer.general', role: 'writer',
+    tags: ['humaniser'], instruction: 'Consult the approved humaniser workflow and preserve meaning.', status: 'active'}, reason: 'Repeated humanising work'};
+  const result = JSON.parse(await f.hooks.tool.village_manage.execute({payload_json: JSON.stringify(payload)}, f.context('propose-specialist')));
+  assert.equal(result.state, 'pending');
+  const status = JSON.parse(await f.hooks.tool.village_status.execute({}, f.context('inspect-before-owner')));
+  assert.equal(status.some(r => r.id === 'writer.humaniser'), false);
+  const replay = JSON.parse(await f.hooks.tool.village_manage.execute({payload_json: JSON.stringify(payload)}, f.context('propose-specialist')));
+  assert.equal(replay.id, result.id);
+  await assert.rejects(f.hooks.tool.village_manage.execute({payload_json: JSON.stringify(payload)}, f.context('plan-proposal', 'plan')), /captain in Build/);
+  const bad = {...payload, operation: 'approve'};
+  await assert.rejects(f.hooks.tool.village_manage.execute({payload_json: JSON.stringify(bad)}, f.context('self-approve')), /unavailable|scope|input/);
+});
+
+test('Commons-style worker cannot access Captain lifecycle management', async t => {
+  const f = await fixture(t, {village: realVillage, run: async ({path, hooks}) => {
+    const context = f.workerContext(path.id, 'village_manage');
+    await assert.rejects(hooks['tool.execute.before'](context), /outside this worker/);
+    await assert.rejects(hooks.tool.village_manage.execute({payload_json: '{}'}, context), /captain in Build/);
+  }});
+  const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('no-lifecycle')]}, f.context('worker-lifecycle')));
+  assert.equal(result.tasks[0].status, 'completed');
+});

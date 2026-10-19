@@ -1,3 +1,17 @@
+Prepared resident management preview 2026-10-19:
+142 focused checks: nine management, 16 Commons, eight layered-memory, 18 Village/
+facilities, nine Captain setup, 26 installer, six Commons HTTP/transport,
+49 Captain/OpenCode JavaScript and one builder regression. Covers system-prepared
+maps with no inference, final owner review, complete Captain specialist proposals,
+activation only on approval, revision/retirement, replay, stale/rejected/expired
+proposals and denial to workers. Baseline roles need no manual creation.
+Python/JavaScript syntax, exact installer/source checks and deterministic rebuild
+verified for publication. No GitHub Actions used. Native Mac acceptance remains
+pending; encrypted backup/restore, full source deletion and founding-corpus
+analysis remain engineering work. They are not owner setup instructions.
+See docs/RESIDENT-MEMORY.md, docs/VILLAGE-STATUS.md and current release validation.
+Earlier records below are historical.
+
 Layered resident-memory preview 2026-10-19:
 130 focused checks: eight new starting-map Python, 15 Commons core, 18 Village/
 archive/facilities, nine Captain setup, 26 installer, six Commons HTTP/transport,

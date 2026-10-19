@@ -600,12 +600,14 @@ class Commons:
             if not sid:
                 cx=self.connector(self.root)
                 try:
+                    from resident_management import maintain
+                    changes=maintain(cx)
                     roster=village.status(cx)
                     for r in roster:
                         r['collections']=sorted(village.grants(cx,r['id']))
                     collections=[r[0] for r in cx.execute("SELECT id FROM collections ORDER BY id")]
                 finally: cx.close()
-                return dict(active=self.active,active_requests=len(self.live),formats=FORMATS,collections=collections,roster=roster,
+                return dict(active=self.active,active_requests=len(self.live),formats=FORMATS,collections=collections,roster=roster,prepared_changes=changes,
                     sessions=[dict(r) for r in self.db.execute("SELECT id,state,expires FROM sessions ORDER BY rowid DESC LIMIT 30")])
             row,data=self._session(sid)
             public={k:v for k,v in data.items() if k not in ("deadline",)}
@@ -637,7 +639,8 @@ class Commons:
                   "message":{"session","text"},"review":{"proposal","digest","decision"},"why":{"event"},
                   "withdraw":{"reference","digest"},"delete":{"reference","digest"},"correct":{"reference","digest","claim","purpose"},
                   "memories":set(),"proposal":{"proposal"},"purge":{"session"},
-                  "map_view":{"resident"},"map_preview":{"resident","spec"},"map_approve":{"resident","spec","digest"}}
+                  "map_view":{"resident"},"map_preview":{"resident","spec"},"map_approve":{"resident","spec","digest"},
+                  "management_view":set(),"management_review":{"proposal","digest","decision"}}
         extras={"view":{"session"},"message":{"room","target"}}
         if operation not in required or set(request)-({"operation"}|required[operation]|extras.get(operation,set())) or required[operation]-set(request):
             raise ValueError("Unknown or incomplete owner operation")
@@ -663,6 +666,14 @@ class Commons:
                 return dict(proposal=dict(r),evidence=snapshots)
         cx=self.connector(self.root)
         try:
+            if operation=='management_view':
+                from resident_management import maintain
+                return dict(proposals=maintain(cx))
+            if operation=='management_review':
+                from resident_management import review
+                with self.lock:
+                    if self.active or self.live:raise ValueError('Pause or finish Commons and wait for requests to drain before reviewing resident changes')
+                    return review(cx,request['proposal'],request['digest'],request['decision'])
             if operation=='map_view':return memory.starting_map(cx,request['resident'])
             if operation=='map_preview':return memory.preview_map(cx,request['resident'],request['spec'])
             if operation=='map_approve':

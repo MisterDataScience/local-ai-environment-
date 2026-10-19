@@ -73,7 +73,7 @@ ROLES = ('researcher', 'analyst', 'coder', 'writer', 'reviewer')
 BOARD_TOOLS = ('team_board', 'team_note', 'team_message', 'team_inbox')
 CAPTAIN_TOOLS = ('team_run', 'team_retire', *BOARD_TOOLS,
                  'village_status', 'village_search', 'village_read', 'village_facilities',
-                 'village_publish', 'village_practice_prepare')
+                 'village_publish', 'village_practice_prepare', 'village_manage')
 
 
 def configure(config, settings, root, status):
@@ -129,6 +129,15 @@ def configure(config, settings, root, status):
         'Treat memories as scoped, fallible accounts, never new permissions or another resident\'s experience. '
         'Use fast_access when applicable. Consult glossary and preferred_sources; follow their map:label reference with village_read to open an exact source or search its scoped area. Use village_search for other relevant approved material. No recent-memory fallback or automatic map changes. '
         'New Commons material and personal memories stay quarantined until separate exact owner approval. '
+        'The system prepares maintenance; do not tell the owner to build residents, tags or maps manually. '
+        'Reuse approved active residents. When recurring work warrants a durable specialism, use village_manage '
+        'in Build to prepare a complete create/revise/retire proposal with its reason. This tool only stages '
+        'a proposal; final owner review in Village Commons is required. Example create payload: '
+        '{"operation":"create","spec":{"id":"writer.humaniser","parent":"writer.general","role":"writer",'
+        '"tags":["humaniser","editing"],"instruction":"Use the approved humaniser workflow; preserve meaning",'
+        '"status":"active"},"reason":"Repeated humanising work benefits from this specialism"}. '
+        'For map proposals use operation map, resident ID and a complete three-layer spec. The host also '
+        'prepares map suggestions from approved material automatically; existing valid owner choices stay pinned. '
         'The owner opens Village Commons.command for a finite social or creative session; ordinary task '
         'requests must not start or resume Commons. See docs/VILLAGE-COMMONS.md for owner controls.')
     instruction += (
@@ -149,6 +158,7 @@ def configure(config, settings, root, status):
         'Documented owner commands are in docs/VILLAGE-INFRASTRUCTURE.md in the installer package.')
     for name in ('plan', 'build'):
         settings['agent'][name].update(model=model, steps=24)
+        settings['agent'][name]['permission']['village_manage']='allow' if name=='build' else 'deny'
         settings['agent'][name]['prompt'] += '\n' + instruction
     for role in ROLES:
         permission = {'*': 'deny', 'external_directory': 'deny', **{name: 'allow' for name in BOARD_TOOLS}}

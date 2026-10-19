@@ -1,5 +1,7 @@
 # LOCAL AI
 
+The host creates the five baseline residents automatically. The Captain can prepare complete specialist changes, and approved work prepares memory-map suggestions for owner review. [Normal use](docs/RESIDENT-MEMORY.md#normal-use-the-system-prepares-you-approve) requires no manual agent or map setup.
+
 Residents now use an [owner-curated starting map](docs/RESIDENT-MEMORY.md): fast-access memories, a glossary of deeper own memories, and preferred Library or Archive workflows. The owner previews and approves map changes separately from approving memories or documents.
 
 The optional [Village Commons](docs/VILLAGE-COMMONS.md) preview adds finite social and creative sessions, four active residents, owner-visible private drafts, and separately approved personal memories. Open `Village Commons.command` after installing the preview; the guide includes a five-minute first session.

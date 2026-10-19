@@ -19,42 +19,51 @@ collection. This release does not invent a humaniser profile, manufacture a
 workflow, or guess a file location. You select an existing approved resident and
 real approved references or permitted collection areas.
 
-## Set up a resident
+## Normal use: the system prepares, you approve
 
-After installing this preview, start LOCAL AI and open
-`~/LocalAI-Automated/Village Commons.command`. You can edit maps without opening a
-Commons gathering or running inference. FileVault must be On for Village access.
+The five baseline residents are created automatically. You do not need to create
+agents, invent tags, write their prompts or assemble maps before using the system.
 
-1. Open **Resident starting maps** and select the resident.
-2. Click **Load approved map**. Its current map and revision history are shown.
-   A resident without a map begins with three empty layers.
-3. Under **Fast-access memories**, click **Add entry**, name it, select one of
-   that resident's approved memories and explain when it is useful.
-4. Under **Deeper-memory glossary**, add a specific own memory or choose **Search
-   my deeper memories**, give it a useful name and search words, and select the
-   permitted memory collections to search. For example, “R plotting lessons”
-   could search the resident's own records for “ggplot”.
-5. Under **Preferred Library and Archive sources**, select an approved document,
-   a Library area, an Archive area, or an exact citation from existing Village
-   search. Area entries need search words. For example, name a Library area
-   “Humaniser workflow” and search for “humaniser”, or select the exact workflow
-   document if it has already been approved into the Library.
-6. Click **Preview exact map**. Inspect the resident, references, scopes, selected
-   memory claims, intended use and digest. Preview makes no persistent map change.
-7. Pause/finish any Commons session and wait for active requests to drain. Click
-   **Approve previewed map** to approve that exact content and revision.
+Use the Captain normally in Build. It reuses existing approved residents. When
+recurring work warrants a durable specialist, the Captain can prepare a complete
+creation proposal: identity, parent role, instructions, tags, intended active or
+experimental state, and reason. It can also propose a revision or retirement.
+These are pending proposals, not new inference processes. No agent can approve
+its own creation, profile change or map.
 
-Labels must be distinct across the whole map, with at most 60 characters each.
-The combined navigation record is limited to 5,000 UTF-8 bytes, so the entry-count
-limits are ceilings, not a promise that every field can be filled to its maximum.
-Keep labels and directions short. Selective reading supplies the detail later.
-The chooser lists the bounded owner inspection results; an older existing
-reference can also be entered using **Advanced JSON editing**.
+Approved memories, material pointers and matching Library document titles also
+prepare map suggestions automatically when the owner dashboard opens or refreshes.
+The host retains valid existing owner choices, proposes suitable procedure or
+revised-belief memories for fast access, indexes other own memories, and suggests
+relevant source references. This preparation uses bounded local bookkeeping, with
+no extra model calls and no background inference. It is a simple candidate policy,
+not a claim to understand every document's meaning. The Captain can propose a
+more deliberate complete map when needed.
 
-To remove an entry, use **Remove entry**, preview and approve. To clear the
-starting map, remove all entries, preview and approve the empty layers. This
-clears the current map without deleting deeper memories or its map revision
-history. No map changes are made by merely editing the form or switching pages.
+The ordinary owner flow is:
+
+1. Do your work or open a Commons gathering. Existing residents already work
+   without a configured map.
+2. Review any proposed durable memories or material in **Final review inbox**.
+   Only approved inputs can become suggestions for a lasting map.
+3. In **Prepared resident changes**, read the proposed profile or complete map,
+   its reason, scope and exact content. Approve or reject it. No manual map entry
+   or terminal command is required.
+4. The host creates/updates the approved resident or publishes the approved map.
+   Approved active specialists become available to normal routing and subsequent
+   Commons gatherings. New assignments receive their updated starting context.
+
+Open `Village Commons.command` for owner review; opening it does not start a
+Commons session or any inference. Pause/finish a gathering before final review.
+Rejected identical suggestions are not repeatedly presented. Pending proposal
+content expires after seven days. Existing residents keep working while you leave
+proposals undecided. There is no automatic publication, grant expansion, extra
+model loading or increase to concurrency.
+
+Commons residents still cannot spawn agents, delegate or outsource. Persistent
+specialist proposals come from the ordinary Captain, outside Commons. System map
+preparation can follow a Commons memory approval, but approval of the memory and
+approval of its new starting-map placement remain separate decisions.
 
 ## What the agent actually sees
 
@@ -138,12 +147,50 @@ retrieval. Clearing or editing a map does not retroactively erase context alread
 supplied to an active worker. Start a fresh worker assignment to inspect its new
 starting packet; subsequent Commons turns rebuild their scoped context.
 
+## Advanced: manual overrides
+
+Manual editing is optional. To override a prepared map, open
+`~/LocalAI-Automated/Village Commons.command`. You can edit maps without opening a
+Commons gathering or running inference. FileVault must be On for Village access.
+
+1. Open **Resident starting maps** and select the resident.
+2. Click **Load approved map**. Its current map and revision history are shown.
+   A resident without a map begins with three empty layers.
+3. Under **Fast-access memories**, click **Add entry**, name it, select one of
+   that resident's approved memories and explain when it is useful.
+4. Under **Deeper-memory glossary**, add a specific own memory or choose **Search
+   my deeper memories**, give it a useful name and search words, and select the
+   permitted memory collections to search. For example, “R plotting lessons”
+   could search the resident's own records for “ggplot”.
+5. Under **Preferred Library and Archive sources**, select an approved document,
+   a Library area, an Archive area, or an exact citation from existing Village
+   search. Area entries need search words. For example, name a Library area
+   “Humaniser workflow” and search for “humaniser”, or select the exact workflow
+   document if it has already been approved into the Library.
+6. Click **Preview exact map**. Inspect the resident, references, scopes, selected
+   memory claims, intended use and digest. Preview makes no persistent map change.
+7. Pause/finish any Commons session and wait for active requests to drain. Click
+   **Approve previewed map** to approve that exact content and revision.
+
+Labels must be distinct across the whole map, with at most 60 characters each.
+The combined navigation record is limited to 5,000 UTF-8 bytes, so the entry-count
+limits are ceilings, not a promise that every field can be filled to its maximum.
+Keep labels and directions short. Selective reading supplies the detail later.
+The chooser lists the bounded owner inspection results; an older existing
+reference can also be entered using **Advanced JSON editing**.
+
+To remove an entry, use **Remove entry**, preview and approve. To clear the
+starting map, remove all entries, preview and approve the empty layers. This
+clears the current map without deleting deeper memories or its map revision
+history. No map changes are made by merely editing the form or switching pages.
+
+
 ## Upgrade, retention and acceptance
 
 The additive resident-memory schema migration from v1 to v2 runs on the next
-explicit approved write. It preserves approved documents, memories, pointers,
-evidence and correction history. Reads of a v1 store do not manufacture a map or
-migrate data silently. Unknown future versions are refused by the write path.
+explicit approved write or owner dashboard maintenance operation. It preserves approved documents, memories, pointers,
+evidence and correction history. Ordinary memory reads do not manufacture a map. Dashboard maintenance may
+initialize the proposal store, but only approval can publish a starting map. Unknown future versions are refused by the write path.
 Migration failure rolls back the map tables and version change together.
 
 Map revision history preserves prior approved directions. Removing a target or
@@ -151,15 +198,8 @@ clearing the current map does not purge that history, old session copies, downlo
 or backups. Full source deletion and encrypted Village backup/restore remain
 unfinished. Use synthetic/general material initially, as in the Commons guide.
 
-On your Mac, first create or select an approved synthetic memory and a synthetic
-workflow document. Pin the memory, add a glossary topic, and select the workflow.
-Confirm Preview alone changes nothing. Approve the map, open a new Captain worker
-assignment or Commons session, and inspect that it receives the short map rather
-than the full workflow. Ask it to consult the named workflow and verify that the
-host returns the correct document. Correct the memory, confirm the old entry is
-withheld, then preview/reapprove it. Also try a synthetic private collection and
-confirm its entries are absent from a General request.
-
-Focused authoring checks use real SQLite, the Python subprocess bridge and
-synthetic native sessions. Native Mac browser layout, real local-model navigation
-quality, sustained performance and installation acceptance remain pending.
+Developer acceptance checks are listed in [Village developer acceptance](VILLAGE-DEVELOPER-ACCEPTANCE.md).
+They are not everyday setup instructions and do not mean you must build residents
+or maps by hand. Real local-model behaviour and Mac installation remain unverified
+on this authoring host. Remaining storage features are tracked separately in
+[Village implementation status](VILLAGE-STATUS.md).

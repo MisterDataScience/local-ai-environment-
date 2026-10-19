@@ -367,6 +367,21 @@ class CommonsTests(unittest.TestCase):
         # Normal model action dispatch cannot approve or change a starting map.
         with self.assertRaises(PermissionError):self.apply(sid,'writer.general',lambda refs:dict(action='map_approve',text='No'))
 
+    def test_owner_page_prepares_maps_without_starting_inference_and_reviews_them(self):
+        cx=self.connector(self.c.root)
+        ref=memory.approve(cx,dict(id='proposal:prepared-map',actor='writer.general',kind='memory',digest='prepared',scopes=['general'],payload=dict(kind='procedure',text='Preserve meaning while editing.',purpose='When editing')),[],'owner')['reference']
+        cx.close()
+        overview=self.c.execute(dict(operation='view'))
+        self.assertEqual(self.engine.calls,[])
+        self.assertIsNone(overview['active'])
+        proposals=overview['prepared_changes'];self.assertEqual(len(proposals),1)
+        self.c.execute(dict(operation='management_review',proposal=proposals[0]['id'],digest=proposals[0]['digest'],decision='approve'))
+        cx=self.connector(self.c.root)
+        self.assertEqual(memory.packet(cx,'writer.general',['general'])['fast_access'][0]['id'],ref)
+        cx.close()
+        self.assertEqual(self.c.execute(dict(operation='management_view'))['proposals'],[])
+        self.assertEqual(self.engine.calls,[])
+
     def test_token_budget_stops_without_consuming_unbounded_failed_retries(self):
         sid=self.new(token_budget=4096,turns=48);self.finished(sid)
         self.assertLessEqual(self.c.view(sid)['data']['reserved'],4096)

@@ -1,5 +1,39 @@
 # Integrated release validation
 
+## Prepared resident management, 19 October 2026
+
+Release `2026-10-19-resident-management-preview` removes routine manual agent/map
+setup from the user flow. The host seeds five baseline residents. Captain Build
+can prepare complete create/revise/retire/map proposals using a host-assigned
+identity and durable replay receipt. Proposal preparation needs no separate
+native permission prompt because it cannot publish, activate, expand grants or
+run inference. Exact final owner review in the dashboard remains required.
+Workers and Commons cannot call Captain lifecycle management.
+
+Dashboard maintenance prepares map suggestions from approved own memories,
+material pointers and Library titles matched against approved role/tag/profile
+terms. It preserves valid existing pins, stages changed bindings and source
+removals, suppresses identical rejected drafts, and expires pending content.
+This is bounded deterministic candidate preparation, not semantic understanding
+or a new model/background job. No pending map enters a resident packet.
+
+142 focused checks pass: nine management, 16 Commons core, eight layered-memory,
+18 Village/facility, nine Captain setup, 26 installer, six Commons HTTP/transport,
+49 Captain/OpenCode JavaScript and one builder regression. New cases cover no
+manual baseline creation, automatic prepared maps, separate final review, no
+self-approval, stale parent/map refusal, explicit approved activation, revision/
+retirement, duplicate/rejected/expired proposals, real host receipts and native
+worker tool denial. The owner API prepares/reviews a map with zero inference.
+Python/JavaScript syntax and deterministic installer/source verification are
+checked for publication. No hosted Actions run is dispatched or rerun.
+
+Normal instructions, optional manual overrides, developer acceptance and remaining
+engineering work are now separate documents. Full encrypted Village recovery,
+complete source deletion and automated founding-corpus analysis remain unfinished
+engineering, not owner setup tasks. Native Mac/model/browser acceptance remains
+unrun on this authoring host. See VILLAGE-STATUS.md and
+VILLAGE-DEVELOPER-ACCEPTANCE.md for the exact boundary.
+
 ## Layered resident-memory preview, 19 October 2026
 
 Release `2026-10-19-layered-memory-preview` replaces automatic recent-memory

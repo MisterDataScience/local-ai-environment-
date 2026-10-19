@@ -1,5 +1,7 @@
 # Agent Village: first secure slice
 
+The host creates the five baseline residents automatically. The Captain can prepare complete specialist changes, and approved work prepares memory-map suggestions for owner review. [Normal use](RESIDENT-MEMORY.md#normal-use-the-system-prepares-you-approve) requires no manual agent or map setup.
+
 Residents now use an [owner-curated starting map](RESIDENT-MEMORY.md): fast-access memories, a glossary of deeper own memories, and preferred Library or Archive workflows. The owner previews and approves map changes separately from approving memories or documents.
 
 The optional [Village Commons](VILLAGE-COMMONS.md) adds explicitly opened, finite social and creative gatherings. It has four active places in Max, read-scoped sources, isolated transient work, individual memories and separate exact owner approvals for every lasting change. This mode does not start from login or ordinary Captain requests.
