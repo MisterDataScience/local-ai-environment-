@@ -295,3 +295,33 @@ test('host enforces twelve worker inference attempts and a fixed native identity
   const ledger = JSON.parse(await readFile(f.statePath));
   assert.equal(Object.values(ledger.turns)[0].tasks[0].modelSteps, 12);
 });
+
+test('worker starting maps reach the native packet and follow approved workflows through real storage', async t => {
+  const f = await fixture(t, {village: async root => {
+    const options = await realVillage(root);
+    await python('python', ['-c', `import sys;sys.path.insert(0,sys.argv[1]);import village;import village_memory as m
+c=village.connect(sys.argv[2],test_encrypted=True);sid='analyst.general'
+def proposal(id,kind,payload):return dict(id=id,actor=sid,kind=kind,digest=id,scopes=['general'],payload=payload)
+a=m.approve(c,proposal('memory-one','memory',dict(kind='procedure',text='A useful editing lesson',purpose='When editing')),[],'owner')
+b=m.approve(c,proposal('doc-one','library',dict(title='Humaniser workflow',text='Approved workflow body')),[],'owner')
+spec=dict(fast_access=[dict(target=a['reference'],label='Editing lesson')],glossary=[dict(target='memories',label='Past editing',query='editing')],preferred_sources=[dict(target=b['reference'],label='Humaniser workflow')])
+p=m.preview_map(c,sid,spec);m.approve_map(c,sid,p['spec'],p['digest'],'owner');c.close()`,
+      fileURLToPath(new URL('../', import.meta.url)), options.villageRoot]);
+    return options;
+  }, run: async ({path, assignment, hooks}) => {
+    assert.equal(assignment.specialist.id, 'analyst.general');
+    const map = assignment.specialist.personal;
+    assert.equal(map.fast_access[0].claim, 'A useful editing lesson');
+    assert.equal(map.glossary[0].reference, 'map:Past editing');
+    assert.equal(map.preferred_sources[0].reference, 'map:Humaniser workflow');
+    assert.equal(JSON.stringify(map).includes('Approved workflow body'), false);
+    const context = f.workerContext(path.id, 'village_read');
+    await hooks['tool.execute.before'](context);
+    const source = JSON.parse(await hooks.tool.village_read.execute({citation: 'map:Humaniser workflow'}, context));
+    assert.equal(source.text, 'Approved workflow body');
+    const memories = JSON.parse(await hooks.tool.village_read.execute({citation: 'map:Past editing'}, f.workerContext(path.id, 'village_read')));
+    assert.equal(memories[0].claim, 'A useful editing lesson');
+  }});
+  const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('mapped-worker')]}, f.context('mapped-start')));
+  assert.equal(result.tasks[0].status, 'completed');
+});

@@ -324,7 +324,7 @@ def grants(cx, sid):
     return own & grants(cx, row[0]) if row[0] else own
 
 
-def search(cx, sid, query, *, request_collections=("general",), limit=5, role=None, title=None, owner=False):
+def search(cx, sid, query, *, request_collections=("general",), limit=5, role=None, title=None, owner=False, archive_only=False):
     if not owner:
         specialist(cx, sid)
     allowed = set(request_collections) if owner else grants(cx, sid) & set(request_collections)
@@ -350,7 +350,7 @@ def search(cx, sid, query, *, request_collections=("general",), limit=5, role=No
     sql += " ORDER BY rank LIMIT ?"
     params.append(limit)
     results = [dict(row) for row in cx.execute(sql, params)]
-    if not owner:
+    if not owner and not archive_only:
         from village_memory import document_search,search_memories
         results += document_search(cx,sid,query,allowed,limit)
         personal=search_memories(cx,sid,query,allowed)
@@ -359,6 +359,10 @@ def search(cx, sid, query, *, request_collections=("general",), limit=5, role=No
 
 
 def read(cx, sid, citation, *, request_collections=("general",), max_chars=2500, owner=False):
+    if isinstance(citation,str) and citation.startswith('map:'):
+        if owner:raise PermissionError('Starting-map lookup needs a resident identity')
+        from village_memory import follow_map
+        return follow_map(cx,sid,citation[4:],request_collections,max_chars)
     if isinstance(citation,str) and citation.startswith('memory:'):
         from village_memory import read_memory
         result=read_memory(cx,sid,citation,request_collections,owner)

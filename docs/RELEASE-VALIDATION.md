@@ -1,5 +1,38 @@
 # Integrated release validation
 
+## Layered resident-memory preview, 19 October 2026
+
+Release `2026-10-19-layered-memory-preview` replaces automatic recent-memory
+selection with separately owner-approved starting maps. Identity and profile
+instructions remain first; curated fast-access memories, deeper-memory glossary
+entries and preferred Library/Archive sources guide selective reading. Named
+`map:` references resolve through the existing read tool with the current resident
+identity, request scopes, approved target revision and live source checks.
+The additive v1-to-v2 migration preserves approved data and rolls back on failure.
+The dashboard provides entry selectors, intended-use fields, scoped search topics,
+exact preview/final approval, clearing and revision inspection. It starts no inference.
+
+Focused checks for this update: eight new starting-map Python, 15 Commons core,
+18 Village/archive/facilities, nine Captain setup, 26 installer, six Commons
+HTTP/transport, 47 Captain/OpenCode JavaScript and one release-builder regression:
+130 passing checks. The JavaScript cases include the real Python/SQLite bridge
+supplying a curated native worker packet and following a named workflow and
+own-memory topic. Tests cover no recency fallback, own-memory isolation, private
+scopes, stale target/map digests, explicit publication versus map approval,
+withdrawal/correction/deletion, area-specific retrieval, navigation bounds, map
+clearing, migration preservation, rollback and future-version write refusal.
+
+Python and JavaScript syntax, source/installer contents and permissions, and an
+identical deterministic second ZIP build are checked for the published artifact.
+The existing gateway import dependency is supplied from the authoring runtime's
+pip-vendored requests; no package download is needed. Native Mac browser layout,
+real model navigation quality, installation and performance remain unverified.
+Village encrypted backup/restore and complete source deletion are still pending;
+removing a map entry does not erase map history or previously supplied context.
+See [Resident memory and starting maps](RESIDENT-MEMORY.md) for usage and limits.
+No Actions were dispatched or rerun. The publishing commit uses `[skip ci]`.
+The earlier preview evidence below is historical.
+
 ## Village Commons preview, 19 October 2026
 
 Development release `2026-10-19-village-commons-preview` extends the same draft

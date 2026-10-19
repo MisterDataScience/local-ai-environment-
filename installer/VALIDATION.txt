@@ -1,3 +1,15 @@
+Layered resident-memory preview 2026-10-19:
+130 focused checks: eight new starting-map Python, 15 Commons core, 18 Village/
+archive/facilities, nine Captain setup, 26 installer, six Commons HTTP/transport,
+47 Captain/OpenCode JavaScript and one release-builder regression. Includes real
+SQLite and Python subprocess navigation, curated native worker packets, separate
+map approval, scoped workflow/area lookup, stale digests, no recency fallback,
+source withdrawal and migration rollback. Source/ZIP integrity, reproducibility
+and Python/JavaScript syntax checked for publication. Native Mac browser/model/
+installation/performance acceptance remains pending. No GitHub Actions used.
+See docs/RESIDENT-MEMORY.md and current docs/RELEASE-VALIDATION.md.
+Earlier preview results below are historical.
+
 Village Commons preview 2026-10-19:
 14 Commons core and six Commons gateway/transport Python checks pass with
 synthetic responses, real SQLite and local HTTP. Existing affected suites:

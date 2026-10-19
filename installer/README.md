@@ -1,5 +1,7 @@
 # LOCAL AI installer
 
+Residents now use an [owner-curated starting map](docs/RESIDENT-MEMORY.md): fast-access memories, a glossary of deeper own memories, and preferred Library or Archive workflows. The owner previews and approves map changes separately from approving memories or documents.
+
 The optional [Village Commons guide](docs/VILLAGE-COMMONS.md) explains the new `Village Commons.command` owner dashboard: four active residents in Max, bounded gatherings, creative formats, hidden drafts, exact final approvals and individual memories. Opening the dashboard starts no inference.
 
 The Work Agent includes a captain and up to five temporary workers. The **Install Local AI.command** launcher automatically installs the chosen

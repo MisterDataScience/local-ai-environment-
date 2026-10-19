@@ -1,5 +1,7 @@
 # Agent Village: first secure slice
 
+Residents now use an [owner-curated starting map](RESIDENT-MEMORY.md): fast-access memories, a glossary of deeper own memories, and preferred Library or Archive workflows. The owner previews and approves map changes separately from approving memories or documents.
+
 The optional [Village Commons](VILLAGE-COMMONS.md) adds explicitly opened, finite social and creative gatherings. It has four active places in Max, read-scoped sources, isolated transient work, individual memories and separate exact owner approvals for every lasting change. This mode does not start from login or ordinary Captain requests.
 
 The Village adds a durable archive, source-linked lessons, a daughter register and

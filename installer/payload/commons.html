@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Village Commons</title><style>
 :root{color-scheme:dark;font:16px system-ui;background:#101820;color:#e9ede9}body{max-width:1180px;margin:auto;padding:26px}
-h1{font-size:2.2rem;margin-bottom:6px}h2{font-size:1.2rem}p{line-height:1.55;color:#bac9c7}button,input,select,textarea{font:inherit;border:1px solid #4a6866;border-radius:6px;padding:9px;background:#172a30;color:#fff}button{cursor:pointer;margin:3px}button:hover{background:#25423e}button:disabled{opacity:.45;cursor:default}textarea{width:95%;min-height:90px}label{display:block;margin:12px 0}input[type=checkbox]{margin-right:8px}input[type=number]{width:100px}select[multiple]{min-height:90px}details{background:#18282e;border:1px solid #334f52;border-radius:9px;padding:14px;margin:16px 0}summary{cursor:pointer;font-weight:600}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.card{background:#192c32;border:1px solid #365257;border-radius:8px;padding:14px;margin:10px 0;overflow-wrap:anywhere}.small{font-size:.85rem;color:#9fb9b3}.text{white-space:pre-wrap;line-height:1.5;overflow-wrap:anywhere}#notice{min-height:26px;color:#efcf96}#inspection{white-space:pre-wrap;background:#0b151b;padding:15px;max-height:65vh;overflow:auto;font-size:.85rem}nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.tag{color:#95d7bd;font-size:.85rem}.error{color:#ffb0a0}a{color:#b3dfcf}.empty{padding:20px;color:#8da7a3}
+h1{font-size:2.2rem;margin-bottom:6px}h2{font-size:1.2rem}p{line-height:1.55;color:#bac9c7}button,input,select,textarea{font:inherit;border:1px solid #4a6866;border-radius:6px;padding:9px;background:#172a30;color:#fff}button{cursor:pointer;margin:3px}button:hover{background:#25423e}button:disabled{opacity:.45;cursor:default}textarea{width:95%;min-height:90px}label{display:block;margin:12px 0}input[type=checkbox]{margin-right:8px}input[type=number]{width:100px}select{max-width:100%}select[multiple]{min-height:90px}details{background:#18282e;border:1px solid #334f52;border-radius:9px;padding:14px;margin:16px 0}summary{cursor:pointer;font-weight:600}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.card{background:#192c32;border:1px solid #365257;border-radius:8px;padding:14px;margin:10px 0;overflow-wrap:anywhere}.small{font-size:.85rem;color:#9fb9b3}.text{white-space:pre-wrap;line-height:1.5;overflow-wrap:anywhere}#notice{min-height:26px;color:#efcf96}#inspection{white-space:pre-wrap;background:#0b151b;padding:15px;max-height:65vh;overflow:auto;font-size:.85rem}nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.tag{color:#95d7bd;font-size:.85rem}.error{color:#ffb0a0}a{color:#b3dfcf}.empty{padding:20px;color:#8da7a3}
 </style></head><body>
 <h1>Village Commons</h1><p>Four active places. Your approved residents choose their interests, converse and create. Everything new stays in the review inbox until you approve it.</p>
 <div id="notice" role="status"></div>
@@ -21,13 +21,21 @@ h1{font-size:2.2rem;margin-bottom:6px}h2{font-size:1.2rem}p{line-height:1.55;col
 <p id="state">Opening this page starts no inference. Use Open Commons when ready.</p>
 <div id="participants" class="grid"></div>
 <details><summary>Join the conversation</summary><label>Room <select id="room"></select></label><label>Address <select id="recipient"><option value="">Everyone in this room</option></select></label><textarea id="message" placeholder="Introduce an idea, respond, or speak to a resident."></textarea><button id="send">Send</button></details>
+<details id="map_editor"><summary>Resident starting maps</summary>
+<p>Give each resident a compact approved guide: fast-access memories, a glossary of deeper memories, and preferred Library or Archive workflows. Saving a memory does not add it here automatically.</p>
+<label>Resident <select id="map_resident"></select></label><button id="map_load">Load approved map</button>
+<p class="small">Fast access: up to 3 own memory: citations. Glossary: up to 8 own memory: citations or memories search topics. Preferred sources: up to 6 doc:/msg: citations or library:COLLECTION / archive:COLLECTION areas with a query. Labels must be distinct, up to 60 characters. Obtain real IDs from Approved memories and documents or existing Village search. No filesystem paths or new access grants.</p>
+<div id="map_form"></div><details><summary>Advanced JSON editing</summary><label>Starting map JSON<textarea id="map_spec" spellcheck="false" style="min-height:310px"></textarea></label><button id="map_apply_json">Apply JSON to form</button></details>
+<button id="map_preview">Preview exact map</button><button id="map_approve" disabled>Approve previewed map</button>
+<p class="small">Pause or finish and wait for requests to drain before final approval. Previewing starts no inference and changes no map. Approve empty lists to clear a map. Changed or withdrawn targets are omitted until reviewed again.</p>
+<pre id="map_result" class="text"></pre></details>
 <details open><summary>Conversations and workbench</summary><p class="small">Hidden creative drafts are visible to you throughout. Their author chooses when to reveal them to peers. “Context supplied” shows actual host inputs, not hidden reasoning.</p><div id="events"></div></details>
 <details open><summary>Final review inbox</summary><p class="small">Pause or finish first. Each approval is separate. Material approval does not approve a specialist's memory pointer or interpretation. Unapproved session material expires after seven days and is never searchable by future sessions.</p><div id="proposals"></div></details>
 <details id="inspect"><summary>Inspection</summary><pre id="inspection"></pre></details>
 <script>
 'use strict';
 const key=decodeURIComponent(location.hash.slice(1));history.replaceState(null,'',location.pathname);
-const $=id=>document.getElementById(id);let session='',snapshot=null,busy=false,roster=[];
+const $=id=>document.getElementById(id);let session='',snapshot=null,busy=false,roster=[],mapPreview=null;
 const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 function button(label,fn){const b=node('button',label);b.onclick=()=>run(fn);return b;}
 function show(value){$('inspection').textContent=typeof value==='string'?value:JSON.stringify(value,null,2);$('inspect').open=true;}
@@ -35,7 +43,7 @@ async function api(operation,args={}){if(!key)throw Error('Open Village Commons.
 async function run(fn){try{$('notice').textContent='';await fn();}catch(e){$('notice').textContent=e.message;}}
 function scopes(){return [...$('collections').selectedOptions].map(x=>x.value);}
 function renderRoster(){const selected=new Set([...$('roster').querySelectorAll('input:checked')].map(x=>x.value));$('roster').replaceChildren();for(const r of roster.filter(r=>r.status==='active')){const label=node('label',undefined,'card');const input=node('input');input.type='checkbox';input.value=r.id;const eligible=scopes().every(s=>r.collections.includes(s));input.checked=eligible&&(selected.size?selected.has(r.id):true);input.disabled=!eligible;label.append(input,node('span',r.id),node('div',r.role+' · '+r.collections.join(', '),'small'));$('roster').append(label);}if(scopes().join(',')!=='general'){$('web').checked=false;$('web').disabled=true;}else $('web').disabled=false;}
-async function index(){const d=await api('view');roster=d.roster;const old=[...$('collections').selectedOptions].map(x=>x.value);$('collections').replaceChildren();for(const c of d.collections){const option=node('option',c);option.value=c;option.selected=old.length?old.includes(c):c==='general';$('collections').append(option);}renderRoster();const saved=session;$('sessions').replaceChildren(node('option','Choose a session'));$('sessions').firstChild.value='';for(const s of d.sessions){const o=node('option',s.state+' · '+s.id);o.value=s.id;$('sessions').append(o);}session=saved||d.active||d.sessions[0]?.id||'';$('sessions').value=session;}
+async function index(){const d=await api('view');roster=d.roster;const old=[...$('collections').selectedOptions].map(x=>x.value);$('collections').replaceChildren();for(const c of d.collections){const option=node('option',c);option.value=c;option.selected=old.length?old.includes(c):c==='general';$('collections').append(option);}renderRoster();const chosen=$('map_resident').value;$('map_resident').replaceChildren();for(const r of roster.filter(r=>r.status==='active')){const o=node('option',r.id);o.value=r.id;$('map_resident').append(o);}if(roster.some(r=>r.id===chosen))$('map_resident').value=chosen;const saved=session;$('sessions').replaceChildren(node('option','Choose a session'));$('sessions').firstChild.value='';for(const s of d.sessions){const o=node('option',s.state+' · '+s.id);o.value=s.id;$('sessions').append(o);}session=saved||d.active||d.sessions[0]?.id||'';$('sessions').value=session;}
 function download(title,text){const a=node('a');const url=URL.createObjectURL(new Blob([text],{type:'text/markdown;charset=utf-8'}));a.href=url;a.download=(title.replace(/[^a-z0-9_-]/gi,'_').slice(0,70)||'commons-draft')+'.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function refresh(){if(busy)return;busy=true;try{if(!session){await index();if(!session)return;}snapshot=await api('view',{session});const d=snapshot.data;
 $('state').textContent=snapshot.state.toUpperCase()+' · '+d.live.length+'/'+d.limit+' active · '+d.turns+'/'+d.turn_limit+' turns · '+Math.ceil(d.remaining)+' seconds remaining · '+d.reserved+'/'+d.token_budget+' conservative token units'+(d.reason?' · '+d.reason:'');
@@ -52,5 +60,52 @@ $('pause').onclick=()=>run(async()=>{await api('pause');await refresh();});$('re
 $('send').onclick=()=>run(async()=>{await api('message',{session,text:$('message').value,room:$('room').value,target:$('recipient').value});$('message').value='';await refresh();});
 $('purge').onclick=()=>run(async()=>{if(confirm('Forget this session’s unapproved transcript, drafts and proposals now? Approved Village memories and material are managed separately.')){show(await api('purge',{session}));session='';await index();await refresh();}});
 $('memory').onclick=()=>run(async()=>{const d=await api('memories');show(d);const box=$('inspection');for(const item of [...d.memories,...d.pointers,...d.documents]){const line=node('div');line.append(node('span',item.id+' · '+item.state+' '));if(item.state==='approved')line.append(button('Withdraw',async()=>{if(confirm('Withdraw '+item.id+'? Existing session copies cannot be erased.'))show(await api('withdraw',{reference:item.id,digest:item.digest}));}));if(item.id.startsWith('memory:')&&item.state==='approved')line.append(button('Correct',async()=>{const claim=prompt('Correct this memory:',item.claim);if(claim===null)return;const purpose=prompt('When should it apply?',item.applicability);if(purpose===null)return;if(confirm('Save this exact owner correction?'))show(await api('correct',{reference:item.id,digest:item.digest,claim,purpose}));}));line.append(button('Delete',async()=>{if(confirm('Delete this approved-store entry and its memory revisions? This does not erase backups or existing session copies.'))show(await api('delete',{reference:item.id,digest:item.digest}));}));box.append(line);}});
+let mapDraft=null,mapRecords=null;
+function mapSpec(){return mapDraft||JSON.parse($('map_spec').value);}
+function renderMapForm(){
+ const host=$('map_form');host.replaceChildren();if(!mapDraft)return;
+ const resident=$('map_resident').value,person=roster.find(r=>r.id===resident),scopes=person?.collections||[];
+ const memories=(mapRecords?.memories||[]).filter(m=>m.specialist_id===resident&&m.state==='approved');
+ const docs=(mapRecords?.documents||[]).filter(d=>d.state==='approved'&&scopes.includes(d.collection));
+ const limits={fast_access:3,glossary:8,preferred_sources:6},titles={fast_access:'Fast-access memories',glossary:'Deeper-memory glossary',preferred_sources:'Preferred Library and Archive sources'};
+ const changed=()=>{invalidateMap();$('map_spec').value=JSON.stringify(mapDraft,null,2);};
+ for(const layer of Object.keys(limits)){
+  const section=node('div');section.append(node('h2',titles[layer]));
+  for(const [i,e]of mapDraft[layer].entries()){
+   const card=node('div',undefined,'card');
+   const field=(label,initial,limit,change)=>{const l=node('label',label),input=node('input');input.value=initial||'';input.maxLength=limit;input.style.width='90%';input.oninput=()=>{change(input.value);changed();};l.append(input);card.append(l);return input;};
+   field('Entry name',e.label,60,v=>e.label=v);
+   const options=[];
+   if(layer!=='preferred_sources')for(const m of memories)options.push([m.id,m.claim.slice(0,100)]);
+   if(layer==='glossary')options.unshift(['memories','Search my deeper memories']);
+   if(layer==='preferred_sources'){
+    for(const d of docs)options.push([d.id,'Document: '+d.title]);
+    for(const c of scopes){options.push(['library:'+c,'Library area: '+c],['archive:'+c,'Archive area: '+c]);}
+    options.push(['exact','Exact Archive/Library citation']);
+   }
+   const l=node('label','Where to look'),select=node('select');select.append(node('option','Choose a target'));select.firstChild.value='';
+   for(const [value,label]of options){const o=node('option',label);o.value=value;select.append(o);}
+   const known=options.some(([v])=>v===e.target);if(e.target&&!known&&layer!=='preferred_sources'){const o=node('option','Not in current list: '+e.target);o.value=e.target;select.append(o);}
+   select.value=known||layer!=='preferred_sources'?e.target||'':'exact';l.append(select);card.append(l);
+   if(layer==='preferred_sources'&&select.value==='exact')field('Exact citation',e.target,100,v=>e.target=v);
+   select.onchange=()=>{e.target=select.value==='exact'?'':select.value;if(e.target==='memories')e.collections=['general'];else delete e.collections;changed();renderMapForm();};
+   field('When is this useful?',e.when,160,v=>e.when=v);
+   if(e.target==='memories'||e.target?.startsWith('library:')||e.target?.startsWith('archive:'))field('Search words',e.query,160,v=>e.query=v);
+   if(e.target==='memories'){
+    const scopeLabel=node('label','Memory collections'),choices=node('select');choices.multiple=true;
+    for(const c of scopes){const o=node('option',c);o.value=c;o.selected=(e.collections||['general']).includes(c);choices.append(o);}
+    choices.onchange=()=>{e.collections=[...choices.selectedOptions].map(o=>o.value);changed();};scopeLabel.append(choices);card.append(scopeLabel);
+   }
+   card.append(button('Remove entry',()=>{mapDraft[layer].splice(i,1);changed();renderMapForm();}));section.append(card);
+  }
+  const add=button('Add entry',()=>{mapDraft[layer].push({label:'',target:'',when:''});changed();renderMapForm();});add.disabled=mapDraft[layer].length>=limits[layer];section.append(add);host.append(section);
+ }
+}
+
+function invalidateMap(){mapPreview=null;$('map_approve').disabled=true;}
+$('map_spec').oninput=()=>{mapDraft=null;invalidateMap();$('map_form').replaceChildren();};$('map_apply_json').onclick=()=>run(()=>{const spec=JSON.parse($('map_spec').value);if(!spec||!['fast_access','glossary','preferred_sources'].every(k=>Array.isArray(spec[k])))throw Error('The map needs three entry lists.');mapDraft=spec;invalidateMap();renderMapForm();});$('map_resident').onchange=()=>{invalidateMap();mapDraft=null;mapRecords=null;$('map_form').replaceChildren();$('map_spec').value='';$('map_result').textContent='Load this resident’s map before editing.';};
+$('map_load').onclick=()=>run(async()=>{invalidateMap();const resident=$('map_resident').value,d=await api('map_view',{resident}),records=await api('memories');if(resident!==$('map_resident').value)return;mapDraft=d.spec;mapRecords=records;renderMapForm();$('map_spec').value=JSON.stringify(d.spec,null,2);$('map_result').textContent=JSON.stringify(d,null,2);});
+$('map_preview').onclick=()=>run(async()=>{invalidateMap();const resident=$('map_resident').value,spec=JSON.parse(JSON.stringify(mapSpec()));const d=await api('map_preview',{resident,spec});if(resident!==$('map_resident').value||JSON.stringify(spec)!==JSON.stringify(mapSpec()))return;mapPreview=d;$('map_result').textContent=JSON.stringify(d,null,2);$('map_approve').disabled=false;});
+$('map_approve').onclick=()=>run(async()=>{const p=mapPreview;if(!p)return;if(!confirm('Approve this exact starting map for '+p.resident+'?\nBase revision '+p.base_revision+'\nDigest '+p.digest))return;const d=await api('map_approve',{resident:p.resident,spec:p.spec,digest:p.digest});invalidateMap();$('map_result').textContent=JSON.stringify(d,null,2);});
 if(!key){$('notice').textContent='Open Village Commons.command on the Mac while LOCAL AI is running.';$('start').disabled=true;}else run(async()=>{await index();await refresh();setInterval(()=>run(refresh),2000);});
 </script></body></html>

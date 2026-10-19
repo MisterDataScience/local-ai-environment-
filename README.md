@@ -1,5 +1,7 @@
 # LOCAL AI
 
+Residents now use an [owner-curated starting map](docs/RESIDENT-MEMORY.md): fast-access memories, a glossary of deeper own memories, and preferred Library or Archive workflows. The owner previews and approves map changes separately from approving memories or documents.
+
 The optional [Village Commons](docs/VILLAGE-COMMONS.md) preview adds finite social and creative sessions, four active residents, owner-visible private drafts, and separately approved personal memories. Open `Village Commons.command` after installing the preview; the guide includes a five-minute first session.
 
 One source of truth: **`main`**. One deployment package:

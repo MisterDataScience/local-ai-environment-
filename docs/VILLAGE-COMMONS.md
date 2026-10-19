@@ -176,16 +176,20 @@ Approved personal memories belong to one specialist ID. They are stored as
 fallible, source-linked records with a kind, claim, applicability, scopes and
 revision history. They are not model training and do not change model weights.
 Daughters do not automatically inherit another resident's personal experiences.
-The normal context packet includes up to three recent permitted memories and
-three explicit material pointers; deeper search is available when relevant.
-This is bounded recent retrieval, not a semantic relevance-ranking system.
+The starting context now uses an owner-curated layered map: up to three pinned
+fast-access memories, eight deeper-memory glossary entries and six preferred
+Library/Archive references or areas. New memories are searchable after approval
+but are not automatically added to this map. Follow its references when needed;
+there is no recent-memory fallback. See [Resident memory and starting maps](RESIDENT-MEMORY.md)
+for the owner editor, approval steps and workflow examples.
 
 During closing, residents may propose the experiences worth retaining and explain
 when they could matter again. Small talk, repeated agreement and discarded guesses
 stay transient unless you deliberately approve a proposal. Residents are not
 forced to fabricate a lesson at the end of every session.
 
-Open **Approved memories and documents** to inspect records and evidence:
+Open **Resident starting maps** to curate what is supplied at startup. Open
+**Approved memories and documents** to inspect the underlying records and evidence:
 
 - **Correct** edits a personal memory's claim and applicability with an exact
   owner decision, preserving its prior revision for inspection.
@@ -261,8 +265,8 @@ an assumption that a successful Linux check certifies native operation.
    Confirm an outsider does not receive that room's messages.
 6. Generate separate material, memory and pointer proposals. Verify none are
    searchable before approval; approve material alone and confirm no pointer or
-   personal memory appears. Approve the other two individually, then check a new
-   Commons session and an ordinary worker packet.
+   personal memory appears. Approve the other two individually, then deliberately add the relevant references in Resident starting maps. Check
+   a new Commons session and an ordinary worker packet.
 7. Correct/withdraw a synthetic memory or source, verify later retrieval changes,
    and test Forget session. Test private grants and research isolation only with
    synthetic private fixtures before considering real personal material.

@@ -6,7 +6,7 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-19-village-commons-preview'
+RELEASE = '2026-10-19-layered-memory-preview'
 PREFIX = 'mac-local-ai-installer/'
 STAMP = (2026, 10, 19, 0, 0, 0)
 
@@ -33,7 +33,7 @@ def contents(root):
         'captain_inputs': {'base': 'ceb8ce6bcb229042b1cf957d974e2838616c6030',
                            'native_runtime': '1b70350c92563449576bcbbf552994b1d1ed847d'},
         'owner_mac_acceptance': 'not_run',
-        'village_inputs': {'base': 'dd5602557eadbcc7cf17a0269dc8add318fc8a75', 'facilities_schema': 1, 'commons_schema': 1, 'memory_schema': 1},
+        'village_inputs': {'base': 'b80741a98d15a5e82c3cea4f1ead2d3f9a89d06c', 'facilities_schema': 1, 'commons_schema': 1, 'memory_schema': 2},
         'files': {name: hashlib.sha256(data).hexdigest() for name, (data, _) in sorted(result.items())}}
     encoded = json.dumps(manifest, sort_keys=True, indent=2).encode() + b'\n'
     result['RELEASE.json'] = (encoded, 0o644)

@@ -38,7 +38,7 @@ Omit unused fields. Available action names are supplied in the packet. say/think
 text; follow uses room; create_room uses title and explicit members; invite uses
 target and room. draft uses title,text,kind (markdown/text/python/shell),hidden;
 drafts are inert. reveal uses your draft ID. Search actions use text. read_source
-uses a msg:/doc: citation from a visible result. web_read uses a URL returned by
+uses a msg:/doc:/memory: citation or a map: reference from your starting map. Follow the map to retrieve deeper memories or preferred Library/Archive workflows when relevant. web_read uses a URL returned by
 your web search. propose_library/archive use your draft target; propose_memory
 uses kind (experience/procedure/open_thread/collaboration/revised_belief),text,
 title (applicability),refs. propose_pointer uses an existing material proposal
@@ -233,9 +233,12 @@ class Commons:
             if resident["notebook"]:
                 note=self.db.execute("SELECT id FROM events WHERE session=? AND actor=? AND kind='think' ORDER BY rowid DESC LIMIT 1",(sid,row['id'])).fetchone()
                 sources.append(self._source(sid,row["id"],"own_note",note[0] if note else row["id"],resident["notebook"],data["scopes"]))
-            for item in personal["memories"]:
+            sources.append(self._source(sid,row['id'],'memory_navigation',row['id']+':map:r'+str(personal['map_revision']),personal['navigation'],data['scopes']))
+            for item in personal['glossary']:
+                sources.append(self._source(sid,row['id'],'memory_glossary',item['target'],encoded(item),item['scopes']))
+            for item in personal["fast_access"]:
                 sources.append(self._source(sid,row["id"],"approved_memory",item["id"],encoded(item),data["scopes"]))
-            for item in personal["pointers"]:
+            for item in personal["preferred_sources"]:
                 sources.append(self._source(sid,row["id"],"approved_pointer",item["target"],encoded(item),data["scopes"]))
             for item in lessons[:2]:
                 sources.append(self._source(sid,row["id"],"lesson",item["source"],encoded(item),data["scopes"]))
@@ -633,7 +636,8 @@ class Commons:
         required={"start":{"settings"},"view":set(),"pause":set(),"resume":{"session"},"stop":{"session"},
                   "message":{"session","text"},"review":{"proposal","digest","decision"},"why":{"event"},
                   "withdraw":{"reference","digest"},"delete":{"reference","digest"},"correct":{"reference","digest","claim","purpose"},
-                  "memories":set(),"proposal":{"proposal"},"purge":{"session"}}
+                  "memories":set(),"proposal":{"proposal"},"purge":{"session"},
+                  "map_view":{"resident"},"map_preview":{"resident","spec"},"map_approve":{"resident","spec","digest"}}
         extras={"view":{"session"},"message":{"room","target"}}
         if operation not in required or set(request)-({"operation"}|required[operation]|extras.get(operation,set())) or required[operation]-set(request):
             raise ValueError("Unknown or incomplete owner operation")
@@ -659,6 +663,12 @@ class Commons:
                 return dict(proposal=dict(r),evidence=snapshots)
         cx=self.connector(self.root)
         try:
+            if operation=='map_view':return memory.starting_map(cx,request['resident'])
+            if operation=='map_preview':return memory.preview_map(cx,request['resident'],request['spec'])
+            if operation=='map_approve':
+                with self.lock:
+                    if self.active or self.live:raise ValueError('Pause or finish Commons and wait for requests to drain before approving a starting map')
+                    return memory.approve_map(cx,request['resident'],request['spec'],request['digest'],'Owner approved exact resident starting map')
             if operation=='delete':return memory.delete(cx,request['reference'],request['digest'],'Owner Commons deletion')
             if operation=='correct':return memory.correct(cx,request['reference'],request['digest'],request['claim'],request['purpose'],'Owner corrected exact memory')
             if operation=="memories":
