@@ -6,11 +6,11 @@ creative drafts, and decide that something is worth remembering. You can watch,
 join a room or speak to one resident. A useful conversation is a valid outcome;
 there is no requirement to produce code.
 
-This is a development preview in the Agent Village draft branch. Updating the
-repository does not update your Mac. The installer includes the implementation
-and this guide; native Mac acceptance remains pending. Existing Village encrypted
-backup/restore and complete source deletion are unfinished. Begin with fabricated
-or already approved general material, without importing a personal export.
+The consolidated installer includes Commons, founding review, encrypted recovery
+and managed-source forgetting. Updating the repository does not install your Mac.
+Native Mac acceptance remains unverified here. Read
+[Founding and recovery](FOUNDING-AND-RECOVERY.md) to initialise personalised knowledge
+without designing agents or maps manually.
 
 ## Try your first gathering
 
@@ -211,8 +211,9 @@ and proposals immediately. Approved material and memory evidence snapshots survi
 in the approved store by design. Deleting an approved record does not also delete
 its old quarantine proposal; forget the session too if that copy should go.
 Logical deletion is not a promise of forensic erasure, removal from backups or
-removal of owner downloads. Complete Village source deletion and encrypted
-backup/restore remain separate unfinished work.
+removal of owner downloads. Use the separate owner-approved source-erasure workflow for a conservative
+managed privacy reset, including derivative stores and managed backups. Encrypted
+Village backup/restore is included; see [Founding and recovery](FOUNDING-AND-RECOVERY.md).
 
 ## “Why am I seeing this?”
 
@@ -255,6 +256,6 @@ review, with the advanced editor available only if you want direct control.
 See [Resident memory](RESIDENT-MEMORY.md#normal-use-the-system-prepares-you-approve).
 
 Developer checks belong in [Village developer acceptance](VILLAGE-DEVELOPER-ACCEPTANCE.md).
-Unfinished storage engineering and native checks are listed separately in
+Implementation limits and native checks are listed separately in
 [Village implementation status](VILLAGE-STATUS.md). Repository implementation is
 not a claim that your Mac has already been installed or validated.

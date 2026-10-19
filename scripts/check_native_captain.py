@@ -16,7 +16,8 @@ import sys
 import tempfile
 import threading
 import time
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, build_opener, ProxyHandler
+import native_approvals
 
 SOURCE = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(SOURCE / 'installer'), str(SOURCE / 'installer/payload')]
@@ -50,8 +51,13 @@ class SyntheticGateway(ThreadingHTTPServer):
         self.failures = []
 
     def completion(self, body):
+        if not body.get('tools'):
+            return {'role': 'assistant', 'content': 'Local acceptance check'}
         users = '\n'.join(content_text(m.get('content')) for m in body['messages'] if m['role'] == 'user')
         previous = [m for m in body['messages'] if m['role'] == 'tool']
+        approval = native_approvals.completion(self.project, users, previous, content_text)
+        if approval is not None:
+            return approval
         worker = re.search(r'"task_id"\s*:\s*"(calc|file-check)"', users)
         if worker:
             identifier = worker[1]
@@ -147,6 +153,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def check(binary):
+    # Exercise the same `opencode web` command used by the managed Captain.
+    subprocess.run([str(binary), 'web', '--help'],
+                   capture_output=True, text=True, timeout=15, check=True)
     if port_open(8001) or port_open(4096):
         raise RuntimeError('Native CI check requires unoccupied loopback ports; no service was stopped')
     with tempfile.TemporaryDirectory(prefix='native-captain-') as folder:
@@ -159,24 +168,68 @@ def check(binary):
             if source.is_file() and source.suffix in {'.mjs', '.txt'}:
                 shutil.copy2(source, control / source.name)
         config = upgrade(upgrade_team(upgrade_text_configuration({'api_key': 'native-ci-key'})))
+        # Simulate requests whose browser page/API share one tailnet origin.
+        remote_origin = 'https://native-ci.example.ts.net:10000'
+        config['remote_access'] = {
+            'enabled': True, 'hostname': 'native-ci.example.ts.net',
+            'captain_url': remote_origin}
         settings = work_agent.configuration(config, list(config['text_models']), 'max', root, STATUS)
+        if settings.get('server', {}).get('cors') != [remote_origin]:
+            raise RuntimeError('OpenCode did not restrict remote CORS to the private Captain origin')
         env = work_agent.environment(root, config, settings)
         env.update(OPENCODE_SERVER_USERNAME='opencode', OPENCODE_SERVER_PASSWORD='native-ci-password')
         token = base64.b64encode(b'opencode:native-ci-password').decode()
-        def native(path, body=None):
+        remote_headers = {'Authorization': 'Basic ' + token, 'Origin': remote_origin,
+                          'Host': 'native-ci.example.ts.net:10000'}
+        opener = build_opener(ProxyHandler({}))
+        def api(path, body=None, headers=None):
             request = Request('http://127.0.0.1:4096' + path,
                 data=None if body is None else json.dumps(body).encode(),
-                headers={'Authorization': 'Basic ' + token, 'Content-Type': 'application/json'})
-            with urlopen(request, timeout=90) as response:
+                headers={**(remote_headers if headers is None else headers), 'Content-Type': 'application/json'})
+            with opener.open(request, timeout=60) as response:
                 return json.load(response)
+        def native(path, body=None):
+            return api(path, body)
+        def unauthorised(path, body=None, *, auth):
+            headers = {k: v for k, v in remote_headers.items() if k != 'Authorization'}
+            if auth == 'wrong':
+                headers['Authorization'] = 'Basic ' + base64.b64encode(b'opencode:wrong-password').decode()
+            return api(path, body, headers)
         server = SyntheticGateway(project)
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
         process = None
         try:
             with (root / 'opencode.log').open('w') as log:
-                process = subprocess.Popen([str(binary), 'serve', '--hostname', '127.0.0.1', '--port', '4096'],
+                process = subprocess.Popen([str(binary), 'web', '--hostname', '127.0.0.1', '--port', '4096'],
                     cwd=project, env=env, stdout=log, stderr=log, start_new_session=True)
                 verify_work_agent(process, env, True)
+                # Real native OpenCode, simulated incoming HTTPS reverse-proxy
+                # browser Origin and Host. Never infer that this tests Tailscale
+                # routing or an actual second-device Safari/Windows browser.
+                remote_headers = {'Authorization': 'Basic ' + token,
+                                  'Origin': remote_origin,
+                                  'Host': 'native-ci.example.ts.net:10000'}
+                with urlopen(Request('http://127.0.0.1:4096/',
+                                     headers=remote_headers), timeout=10) as response:
+                    ui_type = response.headers.get('Content-Type', '')
+                    ui_final = response.geturl()
+                    ui_sample = response.read(4096).lower()
+                if not ui_final.startswith('http://127.0.0.1:4096/') or (
+                        'text/html' not in ui_type and b'<html' not in ui_sample):
+                    raise RuntimeError('Pinned OpenCode web did not serve a local Captain HTML interface')
+                with urlopen(Request('http://127.0.0.1:4096/agent',
+                                     headers=remote_headers), timeout=10) as response:
+                    remote_agents = json.load(response)
+                if not {'plan', 'build'}.issubset({a.get('name') for a in remote_agents}):
+                    raise RuntimeError('Private tailnet same-origin browser cannot see native Plan/Build')
+                # A browser loaded from the same proxy hostname/port as
+                # its API does not need Access-Control-Allow-Origin. What
+                # matters is real authenticated API and SSE compatibility.
+                with urlopen(Request('http://127.0.0.1:4096/event',
+                                     headers=remote_headers), timeout=10) as response:
+                    if 'text/event-stream' not in response.headers.get('Content-Type', ''):
+                        raise RuntimeError('Remote-origin event stream was not established')
+                native_approvals.check(native, unauthorised, remote_headers, project)
                 session = native('/session', {'title': 'Native captain CI'})['id']
                 answer = native('/session/' + session + '/message', {'agent': 'plan', 'parts': [
                     {'type': 'text', 'text': 'Native captain protocol check. Dispatch the two supplied workers and retire them.'}]})

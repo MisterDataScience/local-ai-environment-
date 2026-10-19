@@ -1,5 +1,34 @@
 # Integrated release validation
 
+## Consolidated Village release, 19 October 2026
+
+Release `2026-10-19-integrated-village-1` combines installer hardening, Commons,
+layered resident memory, prepared resident management, local founding review,
+encrypted Village backup/restore and managed source erasure in the single main
+installer. Founding prepares cited proposals and specialist identities; lasting
+publication and prompt maps still require final owner approval.
+
+Local validation: 357 installer tests (352 passed, five skipped), 135 gateway
+payload tests, 90 JavaScript tests and seven release-script tests. Total: 584
+passed, five skipped. Skips cover four Apple PDFKit/Vision cases and one pinned
+WebUI-wheel compatibility case. The optional browser suite was attempted but
+could not run because Chromium is not installed on this authoring host.
+Python compilation, owner-page JavaScript syntax and generated owner-launcher
+shell syntax were checked. The release builder checks exact packaged source,
+permissions and manifest; repeat builds are byte-identical.
+
+New checks exercise real SQLite and ZIP recovery, source tombstones across
+restore/local-ledger loss, interrupted deletion recovery, stale previews and
+reader locks, original import bytes, exact cited proposals, private publication,
+local inference guards, foreground cancellation and bounded format repair.
+Cryptomator mounts and model output use fixtures; no real Mac installation,
+mount semantics, GPU performance, native permission dialogs or browser layout
+acceptance is claimed. See FOUNDING-AND-RECOVERY.md for normal use and the broad,
+explicit source-erasure scope. No GitHub Actions were run. The retained workflow
+is manual-only and release commits suppress CI.
+
+All sections below describe earlier releases and are historical.
+
 ## Prepared resident management, 19 October 2026
 
 Release `2026-10-19-resident-management-preview` removes routine manual agent/map

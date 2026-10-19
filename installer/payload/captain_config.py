@@ -21,6 +21,9 @@ def settings(config):
         raise ValueError('Captain provider must be ollama or llama')
     if type(result['single_model']) is not bool:
         raise ValueError('captain.single_model must be a boolean')
+    if result.get('variant') == 'atomicchat-uncensored-lora':
+        if result['provider'] != 'llama' or not isinstance(result.get('llama', {}).get('lora'), dict):
+            raise ValueError('AtomicChat Captain requires its verified local LoRA adapter')
     if not isinstance(result['model_id'], str) or not result['model_id'].startswith('local-ai'):
         raise ValueError('Captain must select a local-ai profile')
     if result['enabled'] and result['model_id'] not in config.get('text_models', {}):

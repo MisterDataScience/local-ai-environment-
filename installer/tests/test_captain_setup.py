@@ -7,10 +7,20 @@ from model_team import upgrade_team, team_roles
 from text_models import upgrade_text_configuration
 from captain_setup import configure, select_artifacts, build_tools, download_artifact, install_minicpm, LLAMA_REVISION
 import work_agent
+import captain_setup
 from common import ollama_environment
 
 
 class CaptainSetupTests(unittest.TestCase):
+    def metadata(self):
+        base = {'sha': captain_setup.MODEL_REVISION, 'siblings': [
+            {'rfilename': name, 'lfs': {'sha256': checksum}}
+            for name, checksum in captain_setup.MODEL_FILES.values()]}
+        adapter = {'sha': captain_setup.ADAPTER_REVISION, 'siblings': [
+            {'rfilename': captain_setup.ADAPTER_FILENAME,
+             'lfs': {'sha256': captain_setup.ADAPTER_SHA256}}]}
+        return base, adapter
+
     def config(self):
         return upgrade(upgrade_team(upgrade_text_configuration({'text_model': 'qwen3:14b'})))
 
@@ -50,14 +60,28 @@ class CaptainSetupTests(unittest.TestCase):
         self.assertNotEqual(single['OLLAMA_HOST'], shared['OLLAMA_HOST'])
 
     def test_model_downloads_use_an_immutable_revision_and_checksums_without_phone_shards(self):
-        metadata = {'sha': 'a' * 40, 'siblings': [
-            {'rfilename': 'model-mix_q3gud_im.gguf', 'lfs': {'sha256': 'b' * 64}},
-            {'rfilename': 'mmproj-model-f16.gguf', 'lfs': {'sha256': 'c' * 64}}]}
-        artifacts = select_artifacts(metadata)
-        self.assertIn('/resolve/' + 'a' * 40 + '/', artifacts['model']['url'])
+        metadata, adapter = self.metadata()
+        artifacts = select_artifacts(metadata, adapter)
+        self.assertIn('/resolve/' + captain_setup.MODEL_REVISION + '/', artifacts['model']['url'])
+        self.assertIn('/resolve/' + captain_setup.ADAPTER_REVISION + '/', artifacts['lora']['url'])
+        self.assertEqual(artifacts['lora']['sha256'], captain_setup.ADAPTER_SHA256)
         metadata['siblings'][0]['rfilename'] = 'model-mix_q3gud_im-les.gguf'
         with self.assertRaisesRegex(RuntimeError, 'layout changed'):
-            select_artifacts(metadata)
+            select_artifacts(metadata, adapter)
+
+    def test_changed_or_missing_adapter_cannot_select_plain_model(self):
+        import copy
+        base, adapter = self.metadata()
+        for change in ('revision', 'hash', 'missing'):
+            broken = copy.deepcopy(adapter)
+            if change == 'revision':
+                broken['sha'] = 'f' * 40
+            elif change == 'hash':
+                broken['siblings'][0]['lfs']['sha256'] = '0' * 64
+            else:
+                broken['siblings'] = []
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                select_artifacts(base, broken)
 
     def test_shared_role_mapping_can_retire_unused_specialist_downloads(self):
         cfg = self.config(); cfg['captain']['single_model'] = True
@@ -83,7 +107,8 @@ class CaptainSetupTests(unittest.TestCase):
                 self.assertEqual(build_tools(root), str(root / 'control/.venv/bin/cmake'))
             installation = next(c for c in calls if 'pip' in c)
             self.assertIn(str(root / 'control/.venv/bin/python'), installation)
-            self.assertIn('cmake==3.31.8', installation)
+            self.assertTrue(any('control-macos-arm64-py311.txt' in str(p) for p in installation))
+            self.assertIn('--require-hashes', installation)
 
     def test_standalone_download_preserves_partial_and_resumes_with_checksum(self):
         import subprocess
@@ -135,14 +160,17 @@ class CaptainSetupTests(unittest.TestCase):
             (source / '.git').mkdir(parents=True)  # Interrupted after git init.
             binary = source / 'build/bin/llama-server'
             binary.parent.mkdir(parents=True); binary.write_bytes(b'fixture executable')
-            metadata = {'sha': 'a' * 40, 'siblings': [
-                {'rfilename': 'model-mix_q3gud_im.gguf', 'lfs': {'sha256': 'b' * 64}},
-                {'rfilename': 'mmproj-model-f16.gguf', 'lfs': {'sha256': 'c' * 64}}]}
+            metadata, adapter = self.metadata()
+            artifacts = select_artifacts(metadata, adapter)
+            import hashlib
+            for artifact in artifacts.values():
+                artifact['sha256'] = hashlib.sha256(b'fixture weights').hexdigest()
             def run(command, **_):
                 return CompletedProcess(command, 1 if '--verify' in command else 0)
             def download(url, destination, checksum):
                 destination.write_bytes(b'fixture weights')
-            with patch('common.port_open', return_value=False), patch('common.http', return_value=metadata), \
+            with patch('common.port_open', return_value=False), patch('common.http', side_effect=[metadata, adapter]), \
+                 patch('captain_setup.select_artifacts', return_value=artifacts), \
                  patch('captain_setup.build_tools', return_value='/cmake'), \
                  patch('captain_setup.subprocess.run', side_effect=run) as commands, \
                  patch('captain_setup.subprocess.check_output', side_effect=[LLAMA_REVISION, '']):
@@ -150,6 +178,9 @@ class CaptainSetupTests(unittest.TestCase):
             self.assertTrue(any('fetch' in c.args[0] for c in commands.call_args_list))
             self.assertTrue(any('checkout' in c.args[0] for c in commands.call_args_list))
             self.assertEqual(installed['captain']['provider'], 'llama')
+            self.assertEqual(installed['captain']['variant'], captain_setup.MODEL_VARIANT)
+            self.assertIn('lora', installed['captain']['llama'])
+            self.assertIn('AtomicChat', installed['text_models']['local-ai-captain']['model'])
             self.assertNotIn(config['model_team']['roles']['coder'], installed['text_models'])
             self.assertNotIn(config['model_team']['roles']['analyst'], installed['text_models'])
             self.assertEqual(json.loads((root / 'control/config.before-minicpm-captain.json').read_text()), config)

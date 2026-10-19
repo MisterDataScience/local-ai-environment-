@@ -41,9 +41,36 @@ and the audit corrections.
    `http://127.0.0.1:8081`, but Captain worker delegation is in the Work Agent.
    Launch `Local AI.app` on future logins.
 
+The installer uses a SHA-verified, versioned `uv` bootstrap, vendor-checked
+Docker Desktop 4.91.0, an immutable ComfyUI commit/archive checksum, and
+a pinned compatible PyTorch package trio. `UV_EXCLUDE_NEWER` prevents packages
+published after the 2026-10-16 release cutoff from changing dependency
+resolution. ComfyUI additionally uses an 85-package transitive hash lock for
+macOS 15+ ARM64/Python 3.12. Control, WebUI and shared voice environments also
+have artifact-hashed platform locks, with the documented immutable MLX source exception.
+See [dependency lock scope](DEPENDENCY-LOCKS.md).
+
+Remote OpenCode's UI and API share the exact same private Tailscale HTTPS
+origin, with a native OpenCode `web` check of the authenticated API and event
+stream. Cross-origin access is not needed for the standard remote UI.
+During supervised sessions, `caffeinate -i -s` prevents idle sleep without
+changing permanent macOS settings. The supervisor reopens Docker/Tailscale
+and restores missing *owned* private routes on reconnect, refusing Funnel.
+Real Windows/iPad browsing and reboot/sleep recovery remain pending.
+See [headless/remote acceptance](HEADLESS-AND-REMOTE-ACCEPTANCE.md).
+
 Apple Silicon, macOS 15+, 32 GB unified memory and at least 100 GB free space are
 required. Installation needs Internet access for initial dependencies and models.
 No model weights, personal files or account credentials are included in the ZIP.
+
+## Prepare personalised knowledge
+
+After the installer completes, open `Village Commons.command` and use
+**Prepare the Village from your conversation history**. Select the export once;
+the system prepares Library content, memories and specialist residents for exact
+owner approval. The raw corpus remains private. The same package includes
+Commons, memory maps, encrypted Village recovery and managed-source forgetting.
+[Founding and recovery](FOUNDING-AND-RECOVERY.md) explains the complete flow and scope.
 
 ## Account-bound and safety-separated capabilities
 

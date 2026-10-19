@@ -153,7 +153,7 @@ Manual editing is optional. To override a prepared map, open
 `~/LocalAI-Automated/Village Commons.command`. You can edit maps without opening a
 Commons gathering or running inference. FileVault must be On for Village access.
 
-1. Open **Resident starting maps** and select the resident.
+1. Open **Advanced: edit a resident map yourself** and select the resident.
 2. Click **Load approved map**. Its current map and revision history are shown.
    A resident without a map begins with three empty layers.
 3. Under **Fast-access memories**, click **Add entry**, name it, select one of
@@ -195,11 +195,13 @@ Migration failure rolls back the map tables and version change together.
 
 Map revision history preserves prior approved directions. Removing a target or
 clearing the current map does not purge that history, old session copies, downloads
-or backups. Full source deletion and encrypted Village backup/restore remain
-unfinished. Use synthetic/general material initially, as in the Commons guide.
+or backups. The explicit managed-source forgetting workflow is a larger privacy
+reset that does remove managed derivative stores and backups, with a durable
+deletion ledger. Encrypted recovery is also included; see
+[Founding and recovery](FOUNDING-AND-RECOVERY.md).
 
 Developer acceptance checks are listed in [Village developer acceptance](VILLAGE-DEVELOPER-ACCEPTANCE.md).
 They are not everyday setup instructions and do not mean you must build residents
 or maps by hand. Real local-model behaviour and Mac installation remain unverified
-on this authoring host. Remaining storage features are tracked separately in
+on this authoring host. Implementation limits are tracked separately in
 [Village implementation status](VILLAGE-STATUS.md).

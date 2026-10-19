@@ -6,7 +6,7 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-19-resident-management-preview'
+RELEASE = '2026-10-19-integrated-village-1'
 PREFIX = 'mac-local-ai-installer/'
 STAMP = (2026, 10, 19, 0, 0, 0)
 
@@ -33,7 +33,8 @@ def contents(root):
         'captain_inputs': {'base': 'ceb8ce6bcb229042b1cf957d974e2838616c6030',
                            'native_runtime': '1b70350c92563449576bcbbf552994b1d1ed847d'},
         'owner_mac_acceptance': 'not_run',
-        'village_inputs': {'base': '3b65a1355e9827d7b19c5364d530e3c2f1a187ae', 'facilities_schema': 1, 'commons_schema': 1, 'memory_schema': 2, 'management_schema': 1},
+        'integrated_inputs': {'main':'1448677eb7b3442efd227b3e59e6446c8766f354', 'installer_hardening':'a79354a2df50aae43548163fb37494f753555ad7', 'village':'776cd9010790e8030f4ac4860eb62da6817c7e24'},
+        'village_inputs': {'base': '776cd9010790e8030f4ac4860eb62da6817c7e24', 'facilities_schema': 1, 'commons_schema': 1, 'memory_schema': 2, 'management_schema': 1, 'founding_schema': 1, 'workspace_backup_format': 2},
         'files': {name: hashlib.sha256(data).hexdigest() for name, (data, _) in sorted(result.items())}}
     encoded = json.dumps(manifest, sort_keys=True, indent=2).encode() + b'\n'
     result['RELEASE.json'] = (encoded, 0o644)

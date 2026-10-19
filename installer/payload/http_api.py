@@ -174,6 +174,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorised():
             return
         path = urlparse(self.path).path
+        if path == '/control/village-upload':
+            try:
+                from urllib.parse import parse_qs
+                query=parse_qs(urlparse(self.path).query)
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<=1024*1024:raise ValueError('Invalid upload size')
+                result=self.server.engine.founding_controller().upload(query.get('token',[''])[0],int(query.get('offset',['-1'])[0]),self.rfile.read(length))
+                return self.json_response(200,result)
+            except (ValueError,KeyError,RuntimeError,PermissionError,OSError) as error:
+                self.close_connection=True
+                return self.json_response(409,{'error':str(error)[:300]})
         if path == '/control/commons':
             try:
                 length=int(self.headers.get('Content-Length','0'))

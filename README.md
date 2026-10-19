@@ -1,10 +1,15 @@
 # LOCAL AI
 
+One installer now combines the pending hardening and Village work. For first use,
+open `Village Commons.command` and select **Prepare the Village from your
+conversation history**. The system prepares the knowledge and agents; you approve
+lasting changes. [Founding, encrypted recovery and source forgetting](docs/FOUNDING-AND-RECOVERY.md).
+
 The host creates the five baseline residents automatically. The Captain can prepare complete specialist changes, and approved work prepares memory-map suggestions for owner review. [Normal use](docs/RESIDENT-MEMORY.md#normal-use-the-system-prepares-you-approve) requires no manual agent or map setup.
 
 Residents now use an [owner-curated starting map](docs/RESIDENT-MEMORY.md): fast-access memories, a glossary of deeper own memories, and preferred Library or Archive workflows. The owner previews and approves map changes separately from approving memories or documents.
 
-The optional [Village Commons](docs/VILLAGE-COMMONS.md) preview adds finite social and creative sessions, four active residents, owner-visible private drafts, and separately approved personal memories. Open `Village Commons.command` after installing the preview; the guide includes a five-minute first session.
+The optional [Village Commons](docs/VILLAGE-COMMONS.md) adds finite social and creative sessions, four active residents, owner-visible private drafts, and separately approved personal memories. Open `Village Commons.command` after installing; the guide includes a five-minute first session.
 
 One source of truth: **`main`**. One deployment package:
 [Mac-Local-AI-Automated-Installer.zip](downloads/Mac-Local-AI-Automated-Installer.zip).
@@ -16,12 +21,11 @@ shared findings and peer messages. Compatible text requests can run concurrently
 against one model; speech and media still use exclusive model handoffs.
 Read [how the captain works](docs/CAPTAIN-AND-WORKERS.md).
 
-The [Agent Village](docs/AGENT-VILLAGE.md) now has an initial local archive,
-source-linked lesson and daughter registry, and read-only Captain routing for
-owner-classified general passages. It requires FileVault for private storage.
-Encrypted Village backup/restore, source deletion, automated founding review
-and native Mac acceptance are still pending. Do not import the real ChatGPT
-export until those remaining privacy and recovery steps are complete.
+The [Agent Village](docs/AGENT-VILLAGE.md) preserves raw history privately and can
+[prepare the Village from your conversations](docs/FOUNDING-AND-RECOVERY.md).
+Founding review, scoped Library knowledge, individual memories, automatic resident
+proposals, encrypted recovery and reviewed managed-source erasure are implemented.
+Native Mac acceptance remains unverified on the authoring host.
 
 The Village also has a shared **workshop**, persistent project **noticeboard**,
 **suggestion box**, and **practice cases**. Contributions retain evidence and
@@ -44,6 +48,35 @@ Optional finite autonomous document jobs use the existing text gateway and a
 checkpointed launchd worker. They read only a pre-authorised folder of small
 UTF-8 files and create new Markdown outputs without model tool access. This is
 not an unrestricted background OpenCode agent. See [autonomous jobs](docs/AUTONOMOUS-JOBS.md).
+
+The installer now verifies a **fixed SHA-256** for the Apple Silicon `uv`
+bootstrap, Docker Desktop 4.91.0 and the exact ComfyUI source archive.
+It pins a mutually compatible Torch/TorchVision/TorchAudio set and freezes
+remaining `uv` dependency resolution to the 16 October 2026 release window.
+ComfyUI now has an 85-package transitive hash lock for macOS 15+ ARM64,
+Python 3.12. Control, Open WebUI and shared speech/transcription environments
+also use complete hashed package locks, including the speech build backend. See
+[dependency lock scope](docs/DEPENDENCY-LOCKS.md).
+
+Captain now selects **AtomicChat's abliterated MiniCPM-V 4.7** automatically:
+the pinned standard Q3 weights and original vision projector plus its mandatory
+106 MB LoRA adapter at scale 1.0. The installer downloads and verifies all
+three artifacts, and every shared Captain/worker slot loads the adapter.
+No separate activation step is required. Native Mac inference and vision
+with this adapter remain unverified. See [model selection](docs/CAPTAIN-MODEL-SELECTION.md).
+
+The actual remote Captain's web page and API share **one private
+Tailscale HTTPS origin**, with no public LAN listener. Native CI exercises
+the pinned OpenCode `web` command using a simulated tailnet hostname,
+authenticated native agents and its server-sent event stream.
+The Mac supervisor now holds a process-scoped idle-sleep assertion and
+repairs only its missing private Tailscale routes after reconnects. It
+will not enable public Funnel or bypass FileVault login.
+Tailscale recovery and HTTPS checks run in one supervised background worker,
+so slow repairs do not hold up health monitoring or the Captain watchdog.
+
+See [headless and remote acceptance](docs/HEADLESS-AND-REMOTE-ACCEPTANCE.md)
+for what still requires an iPad/Windows test and real reboot/sleep checks.
 
 **Installation candidate only; owner-Mac end-to-end acceptance remains required.**
 Local authoring tests do not establish GPU performance, microphone quality,

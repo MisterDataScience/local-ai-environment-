@@ -1,16 +1,18 @@
 name: LOCAL AI integrated release checks
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    paths:
-      - "installer/**"
-      - "scripts/**"
-      - "docs/**"
-      - "downloads/Mac-Local-AI-Automated-Installer.zip"
-      - ".github/workflows/required-features.yml"
+  # Hosted allowance exhausted. Local edits/commits must not spend runner time.
+  # Restore automatic checks only after the owner approves a new CI budget.
   workflow_dispatch:
+    inputs:
+      native_macos:
+        description: 'Run both macOS release gates (uses hosted runner allowance)'
+        type: boolean
+        default: false
+      publish_installer:
+        description: 'Publish ZIP from main, only if all three gates pass'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,6 +31,12 @@ jobs:
           node-version: "24"
       - run: python -m pip install --disable-pip-version-check "Pillow>=11,<13" "requests>=2.32,<3" imageio-ffmpeg==0.6.0
       - run: python -m pip install --disable-pip-version-check --no-deps open-webui==0.11.1
+      - name: Resolve pinned ComfyUI source archive digest
+        run: |
+          curl -fL --proto '=https' --proto-redir '=https' --retry 3 \
+            'https://github.com/Comfy-Org/ComfyUI/archive/6b747c0428c343e1417219641db93a4fb7cb69ae.zip' \
+            -o "$RUNNER_TEMP/comfyui-source.zip"
+          echo '4a144a553c77397c81f6067f3f8c8ab9dffd42889af48fb35fec2c64a71c75b2  '"$RUNNER_TEMP/comfyui-source.zip" | sha256sum --check
       - run: python -m compileall -q installer
       - name: Persistent batch job regressions
         run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -p test_autonomous_jobs.py -v
@@ -59,9 +67,20 @@ jobs:
 
 
   captain-native-runtime-build:
+    if: inputs.native_macos
     runs-on: macos-15
     timeout-minutes: 20
     steps:
+      - name: Verify native Apple Silicon pinned uv bootstrap archive
+        run: |
+          curl -fL --proto '=https' --proto-redir '=https' --retry 3 \
+            https://github.com/astral-sh/uv/releases/download/0.12.20/uv-aarch64-apple-darwin.tar.gz \
+            -o "$RUNNER_TEMP/uv-bootstrap.tar.gz"
+          echo '848fdeb602ff1a1baacd4f6c8b7bdc6cf1ad026a6d9cf59475fda17c179743ca  '"$RUNNER_TEMP/uv-bootstrap.tar.gz" | shasum -a 256 --check
+          tar -xOzf "$RUNNER_TEMP/uv-bootstrap.tar.gz" uv-aarch64-apple-darwin/uv > "$RUNNER_TEMP/uv"
+          chmod 700 "$RUNNER_TEMP/uv"
+          "$RUNNER_TEMP/uv" --version | grep -E '^uv 0[.]12[.]20([[:space:]]|$)'
+
       - name: Build the pinned MiniCPM native server without downloading model weights
         run: |
           git init "$RUNNER_TEMP/minicpm-runtime"
@@ -73,7 +92,7 @@ jobs:
           "$RUNNER_TEMP/minicpm-runtime/build/bin/llama-server" --help > "$RUNNER_TEMP/llama-options.txt" 2>&1
           # Native compilation alone is not enough: require every option used
           # by the real installed Captain launch command.
-          for option in --parallel --ctx-size --kv-unified-per-slot --jinja --cont-batching --no-context-shift --no-webui --chat-template-kwargs --mmproj; do
+          for option in --parallel --ctx-size --kv-unified-per-slot --jinja --cont-batching --no-context-shift --no-webui --chat-template-kwargs --mmproj --lora; do
             if ! grep -F -q -- "$option" "$RUNNER_TEMP/llama-options.txt"; then
               echo "Pinned llama-server is missing required runtime option: $option"
               exit 1
@@ -81,6 +100,7 @@ jobs:
           done
 
   apple-native-pdf:
+    if: inputs.native_macos
     runs-on: macos-15
     timeout-minutes: 12
     steps:
@@ -144,7 +164,11 @@ jobs:
   publish-validated-installer:
     name: Publish the verified installer ZIP to main
     needs: [required-features, captain-native-runtime-build, apple-native-pdf]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' && inputs.publish_installer &&
+      needs.required-features.result == 'success' &&
+      needs.captain-native-runtime-build.result == 'success' &&
+      needs.apple-native-pdf.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write

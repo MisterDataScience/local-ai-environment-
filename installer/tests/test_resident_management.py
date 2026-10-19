@@ -61,7 +61,7 @@ class ResidentManagementTests(unittest.TestCase):
         self.assertEqual(len(management.maintain(self.cx)),1)
 
     def test_valid_pins_stay_selected_and_corrections_are_prepared_for_separate_approval(self):
-        ref=self.material();row=management.maintain(self.cx)[0];self.review(row)
+        ref=self.material();row=next(r for r in management.maintain(self.cx) if r['kind']=='map');self.review(row)
         old=memory.starting_map(self.cx,'writer.general')['revision']
         memory.correct(self.cx,ref,'A useful editing procedure','A corrected procedure','When editing','owner')
         pending=management.maintain(self.cx)
@@ -90,7 +90,7 @@ class ResidentManagementTests(unittest.TestCase):
         with self.cx:self.cx.execute("DELETE FROM grants WHERE specialist_id='writer.general' AND collection_id='general'")
         with self.assertRaises(PermissionError):self.review(create)
         with self.cx:self.cx.execute("INSERT INTO grants VALUES('writer.general','general')")
-        ref=self.material();row=management.maintain(self.cx)[0]
+        ref=self.material();row=next(r for r in management.maintain(self.cx) if r['kind']=='map')
         memory.correct(self.cx,ref,'A useful editing procedure','A different procedure','When editing','owner')
         with self.assertRaises(ValueError):self.review(row)
         self.assertEqual(memory.starting_map(self.cx,'writer.general')['revision'],0)

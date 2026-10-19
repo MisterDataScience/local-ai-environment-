@@ -1,4 +1,4 @@
-# Agent Village: first secure slice
+# Agent Village
 
 The host creates the five baseline residents automatically. The Captain can prepare complete specialist changes, and approved work prepares memory-map suggestions for owner review. [Normal use](RESIDENT-MEMORY.md#normal-use-the-system-prepares-you-approve) requires no manual agent or map setup.
 
@@ -21,10 +21,10 @@ export is needed to try them with fabricated data.
 The operational directory is `~/LocalAI-Automated/village`. Private imports and
 reads require macOS FileVault to report **On**. The directory and database use
 owner-only permissions. The live SQLite WAL database must stay on the local
-FileVault volume, never in iCloud or the mounted Cryptomator drive. This release
-does not yet include a verified encrypted Village backup or restore workflow.
-Keep the original ChatGPT export safe until that workflow is implemented and
-tested. A locked vault does not cause a plaintext fallback backup.
+FileVault volume, never in iCloud or the mounted Cryptomator drive. The registered encrypted workspace now includes Village snapshots and validated
+recovery. A locked vault never causes a plaintext fallback. Managed-source erasure
+uses deletion ledgers to block old-backup resurrection; see
+[Founding and recovery](FOUNDING-AND-RECOVERY.md) for scope and ordinary use.
 
 New messages enter the `private` collection. Captain tools can read only
 `general`, even if a citation is guessed. Collection membership can be
@@ -83,29 +83,11 @@ version remains stored but inactive. A paused or failed import resumes only
 when the owner reruns the command. Quoted source text is historical data and
 never current authorisation.
 
-Corrections to a lesson create another revision. The source archive remains
-intact. Source deletion, derivative redaction, encrypted export/restore,
-automated founding review, broader task-scoped private access and comparative
-assessments are **not implemented** in this slice. Do not treat the Village as
-the sole copy of private history until these are finished.
-
-## Native acceptance on the owner's Mac
-
-1. Verify FileVault is On, install from the canonical ZIP, and run
-   `Agent Village.command status`.
-2. Import a disposable branching `conversations.json` with `--confirm`;
-   rerun it to confirm deduplication. Search as owner and open the citation.
-3. Confirm Captain cannot find private content. Classify the disposable
-   conversation as general, then search and open it through Captain.
-4. Propose, approve and activate a disposable R daughter. Compare an R task
-   and unrelated C task in the Captain task reports. Confirm native approval
-   prompts, one-coder enforcement and retirement.
-5. Restart the Mac and switch the underlying model configuration. Confirm the
-   same archive citation, lessons and specialist ID remain.
-6. Keep backup/restore and real private corpus import pending until the
-   encrypted Village backup and deletion policy are verified.
-
-Synthetic local tests do not prove these Mac checks or model quality.
+Corrections to a lesson create another revision. The raw archive remains intact
+unless the owner explicitly approves a source-erasure plan. Founding review and
+encrypted recovery are now included; [the first-use guide](FOUNDING-AND-RECOVERY.md)
+prepares knowledge and agents without manual profile or map setup. Developer Mac
+checks are kept in [the separate acceptance checklist](VILLAGE-DEVELOPER-ACCEPTANCE.md).
 
 ## Architecture decision and threat notes
 

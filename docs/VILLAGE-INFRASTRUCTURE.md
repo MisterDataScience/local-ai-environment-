@@ -7,10 +7,11 @@ a small solution in the **workshop**, leave a project **notice**, collect an
 improvement **suggestion**, or prepare a **practice case**. Each operation happens
 because you requested it. There is no background learning or automatic execution.
 
-This is development code in the Agent Village pull request. Deployment remains
-`main` and its single installer ZIP. Native Mac/OpenCode acceptance is pending.
-Encrypted Village backup, restore and source deletion are also pending: begin
-with fabricated, non-sensitive examples. No ChatGPT history import is needed.
+These facilities are included in main and its single installer ZIP. Native
+Mac/OpenCode acceptance remains unverified here. Encrypted recovery, reviewed
+managed-source forgetting and automatic founding review are implemented; see
+[Founding and recovery](FOUNDING-AND-RECOVERY.md). No history import is needed to
+try workshop/practice facilities with fabricated examples.
 
 ## Start here
 

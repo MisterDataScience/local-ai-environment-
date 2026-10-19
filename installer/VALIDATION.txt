@@ -1,3 +1,15 @@
+Consolidated Village release 2026-10-19-integrated-village-1:
+584 local checks passed; five skipped (four native Apple PDF cases and one
+pinned WebUI-wheel compatibility case). Suites: 357 installer tests including
+five skips, 135 payload tests, 90 JavaScript tests and seven builder-script tests.
+Optional browser test attempted but blocked by missing Chromium. Syntax and
+installer/source/permissions/manifest checks passed; repeat ZIPs are identical.
+Includes local founding review, owner approval boundaries, encrypted Village
+backup/restore and conservative managed-source erasure with durable tombstones.
+Native Mac installation, mount, GPU, model-quality and browser acceptance are
+not claimed. No GitHub Actions used. See docs/FOUNDING-AND-RECOVERY.md and
+current docs/RELEASE-VALIDATION.md. Earlier records below are historical.
+
 Prepared resident management preview 2026-10-19:
 142 focused checks: nine management, 16 Commons, eight layered-memory, 18 Village/
 facilities, nine Captain setup, 26 installer, six Commons HTTP/transport,

@@ -1,0 +1,5 @@
+mlx-audio[stt,tts] @ https://github.com/Blaizzy/mlx-audio/archive/200aac3c64e5140dbe0daa4570dcb129f0f7afc9.zip#sha256=92a1075616ecc5fefff6ac07280565b28d52162644e7a75ebd99d2a696ac64e9
+onnxruntime==1.22.1
+soundfile==0.13.1
+setuptools==80.9.0
+wheel==0.45.1

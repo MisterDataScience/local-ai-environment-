@@ -10,6 +10,7 @@ import time
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler, urlopen
 from urllib.error import HTTPError
 import uuid
+import tempfile
 
 TAILSCALE_VERSION = "1.102.4"
 TAILSCALE_PACKAGE = f"https://pkgs.tailscale.com/stable/Tailscale-{TAILSCALE_VERSION}-macos.pkg"
@@ -22,6 +23,10 @@ TARGETS = {443: "http://127.0.0.1:8081", 8443: "http://127.0.0.1:8002",
            CAPTAIN_PORT: "http://127.0.0.1:4096"}
 
 
+class PublicFunnelError(RuntimeError):
+    """A managed port is public: stop local serving rather than retry."""
+
+
 def execute(command, capture=False, timeout=60):
     env = os.environ.copy()
     env["TAILSCALE_BE_CLI"] = "1"
@@ -31,7 +36,7 @@ def execute(command, capture=False, timeout=60):
 
 
 def cli_json(*args):
-    return json.loads(execute([CLI, *args], capture=True))
+    return json.loads(execute([CLI, *args], capture=True, timeout=12))
 
 
 def connected_hostname(status):
@@ -46,7 +51,7 @@ def connected_hostname(status):
 def assert_private_ports(serve, hostname):
     for endpoint, enabled in serve.get("AllowFunnel", {}).items():
         if enabled and any(endpoint.endswith(f":{port}") for port in TARGETS):
-            raise RuntimeError("Public Funnel is enabled on a Local AI port. Remote setup refuses public access.")
+            raise PublicFunnelError("Public Funnel is enabled on a Local AI port. Remote setup refuses public access.")
 
 
 def check_conflicts(serve, hostname):
@@ -67,10 +72,15 @@ def check_conflicts(serve, hostname):
 
 def atomic_json(path, value):
     path = Path(path)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, indent=2) + "\n")
-    temporary.chmod(0o600)
-    temporary.replace(path)
+    # Installer and the remote recovery worker can verify concurrently. Each
+    # writer needs its own private temporary file, not a shared .tmp pathname.
+    fd, name = tempfile.mkstemp(prefix='.' + path.name + '-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w') as output:
+            output.write(json.dumps(value, indent=2) + "\n")
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
 
 
 def install_client(root):
@@ -231,7 +241,59 @@ def verify_captain_access(root, remote):
     if not isinstance(agents, list) or not {'plan', 'build'}.issubset(
             {a.get('name') for a in agents if isinstance(a, dict)}):
         raise RuntimeError('Remote endpoint does not expose the actual Captain agents')
-    return {'status': 'passed', 'login_required': True, 'off_device_test': 'pending'}
+    ui_url = remote['captain_url'] + '/'
+    try:
+        with opener.open(Request(ui_url), timeout=20):
+            raise RuntimeError('Remote Captain UI responded without authentication')
+    except HTTPError as error:
+        if error.code != 401:
+            raise RuntimeError('Remote Captain UI did not require Basic authentication') from error
+    with opener.open(Request(ui_url, headers={'Authorization': 'Basic ' + basic}), timeout=30) as response:
+        sample = response.read(16384).lower()
+        if b'<html' not in sample and b'<!doctype html' not in sample:
+            raise RuntimeError('Remote Captain did not serve its HTML interface')
+    return {'status': 'passed', 'login_required': True, 'html_ui': 'passed',
+            'off_device_test': 'pending', 'browser_approvals': 'pending'}
+
+
+def reconcile_private_routes(remote):
+    """Repair missing owned Serve routes after a Tailscale restart.
+
+    Never replaces a different target, clears an unrelated Serve service,
+    enables Funnel, or changes hostname without the owner's involvement.
+    """
+    if not remote.get('enabled'):
+        return []
+    hostname = connected_hostname(cli_json('status', '--json'))
+    if hostname != remote['hostname']:
+        raise RuntimeError('Tailscale hostname changed; cannot silently reassign access routes.')
+    before = cli_json('serve', 'status', '--json')
+    check_conflicts(before, hostname)
+    missing = [port for port, target in TARGETS.items()
+               if before.get('Web', {}).get(f'{hostname}:{port}', {}).get('Handlers') !=
+               {'/': {'Proxy': target}}]
+    if not missing:
+        return []
+    created = []
+    try:
+        for port in missing:
+            # A timed-out CLI may already have applied the route. Record the
+            # attempt first so rollback also covers that ambiguous outcome.
+            created.append(port)
+            execute([CLI, 'serve', '--bg', '--yes', f'--https={port}', TARGETS[port]], timeout=60)
+        after = cli_json('serve', 'status', '--json')
+        check_conflicts(after, hostname)
+        for port, target in TARGETS.items():
+            if after.get('Web', {}).get(f'{hostname}:{port}', {}).get('Handlers') != {'/': {'Proxy': target}}:
+                raise RuntimeError('Serve reconciliation did not restore the expected private route')
+    except BaseException:
+        for port in reversed(created):
+            try:
+                execute([CLI, 'serve', '--bg', '--yes', f'--https={port}', 'off'], timeout=30)
+            except subprocess.SubprocessError:
+                pass
+        raise
+    return created
 
 
 def verify_remote_access(root, remote):

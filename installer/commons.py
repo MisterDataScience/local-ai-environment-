@@ -134,6 +134,8 @@ class Commons:
         return row, rev
 
     def start(self, request):
+        founding=getattr(self.engine,'founding',None)
+        if founding and (founding.active or founding.guard):raise RuntimeError('Pause founding review and wait for it to drain before opening Commons')
         allowed = {"minutes", "turns", "token_budget", "format", "seed", "collections", "residents", "web"}
         if not isinstance(request, dict) or set(request)-allowed:
             raise ValueError("Unknown Commons opening fields")
@@ -640,10 +642,25 @@ class Commons:
                   "withdraw":{"reference","digest"},"delete":{"reference","digest"},"correct":{"reference","digest","claim","purpose"},
                   "memories":set(),"proposal":{"proposal"},"purge":{"session"},
                   "map_view":{"resident"},"map_preview":{"resident","spec"},"map_approve":{"resident","spec","digest"},
-                  "management_view":set(),"management_review":{"proposal","digest","decision"}}
+                  "management_view":set(),"management_review":{"proposal","digest","decision"},
+                  "founding_view":set(),"founding_upload_begin":set(),"founding_start":{"settings"},
+                  "founding_resume":{"job"},"founding_pause":set(),"founding_extend":{"job"},
+                  "founding_skip":{"job"},"founding_forget":{"job"},"founding_preview":{"item","collection"},
+                  "founding_review":{"item","digest","collection","decision"}}
         extras={"view":{"session"},"message":{"room","target"}}
         if operation not in required or set(request)-({"operation"}|required[operation]|extras.get(operation,set())) or required[operation]-set(request):
             raise ValueError("Unknown or incomplete owner operation")
+        if operation.startswith('founding_'):
+            controller=self.engine.founding_controller()
+            if operation in ('founding_preview','founding_review'):
+                if controller.active or controller.guard or self.active or self.live:raise ValueError('Pause reviews and Commons and wait for requests to drain before final inspection')
+                from founding import preview_item,publish_item
+                cx=self.connector(self.root)
+                try:
+                    if operation=='founding_preview':return preview_item(cx,request['item'],request['collection'])
+                    return publish_item(cx,self.root,request['item'],request['digest'],request['collection'],request['decision'])
+                finally:cx.close()
+            return controller.control(operation,request)
         if operation=="start": return self.start(request["settings"])
         if operation=="view": return self.view(request.get("session",""))
         if operation=="pause": self.pause(); return dict(state="paused")

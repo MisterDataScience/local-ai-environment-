@@ -29,6 +29,12 @@ from model_team import upgrade_team
 from context_policy import require_backend_version
 from context_settings import ContextSettings
 COMFY_RELEASE = "v0.38.0"
+# Immutable source revision behind v0.38.0. Never download floating refs/tags.
+COMFY_COMMIT = "6b747c0428c343e1417219641db93a4fb7cb69ae"
+COMFY_SHA256 = "4a144a553c77397c81f6067f3f8c8ab9dffd42889af48fb35fec2c64a71c75b2"
+TORCH_VERSION = "2.10.0"
+TORCHVISION_VERSION = "0.25.0"
+TORCHAUDIO_VERSION = "2.10.0"
 WEBUI_RELEASE = "0.11.1"
 OLLAMA_CONTEXT_RELEASE = '0.40.0'
 OLLAMA_CONTEXT_SHA256 = '60dd339e77fdc8afe3286c51ff1fd8eb4f467ec178f33f4a85ec69dac6f2b9dd'
@@ -47,8 +53,8 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'essay-edit.mjs', 'essay-edit-prompt.txt', 'essay_setup.py',
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
-TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py', 'village.py', 'village_infrastructure.py')
-TEAM_FILES += ('commons.py', 'commons_control.py', 'village_memory.py', 'resident_management.py')
+TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py', 'power_guard.py', 'remote_recovery.py', 'dependency_locks.py', 'village.py', 'village_infrastructure.py')
+TEAM_FILES += ('commons.py', 'commons_control.py', 'village_memory.py', 'resident_management.py', 'village_storage.py', 'founding.py', 'village_owner.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -105,9 +111,16 @@ def download(url, destination, checksum=None):
                     partial.replace(destination)
                     return
     logging.info("Downloading %s; interrupted downloads can resume", destination.name)
-    run(["/usr/bin/curl", "-fL", "--proto", "=https", "--proto-redir", "=https",
-         "--retry", "3", "--retry-delay", "3",
-         "--connect-timeout", "30", "-C", "-", "-o", partial, url])
+    command = ["/usr/bin/curl", "-fL", "--proto", "=https", "--proto-redir", "=https",
+               "--retry", "3", "--retry-delay", "3", "--connect-timeout", "30"]
+    try:
+        run(command + ["-C", "-", "-o", partial, url])
+    except subprocess.CalledProcessError as error:
+        # A server may reject Range, or a complete corrupt partial may return
+        # HTTP 416. Retry once without Range instead of trapping every rerun.
+        if error.returncode not in {22, 33, 36} or not partial.is_file():
+            raise
+        run(command + ["-o", partial, url])
     if checksum and digest(partial) != checksum:
         invalid = partial.with_name(partial.name + ".invalid-" + str(time.time_ns()))
         partial.rename(invalid)
@@ -144,11 +157,14 @@ def completed(path, stage):
 def acceptance_fingerprint(root):
     hashes = [digest(root / "control" / name) for name in
               GATEWAY_FILES + TEAM_FILES + ("workflows/image.json", "workflows/video.json", "config.json", "comfy_vault/__init__.py")]
+    # Changing a deployed dependency lock invalidates earlier native acceptance.
+    for path in sorted((root / 'control/locks').glob('*.txt')):
+        hashes.append(digest(path))
     # Registering/changing the reference must invalidate an earlier not_run speech check.
     for name in ('voices/default.json', 'voices/default.wav', 'installed.json', 'conversation-installed.json'):
         path = root / 'voice-engine' / name
         hashes.append(digest(path) if path.is_file() else 'missing:' + name)
-    return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, WEBUI_RELEASE]).encode()).hexdigest()
+    return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, COMFY_COMMIT, TORCH_VERSION, TORCHVISION_VERSION, TORCHAUDIO_VERSION, WEBUI_RELEASE]).encode()).hexdigest()
 
 
 def preflight(root):
@@ -219,26 +235,89 @@ def install_ollama(root):
             raise
 
 
-def install_comfy(root, uv, state):
+def ensure_comfy_source(root):
+    """Verify old installs and repair interrupted extraction without losing data."""
     directory = root / "ComfyUI"
-    if not (directory / "main.py").exists():
-        archive = root / "cache/ComfyUI.zip"
-        download(f"https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/{COMFY_RELEASE}.zip", archive)
-        with tempfile.TemporaryDirectory(dir=root / "cache") as temporary:
-            extract_zip(archive, temporary)
-            sources = [p for p in Path(temporary).iterdir() if p.is_dir() and (p / "main.py").is_file()]
-            if len(sources) != 1:
-                raise RuntimeError("ComfyUI source archive layout has changed.")
-            shutil.move(str(sources[0]), directory)
+    if directory.is_symlink():
+        raise RuntimeError('ComfyUI source directory must not be a symlink')
+    archive = root / "cache/ComfyUI.zip"
+    download(f"https://github.com/Comfy-Org/ComfyUI/archive/{COMFY_COMMIT}.zip",
+             archive, COMFY_SHA256)
+    with tempfile.TemporaryDirectory(dir=root / "cache") as temporary:
+        extract_zip(archive, temporary)
+        sources = [p for p in Path(temporary).iterdir() if p.is_dir() and (p / "main.py").is_file()]
+        if len(sources) != 1:
+            raise RuntimeError("ComfyUI source archive layout has changed.")
+        source = sources[0]
+        if not directory.exists():
+            source.rename(directory)
+            return directory
+        # Validate every existing upstream file before repairing missing ones.
+        # Untracked models, outputs, workflows and custom nodes are untouched.
+        missing = []
+        for file in source.rglob('*'):
+            relative = file.relative_to(source)
+            target = directory / relative
+            if any((directory / Path(*relative.parts[:i])).is_symlink()
+                   for i in range(1, len(relative.parts) + 1)):
+                raise RuntimeError('ComfyUI source contains a symlink: ' + str(relative))
+            if file.is_dir():
+                if target.exists() and not target.is_dir():
+                    raise RuntimeError('ComfyUI source directory conflicts: ' + str(relative))
+                continue
+            if target.exists():
+                if not target.is_file() or digest(target) != digest(file):
+                    raise RuntimeError('ComfyUI source differs from pinned revision; preserved: ' + str(relative))
+            else:
+                missing.append((file, target))
+        for file, target in missing:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Rename a fully written sibling so a crash never leaves half a
+            # Python source file that later looks like a user modification.
+            fd, name = tempfile.mkstemp(prefix='.local-ai-source-', dir=target.parent)
+            try:
+                with os.fdopen(fd, 'wb') as output:
+                    output.write(file.read_bytes())
+                os.replace(name, target)
+            finally:
+                Path(name).unlink(missing_ok=True)
+    return directory
+
+
+def install_comfy(root, uv, state):
+    directory = ensure_comfy_source(root)
     python = directory / ".venv/bin/python"
     environment_missing = not python.exists()
     if environment_missing:
         run([uv, "venv", "--python", "3.12", directory / ".venv"])
-    if environment_missing or not completed(state, "comfy-dependencies"):
-        run([uv, "pip", "install", "--python", python, "torch", "torchvision", "torchaudio"])
-        run([uv, "pip", "install", "--python", python, "-r", directory / "requirements.txt"])
+    deps_marker = directory / ".local-ai-dependencies.json"
+    lock = SOURCE / 'locks/comfy-macos-arm64-py312.txt'
+    required = {'comfy_commit': COMFY_COMMIT, 'torch': TORCH_VERSION,
+                'torchvision': TORCHVISION_VERSION, 'torchaudio': TORCHAUDIO_VERSION,
+                'lock_sha256': digest(lock)}
+    try:
+        installed_deps = json.loads(deps_marker.read_text())
+    except (OSError, ValueError):
+        installed_deps = None
+    needs_dependencies = (environment_missing or
+                          not completed(state, "comfy-dependencies") or
+                          installed_deps != required)
+    if needs_dependencies:
+        # Resolve nothing at install time: all 85 transitive packages and
+        # artifact hashes are locked for CPython 3.12 / macOS 15+ ARM64.
+        run([uv, "pip", "install", "--python", python, '--require-hashes',
+             '--only-binary', ':all:', '-r', lock])
+    run([python, "-c", "import platform, torch, torchvision, torchaudio; "
+         "assert platform.machine() == 'arm64'; "
+         "assert (torch.__version__.split('+')[0], torchvision.__version__.split('+')[0], "
+         "torchaudio.__version__.split('+')[0]) == ('2.10.0', '0.25.0', '2.10.0'); "
+         "assert torch.backends.mps.is_available(), 'Apple GPU MPS is unavailable'; "
+         "print('Pinned Apple GPU MPS: available')"])
+    if needs_dependencies:
+        # Mark success only AFTER all imports, exact versions and Metal MPS pass.
+        # An upgrade will not reuse the old checkpoint with stale Torch.
+        deps_marker.write_text(json.dumps(required, sort_keys=True) + "\n")
         checkpoint(state, "comfy-dependencies")
-    run([python, "-c", "import platform, torch; assert platform.machine() == 'arm64'; assert torch.backends.mps.is_available(), 'Apple GPU MPS is unavailable'; print('Apple GPU MPS: available')"])
     return directory
 
 
@@ -260,6 +339,7 @@ def install_environments(root, uv, state):
         shutil.copy2(SOURCE / name, control / name)
     for name in TEAM_FILES:
         shutil.copy2(SOURCE / name, control / name)
+    shutil.copytree(SOURCE / 'locks', control / 'locks', dirs_exist_ok=True)
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     # Install only our descriptor-based save nodes; vault-mode CLI disables every
@@ -271,17 +351,22 @@ def install_environments(root, uv, state):
     python = control / ".venv/bin/python"
     if not python.exists():
         run([uv, "venv", "--python", "3.11", control / ".venv"])
-    run([uv, "pip", "install", "--python", python, "Pillow>=11,<13", "requests>=2.32,<3", "imageio-ffmpeg==0.6.0"])
+    from dependency_locks import install_locked
+    control_receipt = install_locked(uv, python, 'control', run)
     run([python, "-c", "import imageio_ffmpeg, subprocess; subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-version'], check=True)"])
     run([python, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=control)
+    (control / '.local-ai-dependencies.json').write_text(json.dumps(control_receipt, sort_keys=True) + '\n')
     webui = root / "webui"
     (webui / "data").mkdir(parents=True, exist_ok=True)
     webui_missing = not (webui / ".venv/bin/python").exists()
     if webui_missing:
         run([uv, "venv", "--python", "3.11", webui / ".venv"])
-    if webui_missing or not completed(state, "webui-dependencies"):
-        run([uv, "pip", "install", "--python", webui / ".venv/bin/python", f"open-webui=={WEBUI_RELEASE}"])
-        checkpoint(state, "webui-dependencies")
+    webui_python = webui / '.venv/bin/python'
+    webui_receipt = install_locked(uv, webui_python, 'webui', run)
+    run([webui_python, '-c', "import open_webui; from importlib.metadata import version; "
+         f"assert version('open-webui') == '{WEBUI_RELEASE}'"])
+    (webui / '.local-ai-dependencies.json').write_text(json.dumps(webui_receipt, sort_keys=True) + '\n')
+    checkpoint(state, "webui-dependencies")
     from webui_local_images import harden, harden_pdf
     harden(root)
     harden_pdf(root)
@@ -585,6 +670,10 @@ def make_launcher(root):
                               '\nexec .venv/bin/python village.py --root ' +
                               shlex.quote(str(root / 'village')) + ' "$@"\n')
     village_helper.chmod(0o755)
+    for label,operation in (('Back Up Village','backup'),('Restore Village','restore'),('Forget Village Source','forget')):
+        helper=root/(label+'.command')
+        helper.write_text('#!/bin/bash\nset -e\ncd '+shlex.quote(str(root/'control'))+'\nexec .venv/bin/python village_owner.py --root '+shlex.quote(str(root))+' --operation '+operation+' \"$@\"\n')
+        helper.chmod(0o755)
     commons_helper=root/'Village Commons.command'
     commons_helper.write_text('#!/bin/bash\nset -e\ncd '+shlex.quote(str(root/'control'))+
         '\nexec .venv/bin/python commons_control.py --root '+shlex.quote(str(root))+' "$@"\n')

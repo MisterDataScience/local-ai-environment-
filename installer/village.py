@@ -6,6 +6,7 @@ owner must verify FileVault before private data may be imported.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -54,14 +55,34 @@ def secure_root(root, *, test_encrypted=False):
     return root
 
 
-def connect(root, *, test_encrypted=False):
+class VillageConnection(sqlite3.Connection):
+    def close(self):
+        try:super().close()
+        finally:
+            lock=getattr(self,'_store_lock',None)
+            if lock:lock.close();self._store_lock=None
+
+
+def connect(root, *, test_encrypted=False, maintenance=False):
     root = secure_root(root, test_encrypted=test_encrypted)
+    if not maintenance and (root.parent / "village-deletion-pending.json").exists():
+        raise RuntimeError("A source deletion is pending; resume the owner deletion helper before using Village")
     db = root / "village.sqlite"
     if db.is_symlink():
         raise ValueError("Database symlink rejected")
     if db.exists() and db.stat().st_mode & 0o077:
         raise PermissionError("Insecure Village database permissions")
-    cx = sqlite3.connect(db, timeout=30)
+    lock=None
+    if not maintenance:
+        fd=os.open(root.parent/'.village-store.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
+        lock=os.fdopen(fd,'a+b')
+        try:fcntl.flock(lock,fcntl.LOCK_SH|fcntl.LOCK_NB)
+        except BlockingIOError:lock.close();raise RuntimeError('Village recovery operation is in progress')
+    try:cx = sqlite3.connect(db, timeout=30,factory=VillageConnection)
+    except BaseException:
+        if lock:lock.close()
+        raise
+    cx._store_lock=lock
     db.chmod(0o600)
     cx.row_factory = sqlite3.Row
     cx.execute("PRAGMA foreign_keys=ON")
@@ -216,6 +237,8 @@ def import_file(cx, root, source, *, confirm=False, stop_after=None):
                 after.st_size, after.st_mtime_ns, after.st_ctime_ns):
             raise ValueError("Source changed during hashing")
     sha = h.hexdigest()
+    from village_storage import check_import
+    check_import(root,sha,source)
     archive = root / "archive" / (sha + ".json")
     if not archive.exists():
         temporary = root / "archive" / (sha + "." + uuid.uuid4().hex + ".partial")

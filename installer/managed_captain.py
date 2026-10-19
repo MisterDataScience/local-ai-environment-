@@ -7,11 +7,66 @@ import secrets
 import tempfile
 from urllib.request import Request, build_opener, ProxyHandler
 import time
+import logging
 
 
 AUTH_NAME = 'captain-ui-auth.json'
 READY_NAME = 'captain-managed-ready.json'
 URL = 'http://127.0.0.1:4096'
+
+
+def resumed_from_sleep(last_monotonic, last_wall, now_monotonic, now_wall):
+    # On the target Mac, monotonic time excludes system sleep. A slow blocking
+    # operation advances both clocks and must not reset the failure streak.
+    # A large forward wall-clock correction may grant grace too, which is safe.
+    return (now_wall - last_wall) - (now_monotonic - last_monotonic) > 30
+
+
+class CaptainWatchdog:
+    """Probe the control API, never inference, before requesting a restart."""
+    def __init__(self, interval=30, threshold=3, grace=60, timeout=3):
+        self.interval = interval
+        self.threshold = threshold
+        self.grace = grace
+        self.timeout = timeout
+        self.process = None
+        self.failures = 0
+        self.next_check = 0
+
+    def check(self, root, process, mode, *, now=None, resumed=False):
+        now = time.monotonic() if now is None else now
+        if process is not self.process:
+            self.process = process
+            self.failures = 0
+            self.next_check = now + self.grace
+        if process is None or process.poll() is not None:
+            self.failures = 0
+            return False
+        # An unavailable gateway, mode transition or intentional Gaming mode
+        # must not look like a frozen Captain. Startup/wake gets a fresh grace.
+        if (resumed or not isinstance(mode, dict) or
+                mode.get('mode') not in {'normal', 'max'} or
+                mode.get('transitioning') is not False or mode.get('error') is not None):
+            self.failures = 0
+            self.next_check = now + self.grace
+            return False
+        if now < self.next_check:
+            return False
+        self.next_check = now + self.interval
+        try:
+            agent_status(root, timeout=self.timeout)
+        except (OSError, RuntimeError, ValueError, KeyError):
+            self.failures += 1
+            # Do not log response bodies, credential errors or request headers.
+            logging.warning('Captain control API unresponsive (%s/%s probes).',
+                            self.failures, self.threshold)
+            if self.failures >= self.threshold:
+                self.failures = 0
+                self.next_check = now + self.grace
+                return True
+        else:
+            self.failures = 0
+        return False
 
 
 def credentials(root):

@@ -30,6 +30,6 @@ class VoiceSetupTests(unittest.TestCase):
             result = voice_setup.install(root, 'uv', run)
             self.assertTrue(result['enabled'])
             commands = [list(map(str, c.args[0])) for c in run.call_args_list]
-            self.assertTrue(any(voice_setup.MLX_REVISION in ' '.join(c) for c in commands))
+            self.assertTrue(any('voice-macos-arm64-py312.txt' in ' '.join(c) and '--require-hashes' in c for c in commands))
             self.assertTrue(any('speech_worker.py' in ' '.join(c) for c in commands))
             self.assertEqual(json.loads((root / 'voice-engine/installed.json').read_text())['model_revision'], voice_setup.MODEL_REVISION)

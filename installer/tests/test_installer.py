@@ -13,6 +13,47 @@ import installer
 
 
 class InstallerTests(unittest.TestCase):
+    def test_comfy_dependencies_upgrade_when_old_checkpoint_has_unpinned_torch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy = root / 'ComfyUI'
+            (comfy / '.venv/bin').mkdir(parents=True)
+            (comfy / 'main.py').write_text('old existing ComfyUI source')
+            (comfy / '.venv/bin/python').write_text('fake installed Python')
+            state = root / 'install-state.json'
+            installer.checkpoint(state, 'comfy-dependencies')
+            with patch.object(installer, 'ensure_comfy_source', return_value=comfy), \
+                 patch.object(installer, 'run') as runner:
+                installer.install_comfy(root, Path('/tmp/uv'), state)
+                first = [call.args[0] for call in runner.call_args_list]
+                self.assertTrue(any('--require-hashes' in cmd for cmd in first))
+                self.assertTrue(any('--only-binary' in cmd for cmd in first))
+                runner.reset_mock()
+                installer.install_comfy(root, Path('/tmp/uv'), state)
+                # Second run only checks existing exact versions and MPS.
+                self.assertEqual(runner.call_count, 1)
+            marker = json.loads((comfy / '.local-ai-dependencies.json').read_text())
+            self.assertEqual(marker['torch'], '2.10.0')
+            self.assertTrue(installer.completed(state, 'comfy-dependencies'))
+
+    def test_failed_comfy_dependency_upgrade_never_claims_installed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            comfy = root / 'ComfyUI'
+            (comfy / '.venv/bin').mkdir(parents=True)
+            (comfy / 'main.py').write_text('source')
+            (comfy / '.venv/bin/python').write_text('venv')
+            state = root / 'install-state.json'
+            installer.checkpoint(state, 'comfy-dependencies')
+            def failing_run(command, **_):
+                if command[0] == comfy / '.venv/bin/python':
+                    raise RuntimeError('MPS compatibility failed')
+            with patch.object(installer, 'ensure_comfy_source', return_value=comfy), \
+                 patch.object(installer, 'run', side_effect=failing_run):
+                with self.assertRaisesRegex(RuntimeError, 'MPS compatibility failed'):
+                    installer.install_comfy(root, Path('/tmp/uv'), state)
+            self.assertFalse((comfy / '.local-ai-dependencies.json').exists())
+
     def test_upgrade_native_acceptance_temporarily_sets_max_then_restores_user_mode(self):
         import resource_modes
         with tempfile.TemporaryDirectory() as directory:

@@ -33,6 +33,18 @@ do not represent these checks as passed until performed on the target runtime.
 8. Test hidden draft/reveal, breakouts, scoped research, distinct final approvals,
    profile revision/retirement, stale proposal refusal, receipts and expiry.
 
-Full encrypted recovery and source-erasure acceptance requires implementing the
-remaining storage work first. Track that separately in VILLAGE-STATUS.md. Do not
-turn missing engineering into a mandatory owner configuration procedure.
+9. Perform a complete founding review on synthetic exports. Check raw byte identity,
+   default/private boundaries, exact quotations, bounded format repair, explicit
+   approval, specialist recurrence, generated Markdown, pause/restart and budget
+   extension. Normal users should not be asked to construct this fixture.
+10. With the real registered Cryptomator mount, create a snapshot, change synthetic
+    records and restore it. Verify checksums/integrity, preserved prior stores and
+    paused sessions. Test mount loss without plaintext backup fallback.
+11. Preview/approve synthetic source erasure. Verify managed derivatives, specialist
+    identities, history/working copies and backups are removed. Present a retained
+    old snapshot and confirm the current vault deletion ledger refuses restoration,
+    including after local ledger loss. Test interruption/resume and a corrupt source.
+
+These paths are implemented; actual target-Mac results must still be recorded.
+Erasure scope excludes independent external copies/provider versions and forensic
+hardware erasure. See FOUNDING-AND-RECOVERY.md and VILLAGE-STATUS.md.

@@ -12,7 +12,10 @@ import subprocess
 import time
 
 APP = Path('/Applications/Docker.app')
-URL = 'https://desktop.docker.com/mac/main/arm64/Docker.dmg'
+# Docker Desktop 4.91.0, official Apple Silicon release artifact.
+# Source: https://docs.docker.com/desktop/release-notes/ (Mac with Apple chip).
+URL = 'https://desktop.docker.com/mac/main/arm64/239619/Docker.dmg'
+SHA256 = '31a324e8f72acf178c9f5d46cd71240705541faa69827588813e539d29c7e859'
 TEAM = '9BNSXJN65R'
 
 
@@ -82,8 +85,8 @@ def start_installed_docker(timeout=300):
 def install(root, download, *, prompt=input, say=print, timeout=900):
     root = Path(root)
     if not APP.exists():
-        image = root / 'cache/docker-desktop-arm64.dmg'
-        download(URL, image)
+        image = root / 'cache/docker-desktop-4.91.0-arm64.dmg'
+        download(URL, image, SHA256)
         mount = root / 'cache/docker-desktop-mounted'
         mount.mkdir(mode=0o700, exist_ok=True)
         if any(mount.iterdir()):

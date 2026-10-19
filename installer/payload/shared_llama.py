@@ -51,9 +51,11 @@ class SharedLlama:
 
     def files(self):
         result = {}
-        for kind in ('binary', 'model', 'mmproj'):
+        for kind in ('binary', 'model', 'mmproj', 'lora'):
             item = self.config.get('llama', {}).get(kind)
             if item is None and kind == 'mmproj':
+                continue
+            if item is None and kind == 'lora' and self.config.get('variant') != 'atomicchat-uncensored-lora':
                 continue
             if not isinstance(item, dict) or not isinstance(item.get('path'), str):
                 raise ValueError('Missing local GGUF server artifact: ' + kind)
@@ -88,6 +90,10 @@ class SharedLlama:
                    '--no-webui', '--chat-template-kwargs', json.dumps({'enable_thinking': thinking})]
         if 'mmproj' in files:
             command += ['--mmproj', files['mmproj']]
+        if 'lora' in files:
+            # Static LoRA at the default scale 1.0 is applied to all decode
+            # slots, so the captain and every delegated worker use the variant.
+            command += ['--lora', files['lora']]
         return command
 
     def start(self, context, thinking=False, parallel=None):

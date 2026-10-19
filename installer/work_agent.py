@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import secrets
@@ -98,6 +99,30 @@ def _apply_global_behaviour(settings):
     return settings
 
 
+def remote_server_origin(config):
+    """Allow only this installation's private Tailscale HTTPS browser origin."""
+    remote = config.get('remote_access', {})
+    if not remote.get('enabled'):
+        return None
+    hostname = remote.get('hostname', '')
+    origin = remote.get('captain_url', '')
+    if not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)*\.ts\.net', hostname):
+        raise ValueError('Captain remote hostname is not a valid personal Tailscale DNS name')
+    if origin != f'https://{hostname}:10000':
+        raise ValueError('Captain remote origin must match the configured private HTTPS route')
+    return origin
+
+
+def launch_native(command, project, environment, *, managed=False):
+    # Keep managed OpenCode/MCP descendants in the wrapper's private group.
+    # A watchdog can then terminate the whole owned tree even if the wrapper
+    # itself is stuck and cannot forward the shutdown signal.
+    if managed and os.getpgrp() != os.getpid():
+        raise RuntimeError('Managed Captain must be launched in its own supervisor-owned process group')
+    return subprocess.Popen(command, cwd=project, env=environment,
+                            start_new_session=not managed)
+
+
 def configuration(config, identifiers, mode='normal', root=None, status=None):
     sys.path.insert(0, str(Path(__file__).resolve().parent / 'payload'))
     from text_models import configured_text_models, output_ceiling
@@ -128,6 +153,11 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
             'tools': {'webfetch': False, 'websearch': False, 'task': False, 'lsp': False},
             'lsp': False, 'formatter': False,
             'agent': {'build': {'steps': 12}, 'plan': {'steps': 8}}}
+    origin = remote_server_origin(config)
+    if origin:
+        # OpenCode treats off-origin requests from its browser as CORS.
+        # No wildcard, LAN hostname, or unapproved third-party origin.
+        settings['server'] = {'cors': [origin]}
     roles = team_roles(config, models)
     if not roles:
         return _apply_global_behaviour(settings)
@@ -415,8 +445,12 @@ def main():
     print('OpenCode: http://127.0.0.1:4096  Username: opencode', flush=True)
     if not args.discord and not args.managed:
         print('Session password:', git_env['OPENCODE_SERVER_PASSWORD'], flush=True)
-    process = subprocess.Popen([str(binary), 'serve' if args.discord else 'web', '--hostname', '127.0.0.1', '--port', '4096'],
-                               cwd=project, env=git_env, start_new_session=True)
+    # The pinned OpenCode `web` command does not expose the serve-only
+    # --cors CLI flag. Browser UI and API are on the SAME private Tailscale
+    # HTTPS origin, so no cross-origin browser exemption is required here.
+    command = [str(binary), 'serve' if args.discord else 'web',
+               '--hostname', '127.0.0.1', '--port', '4096']
+    process = launch_native(command, project, git_env, managed=args.managed)
     conversation_server = None
     discord_process = None
     try:
@@ -479,9 +513,13 @@ def main():
     finally:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
         if discord_process:
             stop_process(discord_process, timeout=10)
-        stop_process(process, timeout=10)
+        if args.managed:
+            stop_process(process, timeout=10, group_id=os.getpid())
+        else:
+            stop_process(process, timeout=10)
         from file_workflows import clear_project
         clear_project(root, process.pid)
         from essay_setup import clear_connection

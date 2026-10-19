@@ -1,5 +1,11 @@
 # LOCAL AI installer
 
+After installation, open `Village Commons.command` for **Prepare the Village from
+your conversation history**. The system creates baseline residents and prepares
+knowledge, memories, specialists and maps for final owner approval. Encrypted
+Village backup/restore and managed-source forgetting are included. Read
+[Founding and recovery](docs/FOUNDING-AND-RECOVERY.md).
+
 The host creates the five baseline residents automatically. The Captain can prepare complete specialist changes, and approved work prepares memory-map suggestions for owner review. [Normal use](docs/RESIDENT-MEMORY.md#normal-use-the-system-prepares-you-approve) requires no manual agent or map setup.
 
 Residents now use an [owner-curated starting map](docs/RESIDENT-MEMORY.md): fast-access memories, a glossary of deeper own memories, and preferred Library or Archive workflows. The owner previews and approves map changes separately from approving memories or documents.

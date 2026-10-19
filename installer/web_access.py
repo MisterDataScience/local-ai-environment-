@@ -12,7 +12,28 @@ import subprocess
 import time
 from urllib.request import Request, build_opener, ProxyHandler
 
-IMAGES = {"vpn": "qmcgaw/gluetun:v3.41.0", "search": "searxng/searxng:latest", "reader": "python:3.12-alpine"}
+# Publisher manifest indexes verified 2026-10-16. Changes are managed releases.
+PLATFORM = "linux/arm64"
+IMAGES = {
+    "vpn": "qmcgaw/gluetun@sha256:6b54856716d0de56e5bb00a77029b0adea57284cf5a466f23aad5979257d3045",
+    "search": "searxng/searxng@sha256:d7ac1a4c215ae9ea1e3e46b114aa94e4bc4e37f94e773559682491c9a18a7404",
+    "reader": "python@sha256:1b668429b3511ab407d8e00648891631b0b1a4d7e15e3ca70f38ab5b91ad4ab4",
+}
+BROWSER_IMAGE = "mcr.microsoft.com/playwright/mcp@sha256:690763cbb437ee7233f538a953bb5390bf03791eb5c965b471e59d17a6132fcb"
+
+
+def pull_verified_image(binary, image):
+    """Pull the release digest for Apple Silicon, never resolve a mutable tag."""
+    import re
+    if not re.fullmatch(r"[^@\s]+@sha256:[0-9a-f]{64}", image):
+        raise ValueError("Container image must have an exact SHA-256 digest.")
+    run([binary, "pull", "--platform", PLATFORM, image], timeout=900)
+    details = json.loads(run([binary, "image", "inspect", image],
+                             capture_output=True, text=True, timeout=30).stdout)[0]
+    if (image not in details.get("RepoDigests", []) or
+            details.get("Os") != "linux" or details.get("Architecture") != "arm64"):
+        raise RuntimeError("Pulled container does not match the release digest and ARM64 platform: " + image)
+    return image
 
 
 def save(path, value):
@@ -96,6 +117,8 @@ def specification(images, browser_enabled=False):
     if browser_enabled:
         services["vpn"]["ports"].append("127.0.0.1:8931:8931")
         services["vpn"]["environment"]["FIREWALL_INPUT_PORTS"] = "8090,8888,8931"
+    for service in services.values():
+        service["platform"] = PLATFORM
     return {"services": services, "networks": {"default": {"enable_ipv6": False}}}
 
 
@@ -166,19 +189,12 @@ def configure(root):
         # Files must be readable by the unprivileged container users. Parent remains 0700 on host.
         (web / "settings.yml").chmod(0o644)
         lock_path = web / "images.json"
-        if lock_path.exists():
-            images = json.loads(lock_path.read_text())
-        else:
-            images = {}
-            for name, image in IMAGES.items():
-                run([binary, "pull", image], timeout=900)
-                inspected = json.loads(run([binary, "image", "inspect", image], capture_output=True,
-                                          text=True, timeout=30).stdout)[0]
-                digests = inspected.get("RepoDigests", [])
-                if not digests:
-                    raise RuntimeError("Cannot record immutable container digest: " + image)
-                images[name] = digests[0]
-            save(lock_path, images)
+        # images.json is a receipt, not an authority for selecting release versions.
+        # Pull/verify everything before replacing it, including on cache repair.
+        images = {name: pull_verified_image(binary, image) for name, image in IMAGES.items()}
+        if config.get("browser", {}).get("enabled", False):
+            images["browser"] = pull_verified_image(binary, BROWSER_IMAGE)
+        save(lock_path, images)
         save(web / "compose.json", specification(images, browser_enabled=config.get("browser", {}).get("enabled", False)))
         backup = root / "control/config.before-web-access.json"
         if not backup.exists():

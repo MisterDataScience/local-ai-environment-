@@ -26,6 +26,8 @@ def archive_tree(zipped, source, prefix, config, vault_fd):
         for name in sorted(os.listdir(fd)):
             s = os.stat(name, dir_fd=fd, follow_symlinks=False)
             item = relative + '/' + name
+            if item.startswith('village/jobs/upload-') or (item.startswith('village/archive/') and item.endswith('.partial')):
+                continue  # Incomplete uploads/import copies are not accepted archived sources.
             if item == 'webui-data/cache':
                 continue  # Rebuildable model/cache files may include Hugging Face symlinks.
             if stat.S_ISLNK(s.st_mode):
@@ -71,15 +73,25 @@ def archive_tree(zipped, source, prefix, config, vault_fd):
     return entries
 
 
-def snapshot(root, config, legacy=False):
+def snapshot(root,config,legacy=False):
+    from village_storage import offline_access
+    with offline_access(root):return _snapshot(root,config,legacy)
+
+
+def _snapshot(root, config, legacy=False):
     """Caller MUST hold runtime/gateway locks with services stopped."""
     if not enabled(config):
         return None
     from common import PORTS, port_open
     # Never take an inconsistent copy, even if called outside the normal launcher.
-    if any(port_open(PORTS[k]) for k in ('webui', 'gateway', 'comfy')):
+    if (any(port_open(PORTS[k]) for k in ('webui', 'gateway', 'comfy')) or port_open(4096)):
         raise RuntimeError('Stop Local AI before backing up its data.')
     sources = [(root / 'webui/data', 'webui-data')]
+    from village_storage import inventory,sync_ledger
+    if (root/'village-deletion-pending.json').exists():raise RuntimeError('Resume pending source deletion before backup')
+    if (root/'village').exists():
+        sync_ledger(root,config)
+        sources.append((root/'village','village'))
     if legacy:
         sources += [(root / 'control/media', 'legacy/gateway-media'),
                     (root / 'ComfyUI/output', 'legacy/comfy-output'),
@@ -96,10 +108,10 @@ def snapshot(root, config, legacy=False):
             # The separate GitHub PAT and vault password are NOT included.
             zipped.writestr('restore-settings.json', json.dumps({
                 'webui_secret': config.get('webui_secret'), 'text_models': config.get('text_models')}, indent=2))
-            zipped.writestr('manifest.json', json.dumps({'format': 1,
+            zipped.writestr('manifest.json', json.dumps({'format': 2, 'village_sources': inventory(root),
                 'created_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 'method': 'offline-copy-including-sqlite-wal', 'files': entries,
-                'excluded': ['webui-data/cache'],
+                'excluded': ['webui-data/cache','village/jobs/upload-*','village/archive/*.partial'],
                 'legacy_sources_preserved': bool(legacy)}, indent=2))
     if not legacy:
         retain_backups(config, name)
@@ -167,10 +179,16 @@ def retain_backups(config, newest):
             os.unlink(name, dir_fd=folder)
 
 
-def restore(root, config, relative):
+def restore(root,config,relative):
+    from village_storage import offline_access
+    with offline_access(root):return _restore(root,config,relative)
+
+
+def _restore(root, config, relative):
+    if (root/'village-deletion-pending.json').exists():raise RuntimeError('Resume pending source deletion before restore')
     """Restore offline to a new local directory, preserving the previous data."""
     from common import PORTS, port_open
-    if any(port_open(PORTS[k]) for k in ('webui', 'gateway', 'comfy')):
+    if (any(port_open(PORTS[k]) for k in ('webui', 'gateway', 'comfy')) or port_open(4096)):
         raise RuntimeError('Stop Local AI before restoring.')
     if not re.fullmatch(r'Archive/(Backups|Migration)/[0-9a-f]{32}\.zip', relative):
         raise ValueError('Choose an archive path printed by the backup helper.')
@@ -179,6 +197,10 @@ def restore(root, config, relative):
         raise ValueError('WebUI data paths must not be symlinks')
     stage = root / 'webui' / ('.restore-' + uuid.uuid4().hex)
     stage.mkdir(mode=0o700)
+    village_stage=root/('.village-restore-'+uuid.uuid4().hex)
+    village_stage.mkdir(mode=0o700)
+    village_previous=root/('village.before-restore-'+uuid.uuid4().hex)
+    village_moved=False;village_installed=False;has_village=False;has_webui=False;webui_installed=False
     previous = root / 'webui' / ('data.before-restore-' + uuid.uuid4().hex)
     moved = False
     try:
@@ -194,19 +216,27 @@ def restore(root, config, relative):
                         if len(zipped.namelist()) != len(set(zipped.namelist())):
                             raise ValueError('Duplicate archive entries')
                         manifest = json.loads(zipped.read('manifest.json'))
-                        if manifest.get('format') != 1:
+                        if manifest.get('format') not in (1,2):
                             raise ValueError('Unsupported backup format')
+                        if any(e['path'].startswith('village/') for e in manifest['files']):
+                            from village_storage import guard_restore
+                            guard_restore(root,config,manifest)
+                        entries=manifest.get('files')
+                        if not isinstance(entries,list) or len(entries)>100000 or any(type(e.get('size')) is not int or not 0<=e['size']<=8*1024**3 for e in entries) or sum(e['size'] for e in entries)>64*1024**3:raise ValueError('Backup exceeds restore bounds')
                         settings = json.loads(zipped.read('restore-settings.json'))
                         seen = set()
                         for entry in manifest['files']:
                             path = entry['path']
-                            if not path.startswith('webui-data/'):
+                            if not path.startswith(('webui-data/','village/')):
                                 continue  # Legacy archives remain archives; never overwrite media/logs.
                             parts = path.split('/')[1:]
                             if not parts or any(p in ('', '.', '..') or '\\' in p for p in parts) or path in seen:
                                 raise ValueError('Invalid backup path')
                             seen.add(path)
-                            target = stage.joinpath(*parts)
+                            is_village=path.startswith('village/')
+                            has_village=has_village or is_village
+                            has_webui=has_webui or not is_village
+                            target = (village_stage if is_village else stage).joinpath(*parts)
                             target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                             digest, size = hashlib.sha256(), 0
                             with zipped.open(path) as src, target.open('xb') as dst:
@@ -217,6 +247,7 @@ def restore(root, config, relative):
                                     if not block:
                                         break
                                     size += len(block)
+                                    if size>entry['size']:raise ValueError('Backup expands beyond its declared size')
                                     digest.update(block)
                                     dst.write(block)
                             if size != entry['size'] or digest.hexdigest() != entry['sha256']:
@@ -224,18 +255,28 @@ def restore(root, config, relative):
                         if not seen:
                             raise ValueError('Archive contains no WebUI data')
                         same_mount(config, vault_fd)
-        if data.exists():
+        if has_village:
+            from village import secure_root
+            secure_root(root/'village')
+            from village_storage import validate_restored
+            validate_restored(root,config,village_stage)
+        if has_webui and data.exists():
             data.rename(previous)
             moved = True
         try:
-            stage.rename(data)
+            if has_webui:stage.rename(data);webui_installed=True
+            if has_village:
+                (root/'village').rename(village_previous);village_moved=True
+                village_stage.rename(root/'village');village_installed=True
             updated = dict(config)
             if settings.get('webui_secret'):
                 updated['webui_secret'] = settings['webui_secret']
             from workspace_setup import save_config
             save_config(root, updated)
         except Exception:
-            if data.exists():
+            if village_installed:(root/'village').rename(village_stage)
+            if village_moved:village_previous.rename(root/'village')
+            if webui_installed and data.exists():
                 data.rename(stage)
             if moved:
                 previous.rename(data)
@@ -244,6 +285,7 @@ def restore(root, config, relative):
     finally:
         if stage.exists():
             shutil.rmtree(stage)
+        if village_stage.exists():shutil.rmtree(village_stage)
 
 
 @contextmanager

@@ -18,14 +18,13 @@ def install(root, uv, run):
     from speech import MLX_REVISION
     folder = root / 'voice-engine'
     python = folder / '.venv/bin/python'
+    from dependency_locks import install_locked
+    dependency_receipt = install_locked(uv, python, 'voice', run)
     wanted = {'stt': STT_MODEL, 'stt_revision': STT_REVISION, 'vad_revision': VAD_REVISION,
-              'vad_blob': VAD_BLOB, 'mlx_revision': MLX_REVISION, 'onnxruntime': '1.22.1'}
+              'vad_blob': VAD_BLOB, 'mlx_revision': MLX_REVISION, 'onnxruntime': '1.22.1', **dependency_receipt}
     marker = folder / 'conversation-installed.json'
     if (not marker.exists() or json.loads(marker.read_text()) != wanted
             or not (folder / 'stt/config.json').is_file() or not (folder / 'silero.onnx').is_file()):
-        run([uv, 'pip', 'install', '--python', python,
-             f'mlx-audio[stt,tts] @ https://github.com/Blaizzy/mlx-audio/archive/{MLX_REVISION}.zip',
-             'onnxruntime==1.22.1', 'soundfile==0.13.1'])
         run([python, str(root / 'control/conversation_setup.py'), '--root', root, '--download'])
         env = dict(os.environ, HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
         for kind in ('vad', 'stt', 'tts'):
