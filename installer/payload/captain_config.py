@@ -45,4 +45,9 @@ def upgrade(config):
         else:
             result['captain'] = {'enabled': False}
     settings(result)
+    result.setdefault('commons',{'max_active_agents':4,'max_turns_per_resident':12})
+    if not isinstance(result['commons'],dict) or type(result['commons'].get('max_active_agents',4)) is not int or not 1<=result['commons'].get('max_active_agents',4)<=4:
+        raise ValueError('commons.max_active_agents must be an integer from 1 to 4')
+    if type(result['commons'].get('max_turns_per_resident',12)) is not int or not 1<=result['commons'].get('max_turns_per_resident',12)<=64:
+        raise ValueError('commons.max_turns_per_resident must be an integer from 1 to 64')
     return result

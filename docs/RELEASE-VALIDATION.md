@@ -1,5 +1,53 @@
 # Integrated release validation
 
+## Village Commons preview, 19 October 2026
+
+Development release `2026-10-19-village-commons-preview` extends the same draft
+Village branch and canonical installer. It does not deploy to the owner's Mac.
+See [the practical Commons guide](VILLAGE-COMMONS.md).
+
+Commons uses the existing shared local inference queue: four active residents
+by default with one extra foreground slot required, fair rotation, one coder at
+a time, real clock/turn/conservative-token limits, foreground pause and explicit
+resume. There is no automatic opening, background review or outsourcing. The
+owner page provides formats, selective rooms, private drafts/reveal, exact context
+inspection and separate final approvals for documents, Archive snapshots,
+individual memories and persistent pointers. Expiring quarantine is excluded
+from regular Village retrieval. Approved memories retain evidence and revisions;
+source withdrawal, current grants and resident identity are rechecked.
+
+Focused authoring validation:
+
+- Commons core: 14 Python checks with real SQLite and synthetic responses.
+  Covers four concurrent requests and rotation, independent openings, clocks,
+  budgets, scopes, private research denial, draft/reveal/room isolation, exact
+  approvals, source dependency withdrawal, forgetting, correction/deletion and
+  approval replay. No private user corpus was used.
+- Commons gateway/transport: six checks, including four real Engine queue
+  admissions paused by a foreground request, authenticated owner HTTP and media
+  isolation, forbidden remote/tool endpoints, queue cancellation and closing an
+  actual stalled local inference HTTP socket.
+- Existing affected suites: 11 shared inference/backend, four native Captain
+  capacity, 25 gateway, 18 Village/archive/facilities, nine Captain setup and
+  26 installer Python checks. Captain/OpenCode JavaScript: 46 checks.
+- Builder regression: one check for deterministic output, stale source refusal,
+  missing files and incorrect permissions. Full package contents/permissions/
+  manifest verification and identical second build are required before publishing.
+- Python compilation, Captain JavaScript syntax and extracted dashboard script
+  syntax checked. The authoring runtime's pip-vendored requests supplied the
+  existing gateway import dependency; no packages were downloaded for these checks.
+
+Native Mac browser layout, real local-model JSON action compliance, useful GPU
+throughput, sustained memory pressure, GPU cancellation, model startup/draining,
+real VPN research and native upgrade/approval acceptance are NOT RUN. Closing a
+host socket does not prove GPU work immediately stopped. Quarantine deletion is
+logical deletion, not guaranteed forensic erasure or backup removal. Village
+encrypted backup/restore and complete source deletion remain unfinished; the PR
+stays draft and real personal exports should remain unimported.
+
+No GitHub Actions were dispatched or rerun. The publishing commit contains
+`[skip ci]`; no merge is part of this preview update.
+
 ## Village infrastructure preview, 19 October 2026
 
 Development release `2026-10-19-village-infrastructure-preview` extends the

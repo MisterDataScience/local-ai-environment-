@@ -1,5 +1,7 @@
 # Using the Village infrastructure
 
+For an explicitly opened social or creative gathering, see [Village Commons](VILLAGE-COMMONS.md). Its conversations and drafts stay quarantined; Library material, Archive snapshots, individual memories and material pointers each need separate owner approval.
+
 The Village can keep useful work between conversations. Ask the Captain to save
 a small solution in the **workshop**, leave a project **notice**, collect an
 improvement **suggestion**, or prepare a **practice case**. Each operation happens

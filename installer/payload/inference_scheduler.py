@@ -11,12 +11,14 @@ class ModelQueue:
         self.active = 0
 
     @contextmanager
-    def lease(self, key=None, slots=1):
+    def lease(self, key=None, slots=1, cancelled=None):
         ticket = object()
         with self.condition:
             self.waiters.append((ticket, key))
             try:
                 while True:
+                    if cancelled is not None and cancelled.is_set():
+                        raise RuntimeError('Queued inference cancelled')
                     position = next(i for i, item in enumerate(self.waiters) if item[0] is ticket)
                     # A different profile/media/mode barrier prevents later text
                     # readers from overtaking it indefinitely.
@@ -28,7 +30,7 @@ class ModelQueue:
                         self.active += 1
                         self.condition.notify_all()
                         break
-                    self.condition.wait()
+                    self.condition.wait(timeout=.1 if cancelled is not None else None)
             except BaseException:
                 self.waiters = [w for w in self.waiters if w[0] is not ticket]
                 self.condition.notify_all()

@@ -79,6 +79,19 @@ class Engine:
         self.mode_transitioning = False
         self.mode_error = None
         self.audio = Audio(self)
+        self.commons = None
+        self.commons_lock = threading.Lock()
+
+    def commons_controller(self):
+        with self.commons_lock:
+            if self.commons is None:
+                from commons import Commons
+                self.commons = Commons(self)
+            return self.commons
+
+    def pause_commons(self, reason):
+        if self.commons is not None:
+            self.commons.pause(reason)
 
     def mode_status(self):
         with self.mode_lock:
@@ -117,6 +130,8 @@ class Engine:
 
     def check_policy(self, body, route):
         with self.mode_lock:
+            if body.get('_commons_turn') is not None and (body['_commons_turn'].is_set() or self.mode!='max'):
+                raise RuntimeError('Commons inference paused or cancelled')
             if self.mode_transitioning or self.mode_error:
                 raise RuntimeError('Mode switch is not ready. Check AI Modes before submitting another request.')
             if not resource_modes.allowed(self.mode, body['model'], self.text_models[body['model']], route):
@@ -127,6 +142,7 @@ class Engine:
     def change_mode(self, mode):
         if mode not in resource_modes.MODES:
             raise ValueError('Choose gaming, normal or max.')
+        self.pause_commons('resource mode changed; resume explicitly in Max')
         with self.mode_lock:
             if self.mode_transitioning:
                 raise RuntimeError('A mode switch is already in progress.')
@@ -159,9 +175,16 @@ class Engine:
                 self.mode_transitioning = False
                 self.state = 'idle'
 
-    def submit(self, body, stream=None):
+    def submit(self, body, stream=None, *, commons_turn=None):
         if not isinstance(body, dict):
             raise ValueError('The request body must be a JSON object.')
+        body.pop('_commons_turn', None)
+        if commons_turn is None:
+            self.pause_commons('direct work takes priority; resume explicitly')
+        else:
+            if self.commons is None or not self.commons.owns(commons_turn):
+                raise PermissionError('Unregistered Commons turn')
+            body['_commons_turn'] = commons_turn
         if type(body.get('inference_only', False)) is not bool:
             raise ValueError('inference_only must be a boolean.')
         # Internal callbacks can only originate in the HTTP handler.
@@ -215,7 +238,10 @@ class Engine:
         # Only the same shared profile can overlap. Specialists, larger document
         # profiles, audio, media and mode transitions acquire an exclusive lease.
         key = ('captain', body['model']) if shared and self.mode != 'gaming' else None
-        with self.model_jobs.lease(key, self.parallel_slots()):
+        guard = body.get('_commons_turn')
+        if guard is not None and (guard.is_set() or self.mode != 'max' or route != 'text' or not shared or body.get('tools')):
+            raise PermissionError('Commons requires uncancelled Max shared text inference only')
+        with self.model_jobs.lease(key, self.parallel_slots(), cancelled=guard):
             with self.mode_lock:
                 if epoch != self.mode_epoch:
                     raise RuntimeError('Request cancelled because the resource mode changed.')
@@ -420,6 +446,7 @@ class Engine:
                     self.unload_ollama()
 
     def start_conversation(self):
+        self.pause_commons('voice conversation takes priority; resume explicitly')
         def start():
             with self.model_jobs.lease(), self.audio.model_job():
                 self.stop_comfy()
@@ -466,7 +493,11 @@ class Engine:
                     self.shared_last_used = time.monotonic()
                 self.check_policy(body, route)
                 request = body if route == 'text' else dict(body, messages=messages)
-                result = self.shared_llama.chat(request, output_limit(body, self.mode, preset), messages)
+                guard = body.get('_commons_turn')
+                if guard is not None and guard.is_set():
+                    raise RuntimeError('Commons turn cancelled during model preparation')
+                result = self.shared_llama.chat(request, output_limit(body, self.mode, preset), messages,
+                                                **({'transport': guard.api} if guard is not None else {}))
                 if request is not body:
                     for name in ('_usage', '_finish_reason'):
                         if name in request:
@@ -507,7 +538,9 @@ class Engine:
             # Exactly one inference call. Open WebUI executes/approves tools and
             # submits the next inference turn with their results.
             stream = body.get('_stream') if route == 'text' else None
-            response = (token_stream.chat(base, payload, stream) if stream
+            guard = body.get('_commons_turn')
+            response = (guard.api(base, '/api/chat', payload, timeout=1800) if guard is not None
+                        else token_stream.chat(base, payload, stream) if stream
                         else api(base, '/api/chat', payload, timeout=1800))
             message = response['message']
             counts = [response.get('prompt_eval_count'), response.get('eval_count')]

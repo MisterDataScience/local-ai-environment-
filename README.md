@@ -1,5 +1,7 @@
 # LOCAL AI
 
+The optional [Village Commons](docs/VILLAGE-COMMONS.md) preview adds finite social and creative sessions, four active residents, owner-visible private drafts, and separately approved personal memories. Open `Village Commons.command` after installing the preview; the guide includes a five-minute first session.
+
 One source of truth: **`main`**. One deployment package:
 [Mac-Local-AI-Automated-Installer.zip](downloads/Mac-Local-AI-Automated-Installer.zip).
 Feature branches are development history, not installation choices.

@@ -38,6 +38,7 @@ GATEWAY_FILES = ("gateway.py", "backend_http.py", "routing.py", "workflows.py",
 GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_worker.py')
 GATEWAY_FILES += ('capability_discovery.py',)
 GATEWAY_FILES += ('inference_scheduler.py', 'captain_config.py', 'shared_llama.py')
+GATEWAY_FILES += ('commons_transport.py', 'commons.html')
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
               'office_setup.py', 'office_mcp.py', 'office_check.py', 'browser_agent.py', 'browser_setup.py',
                'tool_availability.py', 'pdf_reader.py', 'pdf_mcp.py', 'transfer_mcp.py', 'file_transfer.py', 'vault_transfer.py', 'login_startup.py',
@@ -47,6 +48,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'reverse-scaffold.mjs', 'reverse-scaffold-prompt.txt', 'scaffold_setup.py', 'discord_setup.py', 'discord_runtime.py', 'discord-adapter.mjs', 'discord-core.mjs',
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
 TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py', 'village.py', 'village_infrastructure.py')
+TEAM_FILES += ('commons.py', 'commons_control.py', 'village_memory.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -583,6 +585,10 @@ def make_launcher(root):
                               '\nexec .venv/bin/python village.py --root ' +
                               shlex.quote(str(root / 'village')) + ' "$@"\n')
     village_helper.chmod(0o755)
+    commons_helper=root/'Village Commons.command'
+    commons_helper.write_text('#!/bin/bash\nset -e\ncd '+shlex.quote(str(root/'control'))+
+        '\nexec .venv/bin/python commons_control.py --root '+shlex.quote(str(root))+' "$@"\n')
+    commons_helper.chmod(0o755)
     application = Path.home() / "Applications/Local AI.app"
     if application.exists() and not (application / "Contents/local-ai-owner.txt").exists():
         raise RuntimeError("An unrelated Local AI.app already exists. No application was overwritten.")

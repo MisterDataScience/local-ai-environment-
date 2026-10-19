@@ -1,3 +1,17 @@
+Village Commons preview 2026-10-19:
+14 Commons core and six Commons gateway/transport Python checks pass with
+synthetic responses, real SQLite and local HTTP. Existing affected suites:
+11 shared inference/backend, four native Captain capacity, 25 gateway,
+18 Village/archive/facilities, nine Captain setup, 26 installer Python checks;
+46 Captain/OpenCode JavaScript checks. Builder regression: one passing check.
+Python/JavaScript syntax, exact installer/source verification and deterministic
+rebuild checked for the published artifact. No GitHub Actions dispatched/rerun.
+Native Mac upgrade, browser layout, local-model protocol/quality, actual GPU
+cancellation, throughput/memory and VPN research NOT RUN. Encrypted Village
+backup/restore and complete source deletion remain unfinished; begin only with
+synthetic or approved general content. Read docs/VILLAGE-COMMONS.md and the
+current section of docs/RELEASE-VALIDATION.md for usage and precise boundaries.
+
 Village infrastructure preview 2026-10-19:
 18 Village/archive/facility Python tests, nine Captain setup tests, 26 installer
 tests and 46 Captain/OpenCode policy JavaScript tests pass locally. Coverage

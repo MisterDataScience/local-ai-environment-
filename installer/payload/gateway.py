@@ -24,6 +24,8 @@ def cleanup(engine, server, media_server, lock_file):
                   ('listener', server.server_close),
                   ('inference queue', lambda: engine.executor.shutdown(wait=True)),
                   ('media model', engine.stop_comfy)]
+    if engine.__dict__.get('commons') is not None:
+        operations.insert(0, ('commons', engine.commons.shutdown))
     if engine.shared_llama:
         operations.append(('shared model', engine.shared_llama.stop))
     if media_server:

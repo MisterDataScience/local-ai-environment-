@@ -141,7 +141,7 @@ class SharedLlama:
         self.process = None
         self.running_slots = None
 
-    def chat(self, body, limit, messages=None):
+    def chat(self, body, limit, messages=None, transport=None):
         tools = tools_for_ollama(body)
         cleaned = messages if messages is not None else messages_for_ollama(body['messages'])
         payload = {'model': 'local-ai-captain', 'messages': openai_messages(body['messages'], cleaned), 'stream': False,
@@ -150,7 +150,7 @@ class SharedLlama:
             payload['tools'] = tools
         if isinstance(body.get('temperature'), (int, float)):
             payload['temperature'] = body['temperature']
-        response = api(self.base, '/v1/chat/completions', payload, timeout=1800)
+        response = (transport or api)(self.base, '/v1/chat/completions', payload, timeout=1800)
         choices = response.get('choices')
         if not isinstance(choices, list) or not choices:
             raise RuntimeError('Local GGUF server returned no completion')

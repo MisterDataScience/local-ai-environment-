@@ -349,10 +349,26 @@ def search(cx, sid, query, *, request_collections=("general",), limit=5, role=No
         params.append("%" + title.replace("%", "\\%").replace("_", "\\_") + "%")
     sql += " ORDER BY rank LIMIT ?"
     params.append(limit)
-    return [dict(row) for row in cx.execute(sql, params)]
+    results = [dict(row) for row in cx.execute(sql, params)]
+    if not owner:
+        from village_memory import document_search,search_memories
+        results += document_search(cx,sid,query,allowed,limit)
+        personal=search_memories(cx,sid,query,allowed)
+        results=[dict(citation=m['citation'],role='memory',title=m['kind'],excerpt=m['claim'],created=m['created'],collection='authorised personal memory') for m in personal[:2]]+results
+    return results[:limit]
 
 
 def read(cx, sid, citation, *, request_collections=("general",), max_chars=2500, owner=False):
+    if isinstance(citation,str) and citation.startswith('memory:'):
+        from village_memory import read_memory
+        result=read_memory(cx,sid,citation,request_collections,owner)
+        result['text']=result['text'][:max(1,min(int(max_chars),4000))]
+        return result
+    if isinstance(citation,str) and citation.startswith('doc:'):
+        from village_memory import document_read
+        result=document_read(cx,sid,citation,request_collections,owner=owner)
+        result['text']=result['text'][:max(1,min(int(max_chars),4000))]
+        return result
     if not owner:
         specialist(cx, sid)
     allowed = set(request_collections) if owner else grants(cx, sid) & set(request_collections)
@@ -457,9 +473,10 @@ def packet(cx, sid, *, request_collections=("general",), objective=""):
         WHERE l.specialist_id IN (?,?) AND l.status='approved' AND l.collection IN (""" + slots + """)
         AND l.revision=(SELECT max(x.revision) FROM lessons x WHERE x.id=l.id)
         ORDER BY l.created DESC LIMIT 3""", (sid, row["parent_id"] or sid, *sorted(allowed)))]
+    from village_memory import packet as personal_packet
     return dict(id=sid, role=row["role"], revision=profile["revision"],
                 instruction=profile["instruction"][:1000], lessons=lessons,
-                allowed_collections=sorted(grants(cx, sid)))
+                allowed_collections=sorted(grants(cx, sid)),personal=personal_packet(cx,sid,allowed))
 
 
 def add_lesson(cx, *, claim, kind, citation, specialist_id, approval):

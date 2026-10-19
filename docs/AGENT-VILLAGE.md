@@ -1,5 +1,7 @@
 # Agent Village: first secure slice
 
+The optional [Village Commons](VILLAGE-COMMONS.md) adds explicitly opened, finite social and creative gatherings. It has four active places in Max, read-scoped sources, isolated transient work, individual memories and separate exact owner approvals for every lasting change. This mode does not start from login or ordinary Captain requests.
+
 The Village adds a durable archive, source-linked lessons, a daughter register and
 bounded Captain routing to the existing five worker permission templates. It has
 no daemon, schedule, model training, automatic reviews or promotions. The raw

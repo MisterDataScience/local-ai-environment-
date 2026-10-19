@@ -117,6 +117,17 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(content)
             return
+        if path == '/commons':
+            from pathlib import Path
+            content=(Path(__file__).parent/'commons.html').read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type','text/html; charset=utf-8')
+            self.send_header('Content-Length',str(len(content)))
+            self.send_header('Cache-Control','no-store')
+            self.send_header('Referrer-Policy','no-referrer')
+            self.send_header('X-Frame-Options','DENY')
+            self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'none'; frame-ancestors 'none'")
+            self.end_headers(); self.wfile.write(content); return
         if path == "/health":
             return self.json_response(503 if self.server.engine.mode_transitioning or self.server.engine.mode_error else 200, {"status": "switching" if self.server.engine.mode_transitioning else "blocked" if self.server.engine.mode_error else "ok", "state": self.server.engine.state})
         if path.startswith("/media/"):
@@ -163,6 +174,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorised():
             return
         path = urlparse(self.path).path
+        if path == '/control/commons':
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<=65536:
+                    self.close_connection=True
+                    raise ValueError('Invalid Commons request size')
+                body=json.loads(self.rfile.read(length))
+                result=self.server.engine.commons_controller().execute(body)
+                return self.json_response(200,result)
+            except (ValueError,TypeError,KeyError,RuntimeError,PermissionError,OSError) as error:
+                return self.json_response(409,{'error':str(error)[:300]})
         if path.startswith('/files/'):
             try:
                 from file_workflows import execute

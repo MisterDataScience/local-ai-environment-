@@ -1,5 +1,7 @@
 # LOCAL AI installer
 
+The optional [Village Commons guide](docs/VILLAGE-COMMONS.md) explains the new `Village Commons.command` owner dashboard: four active residents in Max, bounded gatherings, creative formats, hidden drafts, exact final approvals and individual memories. Opening the dashboard starts no inference.
+
 The Work Agent includes a captain and up to five temporary workers. The **Install Local AI.command** launcher automatically installs the chosen
 MiniCPM Captain profile. The older named MiniCPM launcher is an alias, not an
 extra step.
