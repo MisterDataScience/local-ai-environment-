@@ -1,0 +1,83 @@
+# Studio planning and documentation department
+
+The planning department turns the studio's mission and approved lessons into a
+reviewed design tree. It runs before implementation and does not edit project
+files, build a game, run a machine, publish knowledge, or start a coding session.
+The owner does not need to choose a genre or supply a game prompt.
+
+## How the design tree grows
+
+1. Four design roles propose different game opportunities.
+2. The Lead Designer selects one, records why it fits the studio, and opens the
+   tree with five to seven broad questions under **“What should this studio
+   make?”**
+3. A department role answers one question. It either splits the question into
+   two to five necessary, narrower questions, or produces one bounded design
+   deliverable for the Lead Designer.
+4. A separate Design Auditor turn checks the answer before it is accepted. The
+   review records five checks: contract met, specific, traceable to the game
+   promise, complete for this stage, and checkable. A failed review must name a
+   repair; repeated failure blocks the run instead of silently passing it.
+5. Host checks validate the tree structure and prerequisite IDs. A final review
+   checks the top-level branches together for missing coverage or conflict.
+
+There is no minimum depth, fixed fan-out, or 1,000-leaf requirement. A branch
+stops when its design question has a complete, bounded result. It splits further
+when consequential decisions remain unresolved. The result may have hundreds or
+thousands of nodes when the design needs them, but the count is not treated as
+evidence of quality.
+
+## What a design leaf contains
+
+A leaf is work the Lead Designer can complete, not a coding ticket. It names one
+deliverable, the instruction for producing it, its inputs and outputs, the IDs
+of any earlier design decisions it depends on, a sufficiency check, and evidence
+to retain. For example, a leaf could require a movement specification with a
+state table and worked edge cases. The sufficiency check can verify that those
+parts are present and agree with the parent design decision.
+
+The leaf's decision is then available to the later implementation workbench.
+This planning release does not yet turn every design leaf into a separately
+scheduled code task or execute those tasks. Implementation remains a separate
+stage.
+
+Dependencies must refer to existing, audited design-decision leaves. Unknown,
+self, duplicate, or unaccepted prerequisite IDs fail host validation. This
+produces traceable prerequisites, but it does not yet schedule implementation
+tasks in parallel.
+
+## Starting and continuing a plan
+
+Open **Institutions → Planning and documentation department → Start hands-free
+game planning**. The job uses the existing local inference scheduler. It saves
+each bounded turn and can pause and resume without loading the entire dossier
+into one prompt. Open **Design dossier** to inspect the tree, review checks,
+decision deliverables, dependencies, and source inputs.
+
+Planning runs are mutually exclusive with other studio sessions in the same
+institution. The job uses the installed local model and consumes computer time
+and electricity. Increase the time or turn allowance only if a run stopped
+because it reached that limit.
+
+## How the roles operate
+
+The four department roles and auditor use the same installed local Captain
+model in separate, sequential turns. They are not four concurrently loaded
+models. Separate role prompts and bounded packets help organize the work, but
+the auditor is not an independent model and can share the generator's blind
+spots.
+
+## Checks and limits
+
+Host validation can prove that required fields exist, question links are valid,
+leaves have sufficiency checks, prerequisite IDs point to accepted decisions,
+and the tree is complete and within its safety limit. The language-model review
+judges whether the content satisfies its design contract; it cannot prove that
+the game is good, fun, technically feasible, or free of subtle contradictions.
+The final integration review receives a summary of every top-level branch,
+while each node receives its own review. No player test or build is run by this
+department.
+
+The next stage should translate accepted design decisions into code and content
+tasks with concrete dependencies, acceptance checks, and build or play evidence.
+That task scheduler and real local-model quality have not been validated here.

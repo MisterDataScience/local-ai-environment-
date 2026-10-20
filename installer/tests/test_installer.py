@@ -336,6 +336,8 @@ class InstallerTests(unittest.TestCase):
     def test_autonomous_worker_is_packaged_and_launchers_require_job_id(self):
         self.assertIn("autonomous_jobs.py", installer.TEAM_FILES)
         self.assertTrue((installer.SOURCE / "autonomous_jobs.py").is_file())
+        self.assertIn("game_scaffold.py", installer.TEAM_FILES)
+        self.assertTrue((installer.SOURCE / "game_scaffold.py").is_file())
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "control").mkdir()

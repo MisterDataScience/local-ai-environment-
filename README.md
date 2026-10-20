@@ -1,6 +1,6 @@
 # LOCAL AI
 
-The integrated [institutions and studio workbench](docs/INSTITUTIONS-AND-STUDIOS.md) adds private studios, a Lead Designer, source-based founding, approved memory maps and portable C computers at **320 × 180**. Open `Village Institutions.command` after updating the main installer.
+The integrated [institutions and studio workbench](docs/INSTITUTIONS-AND-STUDIOS.md) adds private studios, a Lead Designer, source-based founding, approved memory maps, a resumable [planning and documentation department](docs/STUDIO-PLANNING-DEPARTMENT.md), and portable C computers at **320 × 180**. Open `Village Institutions.command` after updating the main installer.
 
 One installer now combines the pending hardening and Village work. For first use,
 open `Village Commons.command` and select **Prepare the Village from your

@@ -56,7 +56,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
 TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py', 'power_guard.py', 'remote_recovery.py', 'dependency_locks.py', 'village.py', 'village_infrastructure.py')
 TEAM_FILES += ('commons.py', 'commons_control.py', 'village_memory.py', 'resident_management.py', 'village_storage.py', 'founding.py', 'village_owner.py')
-TEAM_FILES += ('studio_store.py','studio_runtime.py','studio_workbench.py','studio_player.py','studio_control.py','studios.py')
+TEAM_FILES += ('studio_store.py','studio_runtime.py','studio_workbench.py','studio_player.py','studio_control.py','studios.py','game_scaffold.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",

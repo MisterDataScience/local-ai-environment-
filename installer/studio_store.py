@@ -19,6 +19,7 @@ import zipfile
 import village
 import village_memory as memory
 from village_infrastructure import encoded, bounded
+from game_scaffold import tree_counts
 
 
 def sha(value):
@@ -392,6 +393,14 @@ class Store:
                         if field in row and row[field]:
                             try:row[field]=json.loads(row[field])
                             except (ValueError,TypeError):pass
+                    if key=='jobs' and row.get('kind')=='design' and isinstance(row.get('progress'),dict):
+                        state=row['progress'].get('design',{})
+                        if state:
+                            row['progress']={'phase':state.get('phase'),'status':state.get('status'),
+                                'departments_reviewed':len(state.get('candidates',[])),
+                                'queued_branches':len(state.get('queue',[])),
+                                **tree_counts(state.get('nodes',[])),
+                                'audits':state.get('audit_count',0)}
                 out[key]=rows
             out['library']=[dict(r) for r in cx.execute('SELECT id,title,state FROM library_documents WHERE collection=?',(inst['collection'],))]
             out['proposal_total']=cx.execute('SELECT count(*) FROM studio_proposals WHERE institution=?',(iid,)).fetchone()[0]
