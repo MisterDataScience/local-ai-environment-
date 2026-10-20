@@ -204,6 +204,130 @@ class Studios:
     def shutdown(self):
         self.pause('Gateway stopped; resume explicitly');self.pool.shutdown(wait=True);self.workbench.shutdown()
 
+    def dispatch_integration_orders(self, request):
+        """Launch ready tickets in isolated working copies with approved role owners."""
+        iid=request['institution'];integration_job=request['job'];base_project=request.get('project','')
+        self.capacity()
+        with self.lock:
+            slots=max(0,4-len(self.jobs))
+        limit=request.get('limit',slots)
+        if slots==0 and 'limit' not in request:return dict(started=[],unassigned=[],capacity=0)
+        if type(limit) is not int or not 1<=limit<=4:raise ValueError('Dispatch limit must be 1 to 4')
+        limit=min(limit,slots)
+        if limit==0:return dict(started=[],unassigned=[],capacity=0)
+        with self.store.db() as cx:
+            self.store.project(cx,base_project,iid)
+            members=list(cx.execute('SELECT title,resident FROM institution_members WHERE institution=?',(iid,)))
+        by_title={row['title']:row['resident'] for row in members}
+        def resolve_role(role):
+            if role in by_title:return by_title[role]
+            words=set(re.findall(r'[a-z]+',role.casefold()))
+            if words & {'programmer','programming','engine','code','technical','integration'}:
+                return by_title.get('Engine specialist')
+            if words & {'system','systems','design','designer','analysis','analyst'}:
+                return by_title.get('Systems designer')
+            if words & {'test','testing','review','reviewer','playtest','quality'}:
+                return by_title.get('Playtest reviewer')
+            if words & {'lead','producer','coordination'}:
+                return by_title.get('Lead Designer')
+            return None
+        with self.store.db() as cx,cx:
+            row=cx.execute("SELECT progress FROM studio_jobs WHERE id=? AND institution=? AND kind='integration'",
+                            (integration_job,iid)).fetchone()
+            if not row:raise ValueError('Integration dossier unavailable')
+            progress=json.loads(row['progress']);state=progress['integration']
+            roles={order['responsible_role']:resolve_role(order['responsible_role'])
+                   for order in state.get('work_orders',[]) if order.get('status','planned')=='planned'}
+            by_id={item['id']:item for item in state.get('work_orders',[])}
+            role_gaps=[dict(id=item['id'],role=item['responsible_role'],
+                            error='No approved resident matches this specialist role')
+                       for item in state.get('work_orders',[])
+                       if item.get('status','planned')=='planned' and
+                       all(by_id.get(dep,{}).get('status')=='done' for dep in item.get('depends_on',[])) and
+                       not roles.get(item['responsible_role'])]
+            roles={role:resident for role,resident in roles.items() if resident}
+            batch=design_integration.dispatch_work_orders(state,limit,roles)
+            cx.execute('UPDATE studio_jobs SET progress=? WHERE id=?',(encoded(progress),integration_job))
+        started=[];unassigned=list(role_gaps)
+        for order in batch['claimed']:
+            role=order['responsible_role'];resident=roles.get(role)
+            try:
+                if not resident:
+                    unassigned.append(dict(id=order['id'],role=role));continue
+                entries=files(self.store.path(base_project))
+                base_snapshot={path:sha(data) for path,data in entries}
+                ticket=dict(id=order['id'],title=order['title'],kind=order['kind'],
+                    decision_ids=order['decision_ids'],inputs=order['inputs'],outputs=order['outputs'],
+                    prerequisites=order['prerequisite_decision_ids'],done_when=order['done_when'],
+                    planned_check=order['check'],evidence_requested=order['evidence'])
+                entries.append(('.studio-work-order.json',encoded(ticket).encode()))
+                branch=self.store.ingest(iid,'Branch '+order['id']+' '+order['title'],entries,
+                    dict(kind='work-order-branch',integration_job=integration_job,
+                         work_order=order['id'],base_project=base_project))
+                atomic(self.store.path(branch['project']).parent/'.work-order-base.json',
+                       encoded(dict(base_project=base_project,files=base_snapshot)).encode())
+                objective=('Implement only this approved work order in its isolated project copy. '
+                    'Follow its cited decisions, inputs, outputs and prerequisites. Do not expand scope '
+                    'or claim a check passed without running it. Save code and test evidence in project notes. '
+                    'Work order: '+encoded(ticket))
+                session=self.start(dict(institution=iid,kind='work',project=branch['project'],
+                    resident=resident,objective=objective,minutes=request.get('minutes',60),
+                    turns=request.get('turns',128)))
+                order['implementation_job']=session['id'];order['implementation_project']=branch['project']
+                order['base_project']=base_project
+                started.append(dict(work_order=order['id'],job=session['id'],project=branch['project'],
+                                     resident=resident,role=role))
+            except Exception as error:
+                order['status']='planned'
+                order.pop('implementation_job',None);order.pop('implementation_project',None)
+                unassigned.append(dict(id=order['id'],role=role,error=str(error)[:300]))
+            finally:
+                with self.store.db() as cx,cx:
+                    latest=cx.execute("SELECT progress FROM studio_jobs WHERE id=? AND institution=? AND kind='integration'",
+                                       (integration_job,iid)).fetchone()
+                    saved=json.loads(latest['progress']);current=saved['integration']
+                    target=next(x for x in current['work_orders'] if x['id']==order['id'])
+                    target.update({key:order[key] for key in ('status','implementation_job','implementation_project','base_project') if key in order})
+                    if order['status']!='running':
+                        target['status']='planned'
+                        for key in ('implementation_job','implementation_project','base_project'):target.pop(key,None)
+                    cx.execute('UPDATE studio_jobs SET progress=? WHERE id=?',(encoded(saved),integration_job))
+        return dict(started=started,unassigned=unassigned,capacity=limit)
+
+    def merge_work_order_branch(self, iid, order):
+        """Apply only conflict-free branch edits to the selected project."""
+        base=order.get('base_project');branch=order.get('implementation_project')
+        if not base or not branch:raise ValueError('Work order has no isolated implementation branch')
+        with self.lock:
+            if any(job.get('project')==base for job in self.jobs.values()):
+                raise RuntimeError('Pause the base project session before merging this work order')
+            meta_path=self.store.path(branch).parent/'.work-order-base.json'
+            snapshot=json.loads(meta_path.read_text())
+            if snapshot['base_project']!=base:raise PermissionError('Work-order branch base does not match')
+            original=snapshot['files'];current=dict(files(self.store.path(base)))
+            proposed={path:data for path,data in files(self.store.path(branch))
+                      if path!='.studio-work-order.json'}
+            updates=[];conflicts=[]
+            for path,data in proposed.items():
+                prior=original.get(path);digest=sha(data)
+                if digest==prior:continue
+                live=sha(current[path]) if path in current else None
+                if live not in (prior,digest):conflicts.append(path)
+                else:updates.append((path,data,live or ''))
+            for path in original:
+                if path not in proposed:
+                    conflicts.append(path+' (deletion is not supported)')
+            if conflicts:raise ValueError('Branch merge conflicts: '+', '.join(conflicts[:12]))
+            total=sum(len(data) for _,data in current.items())+sum(
+                max(0,len(data)-len(current.get(path,b''))) for path,data,_ in updates)
+            if total>MAX_PROJECT:raise ValueError('Merged project exceeds its working-copy limit')
+            with self.store.db() as cx:self.store.project(cx,base,iid)
+            for path,data,live in updates:
+                try:text=data.decode('utf-8')
+                except UnicodeDecodeError:raise ValueError('Binary branch changes require a dedicated asset merge')
+                self.store.edit(base,path,text,live)
+            return dict(project=base,merged_files=[path for path,_,_ in updates])
+
     def infer(self,jid,system,packet,image=None):
         preset=getattr(self.engine,'text_models',{}).get(self.engine.captain['model_id'],{'num_ctx':16384})
         limit=min(14000,preset['num_ctx']-2560)-len(system.encode())
@@ -927,7 +1051,9 @@ class Studios:
                 if not row:raise ValueError('Integration dossier unavailable')
                 return design_integration.work_orders_page(json.loads(row['progress'])['integration'],
                                                            r.get('offset',0),r.get('limit',100))
-        if op in ('dispatch_work_orders','report_work_order','review_work_order'):
+        if op=='dispatch_work_orders':
+            return self.dispatch_integration_orders(r)
+        if op in ('report_work_order','review_work_order'):
             # Serialize queue claims and review transitions with the persisted
             # dossier so parallel owner requests cannot exceed the worker cap.
             with self.store.db() as cx,cx:
@@ -936,12 +1062,29 @@ class Studios:
                 if not row:raise ValueError('Integration dossier unavailable')
                 progress=json.loads(row['progress'])
                 state=progress['integration']
-                if op=='dispatch_work_orders':
-                    result=design_integration.dispatch_work_orders(state,r.get('limit',4))
-                elif op=='report_work_order':
+                if op=='report_work_order':
+                    order=next((item for item in state.get('work_orders',[])
+                                if item.get('id')==r.get('work_order')),None)
+                    if order and order.get('implementation_job'):
+                        completed=cx.execute('SELECT state FROM studio_jobs WHERE id=? AND institution=? AND kind=\'work\'',
+                            (order['implementation_job'],iid)).fetchone()
+                        if not completed or completed['state']!='complete':
+                            raise ValueError('The isolated implementation session must complete before its result is reported')
                     result=design_integration.report_work_order(state,r.get('work_order'),
                         r.get('result'),r.get('evidence'),r.get('check_status'))
                 else:
+                    order=next((item for item in state.get('work_orders',[])
+                                if item.get('id')==r.get('work_order')),None)
+                    if r.get('decision')=='accept' and order and order.get('implementation_job'):
+                        completed=cx.execute('SELECT state FROM studio_jobs WHERE id=? AND institution=? AND kind=\'work\'',
+                            (order['implementation_job'],iid)).fetchone()
+                        if not completed or completed['state']!='complete':
+                            raise ValueError('The isolated implementation session must complete before review')
+                        if (order.get('status')!='review' or
+                                not order.get('implementation_report') or
+                                order['implementation_report'].get('check_status')!='passed'):
+                            raise ValueError('A passing reported check is required before merge review')
+                        self.merge_work_order_branch(iid,order)
                     result=design_integration.review_work_order(state,r.get('work_order'),
                         r.get('decision'),r.get('notes',''))
                 cx.execute("UPDATE studio_jobs SET progress=? WHERE id=?",(encoded(progress),r['job']))

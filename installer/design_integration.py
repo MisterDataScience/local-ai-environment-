@@ -982,7 +982,7 @@ def work_orders_page(state, offset=0, limit=100):
 MAX_WORK_ORDER_CONCURRENCY = 4
 
 
-def dispatch_work_orders(state, limit=MAX_WORK_ORDER_CONCURRENCY):
+def dispatch_work_orders(state, limit=MAX_WORK_ORDER_CONCURRENCY, allowed_roles=None):
     """Claim dependency-ready orders without exceeding the host concurrency cap."""
     if state.get("phase") != "work_order_complete" or not state.get("work_order_gate", {}).get("passed"):
         raise ValueError("A validated, complete work-order plan is required")
@@ -997,6 +997,8 @@ def dispatch_work_orders(state, limit=MAX_WORK_ORDER_CONCURRENCY):
         if available == 0:
             break
         if order.get("status", "planned") != "planned":
+            continue
+        if allowed_roles is not None and order.get("responsible_role") not in allowed_roles:
             continue
         dependencies = order.get("depends_on", [])
         if all(by_id.get(dep, {}).get("status") == "done" for dep in dependencies):

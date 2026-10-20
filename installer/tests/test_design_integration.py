@@ -2,6 +2,7 @@
 import json
 import tempfile
 import sys
+import time
 from pathlib import Path
 import unittest
 
@@ -156,6 +157,53 @@ class IntegrationApiTests(unittest.TestCase):
                                   "institution": "studio:other", "job": first["id"]})
         with self.assertRaises(ValueError):
             self.studios.resume(first["id"])
+
+    def test_ready_order_launches_approved_role_in_isolated_project(self):
+        project=self.studios.store.ingest(self.institution,'Base game',
+            [('main.c',b'int main_value = 1;')],dict(kind='fixture'))['project']
+        staff=self.studios.store.prepare_staff(self.institution)
+        engine_proposal=staff[1]
+        approved=self.studios.store.preview(engine_proposal['id'])
+        resident=self.studios.store.review(engine_proposal['id'],approved['review_digest'],'approve')['resident']
+        order=dict(id='WO-0001',title='Implement gate rule',kind='code',status='planned',depends_on=[],
+            responsible_role='Gameplay programmer',decision_ids=['G0.1:D1'],inputs=['Approved rule'],
+            outputs=['Updated game code'],prerequisite_decision_ids=[],done_when='The gate follows the reviewed rule.',
+            check={'method':'automated_test','procedure':'Run the gate rule tests for edge cases.',
+                   'expected_result':'The observed result matches the design.'},evidence=['Test log'])
+        state=dict(phase='work_order_complete',work_order_gate={'passed':True},work_orders=[order])
+        job='studio-job:test-dispatch'
+        with self.studios.store.db() as cx,cx:
+            cx.execute('INSERT INTO studio_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                (job,self.institution,'','integration','complete','{}',encoded({'integration':state}),0,0,0,'',1))
+        self.studios.infer=lambda jid,system,packet:json.dumps({'action':'done','args':{'summary':'Finished isolated implementation.'},'note':'Work order complete.'})
+        result=self.studios.execute({'operation':'dispatch_work_orders','institution':self.institution,
+            'job':job,'project':project,'limit':1})
+        self.assertEqual(len(result['started']),1)
+        launched=result['started'][0]
+        self.assertEqual(launched['role'],'Gameplay programmer')
+        self.assertNotEqual(launched['project'],project)
+        with self.studios.store.db() as cx:
+            branch=cx.execute('SELECT project FROM studio_jobs WHERE id=?',(launched['job'],)).fetchone()[0]
+        self.assertEqual(branch,launched['project'])
+        with self.studios.store.db() as cx:
+            self.assertEqual(self.studios.store.project(cx,branch,self.institution)['state'],'active')
+        self.assertTrue(any(row['path']=='.studio-work-order.json' for row in self.studios.store.tree(branch)))
+        deadline=time.monotonic()+3
+        while time.monotonic()<deadline:
+            with self.studios.store.db() as cx:
+                session_state=cx.execute('SELECT state FROM studio_jobs WHERE id=?',(launched['job'],)).fetchone()[0]
+            if session_state=='complete':break
+            time.sleep(.01)
+        self.assertEqual(session_state,'complete')
+        original=self.studios.store.read(branch,'main.c')['sha256']
+        self.studios.store.edit(branch,'main.c','int main_value = 2;',original)
+        self.assertEqual(self.studios.store.read(project,'main.c')['text'],'int main_value = 1;')
+        self.studios.execute({'operation':'report_work_order','institution':self.institution,'job':job,
+            'work_order':'WO-0001','result':'Implemented the gate rule and verified the expected behaviour.',
+            'evidence':['Automated test output: all cases passed'],'check_status':'passed'})
+        self.studios.execute({'operation':'review_work_order','institution':self.institution,'job':job,
+            'work_order':'WO-0001','decision':'accept','notes':'Reviewed the isolated change and evidence.'})
+        self.assertEqual(self.studios.store.read(project,'main.c')['text'],'int main_value = 2;')
 
     def test_saved_inventory_resolves_leaves_and_one_rule_gap(self):
         frozen = self.studios.execute({"operation": "prepare_integration",
