@@ -26,7 +26,7 @@ def archive_tree(zipped, source, prefix, config, vault_fd):
         for name in sorted(os.listdir(fd)):
             s = os.stat(name, dir_fd=fd, follow_symlinks=False)
             item = relative + '/' + name
-            if item.startswith('village/jobs/upload-') or (item.startswith('village/archive/') and item.endswith('.partial')):
+            if item.startswith(('village/jobs/upload-','village/jobs/studio-upload-')) or (item.startswith('village/archive/') and item.endswith('.partial')):
                 continue  # Incomplete uploads/import copies are not accepted archived sources.
             if item == 'webui-data/cache':
                 continue  # Rebuildable model/cache files may include Hugging Face symlinks.

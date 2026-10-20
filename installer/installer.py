@@ -45,6 +45,7 @@ GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_work
 GATEWAY_FILES += ('capability_discovery.py',)
 GATEWAY_FILES += ('inference_scheduler.py', 'captain_config.py', 'shared_llama.py')
 GATEWAY_FILES += ('commons_transport.py', 'commons.html')
+GATEWAY_FILES += ('institutions.html',)
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
               'office_setup.py', 'office_mcp.py', 'office_check.py', 'browser_agent.py', 'browser_setup.py',
                'tool_availability.py', 'pdf_reader.py', 'pdf_mcp.py', 'transfer_mcp.py', 'file_transfer.py', 'vault_transfer.py', 'login_startup.py',
@@ -55,6 +56,7 @@ TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'tea
               'discord-package.json', 'discord-package-lock.json', 'conversation_setup.py', 'conversation.py', 'conversation_check.py', 'conversation.html', 'conversation.mjs', 'microphone.js')
 TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captain_check.py', 'managed_captain.py', 'workspace_install.py', 'docker_setup.py', 'power_guard.py', 'remote_recovery.py', 'dependency_locks.py', 'village.py', 'village_infrastructure.py')
 TEAM_FILES += ('commons.py', 'commons_control.py', 'village_memory.py', 'resident_management.py', 'village_storage.py', 'founding.py', 'village_owner.py')
+TEAM_FILES += ('studio_store.py','studio_runtime.py','studio_workbench.py','studio_player.py','studio_control.py','studios.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -160,6 +162,8 @@ def acceptance_fingerprint(root):
     # Changing a deployed dependency lock invalidates earlier native acceptance.
     for path in sorted((root / 'control/locks').glob('*.txt')):
         hashes.append(digest(path))
+    for path in sorted((root / 'control/studio_sdk').glob('*')):
+        if path.is_file():hashes.append(digest(path))
     # Registering/changing the reference must invalidate an earlier not_run speech check.
     for name in ('voices/default.json', 'voices/default.wav', 'installed.json', 'conversation-installed.json'):
         path = root / 'voice-engine' / name
@@ -340,6 +344,8 @@ def install_environments(root, uv, state):
     for name in TEAM_FILES:
         shutil.copy2(SOURCE / name, control / name)
     shutil.copytree(SOURCE / 'locks', control / 'locks', dirs_exist_ok=True)
+    shutil.copytree(SOURCE / 'studio_sdk', control / 'studio_sdk', dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
     shutil.copytree(SOURCE / "web", control / "web", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     # Install only our descriptor-based save nodes; vault-mode CLI disables every
@@ -678,6 +684,10 @@ def make_launcher(root):
     commons_helper.write_text('#!/bin/bash\nset -e\ncd '+shlex.quote(str(root/'control'))+
         '\nexec .venv/bin/python commons_control.py --root '+shlex.quote(str(root))+' "$@"\n')
     commons_helper.chmod(0o755)
+    studio_helper=root/'Village Institutions.command'
+    studio_helper.write_text('#!/bin/bash\nset -e\ncd '+shlex.quote(str(root/'control'))+
+        '\nexec .venv/bin/python studio_control.py --root '+shlex.quote(str(root))+' "$@"\n')
+    studio_helper.chmod(0o755)
     application = Path.home() / "Applications/Local AI.app"
     if application.exists() and not (application / "Contents/local-ai-owner.txt").exists():
         raise RuntimeError("An unrelated Local AI.app already exists. No application was overwritten.")

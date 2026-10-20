@@ -96,6 +96,10 @@ def live_evidence(cx, evidence, _seen=None):
     seen=set() if _seen is None else _seen
     for source in evidence:
         for origin in set([source.get('origin','')]+source.get('dependencies',[])):
+            if origin.startswith('studio-source:'):
+                if not cx.execute("SELECT 1 FROM sqlite_master WHERE name='studio_sources'").fetchone():return False
+                r=cx.execute("SELECT s.state,i.collection FROM studio_sources s JOIN institutions i ON i.id=s.institution WHERE s.id=?",(origin,)).fetchone()
+                if not r or r['state']!='active' or r['collection'] not in source['scopes']:return False
             if origin.startswith("msg:"):
                 r = cx.execute("SELECT active,collection FROM messages WHERE citation=?", (origin,)).fetchone()
                 if not r or not r["active"] or r["collection"] not in source["scopes"]:

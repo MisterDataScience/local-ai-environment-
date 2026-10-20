@@ -135,6 +135,8 @@ class Commons:
 
     def start(self, request):
         founding=getattr(self.engine,'founding',None)
+        studios=getattr(self.engine,'studios',None)
+        if studios and studios.active:raise RuntimeError('Pause studio sessions and wait for them to drain first')
         if founding and (founding.active or founding.guard):raise RuntimeError('Pause founding review and wait for it to drain before opening Commons')
         allowed = {"minutes", "turns", "token_budget", "format", "seed", "collections", "residents", "web"}
         if not isinstance(request, dict) or set(request)-allowed:

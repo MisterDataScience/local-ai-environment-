@@ -83,6 +83,15 @@ class Engine:
         self.founding_lock = threading.Lock()
         self.commons = None
         self.commons_lock = threading.Lock()
+        self.studios = None
+        self.studios_lock = threading.Lock()
+
+    def studios_controller(self):
+        with self.studios_lock:
+            if self.studios is None:
+                from studios import Studios
+                self.studios=Studios(self)
+            return self.studios
 
     def founding_controller(self):
         with self.founding_lock:
@@ -99,6 +108,8 @@ class Engine:
             return self.commons
 
     def pause_commons(self, reason):
+        if self.studios is not None:
+            self.studios.pause(reason)
         if self.founding is not None:
             self.founding.pause(reason)
         if self.commons is not None:
@@ -141,7 +152,7 @@ class Engine:
 
     def check_policy(self, body, route):
         with self.mode_lock:
-            if (body.get('_commons_turn') or body.get('_founding_turn')) is not None and ((body.get('_commons_turn') or body.get('_founding_turn')).is_set() or self.mode!='max'):
+            if (body.get('_commons_turn') or body.get('_founding_turn') or body.get('_studio_turn')) is not None and ((body.get('_commons_turn') or body.get('_founding_turn') or body.get('_studio_turn')).is_set() or self.mode!='max'):
                 raise RuntimeError('Commons inference paused or cancelled')
             if self.mode_transitioning or self.mode_error:
                 raise RuntimeError('Mode switch is not ready. Check AI Modes before submitting another request.')
@@ -186,13 +197,17 @@ class Engine:
                 self.mode_transitioning = False
                 self.state = 'idle'
 
-    def submit(self, body, stream=None, *, commons_turn=None, founding_turn=None):
+    def submit(self, body, stream=None, *, commons_turn=None, founding_turn=None, studio_turn=None):
         if not isinstance(body, dict):
             raise ValueError('The request body must be a JSON object.')
         body.pop('_commons_turn', None)
         body.pop('_founding_turn', None)
-        if commons_turn is not None and founding_turn is not None:raise PermissionError('Choose one internal review context')
-        if founding_turn is not None:
+        body.pop('_studio_turn', None)
+        if sum(g is not None for g in (commons_turn,founding_turn,studio_turn))>1:raise PermissionError('Choose one internal review context')
+        if studio_turn is not None:
+            if self.studios is None or not self.studios.owns(studio_turn):raise PermissionError('Unregistered studio turn')
+            body['_studio_turn']=studio_turn
+        elif founding_turn is not None:
             if self.founding is None or not self.founding.owns(founding_turn):raise PermissionError('Unregistered founding turn')
             body['_founding_turn']=founding_turn
         elif commons_turn is None:
@@ -254,8 +269,8 @@ class Engine:
         # Only the same shared profile can overlap. Specialists, larger document
         # profiles, audio, media and mode transitions acquire an exclusive lease.
         key = ('captain', body['model']) if shared and self.mode != 'gaming' else None
-        guard = (body.get('_commons_turn') or body.get('_founding_turn'))
-        if guard is not None and (guard.is_set() or self.mode != 'max' or route != 'text' or not shared or body.get('tools')):
+        guard = (body.get('_commons_turn') or body.get('_founding_turn') or body.get('_studio_turn'))
+        if guard is not None and (guard.is_set() or self.mode != 'max' or route != 'text' or (not shared and not (body.get('_studio_turn') and body.get('_vision') and body['model']==self.captain['model_id'])) or body.get('tools')):
             raise PermissionError('Commons requires uncancelled Max shared text inference only')
         with self.model_jobs.lease(key, self.parallel_slots(), cancelled=guard):
             with self.mode_lock:
@@ -509,7 +524,7 @@ class Engine:
                     self.shared_last_used = time.monotonic()
                 self.check_policy(body, route)
                 request = body if route == 'text' else dict(body, messages=messages)
-                guard = (body.get('_commons_turn') or body.get('_founding_turn'))
+                guard = (body.get('_commons_turn') or body.get('_founding_turn') or body.get('_studio_turn'))
                 if guard is not None and guard.is_set():
                     raise RuntimeError('Commons turn cancelled during model preparation')
                 result = self.shared_llama.chat(request, output_limit(body, self.mode, preset), messages,
@@ -554,7 +569,7 @@ class Engine:
             # Exactly one inference call. Open WebUI executes/approves tools and
             # submits the next inference turn with their results.
             stream = body.get('_stream') if route == 'text' else None
-            guard = (body.get('_commons_turn') or body.get('_founding_turn'))
+            guard = (body.get('_commons_turn') or body.get('_founding_turn') or body.get('_studio_turn'))
             response = (guard.api(base, '/api/chat', payload, timeout=1800) if guard is not None
                         else token_stream.chat(base, payload, stream) if stream
                         else api(base, '/api/chat', payload, timeout=1800))

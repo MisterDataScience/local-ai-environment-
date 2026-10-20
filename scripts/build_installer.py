@@ -6,9 +6,9 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-19-integrated-village-1'
+RELEASE = '2026-10-20-village-studios-1'
 PREFIX = 'mac-local-ai-installer/'
-STAMP = (2026, 10, 19, 0, 0, 0)
+STAMP = (2026, 10, 20, 0, 0, 0)
 
 
 def contents(root):
@@ -33,8 +33,9 @@ def contents(root):
         'captain_inputs': {'base': 'ceb8ce6bcb229042b1cf957d974e2838616c6030',
                            'native_runtime': '1b70350c92563449576bcbbf552994b1d1ed847d'},
         'owner_mac_acceptance': 'not_run',
+        'studio_inputs': {'base':'709047b7e921165a23346e43c43d623cfa7d754c','schema':1,'resolution':[320,180]},
         'integrated_inputs': {'main':'1448677eb7b3442efd227b3e59e6446c8766f354', 'installer_hardening':'a79354a2df50aae43548163fb37494f753555ad7', 'village':'776cd9010790e8030f4ac4860eb62da6817c7e24'},
-        'village_inputs': {'base': '776cd9010790e8030f4ac4860eb62da6817c7e24', 'facilities_schema': 1, 'commons_schema': 1, 'memory_schema': 2, 'management_schema': 1, 'founding_schema': 1, 'workspace_backup_format': 2},
+        'village_inputs': {'base': '776cd9010790e8030f4ac4860eb62da6817c7e24', 'facilities_schema': 1, 'commons_schema': 1, 'memory_schema': 2, 'management_schema': 1, 'founding_schema': 1, 'workspace_backup_format': 2, 'institution_schema': 1},
         'files': {name: hashlib.sha256(data).hexdigest() for name, (data, _) in sorted(result.items())}}
     encoded = json.dumps(manifest, sort_keys=True, indent=2).encode() + b'\n'
     result['RELEASE.json'] = (encoded, 0o644)

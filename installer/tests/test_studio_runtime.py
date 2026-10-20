@@ -1,0 +1,72 @@
+"""Real C/Wasm execution; compiler supplied explicitly for native test hosts."""
+import base64,json,os,sys,tempfile,unittest
+from pathlib import Path
+sys.path[:0]=[str(Path(__file__).resolve().parents[1]),str(Path(__file__).resolve().parents[1]/'payload')]
+import village
+from studio_store import Store,files
+from studio_workbench import Workbench,sandbox
+try:import wasmtime
+except ImportError:wasmtime=None
+
+@unittest.skipUnless(wasmtime and os.environ.get('STUDIO_TEST_CLANG'),'requires Wasmtime and explicit fixture compiler')
+class RuntimeTests(unittest.TestCase):
+ def setUp(self):
+  self.t=tempfile.TemporaryDirectory();self.addCleanup(self.t.cleanup)
+  self.s=Store(Path(self.t.name)/'village',lambda p:village.connect(p,test_encrypted=True));self.i=self.s.create('Fixture','Test')['id'];self.p=self.s.ingest(self.i,'C fixture',files(Path(__file__).resolve().parents[1]/'studio_sdk'),{'kind':'fixture'})
+  self.w=Workbench(self.s,sys.executable,Path(os.environ['STUDIO_TEST_CLANG']),test_trusted=True);self.addCleanup(self.w.shutdown)
+  self.b=self.w.build(self.p['project']);self.assertEqual(self.b['state'],'passed',self.b)
+ def test_compiled_c_replay_snapshot_and_export(self):
+  self.assertTrue(self.w.tests(self.i,self.b['id'])['passed'])
+  m=self.w.create(self.i,self.b['id'])['machine'];a=self.w.machine(self.i,m,'run',steps=10,buttons=8)
+  saved=self.w.machine(self.i,m,'snapshot')['saved'];self.w.machine(self.i,m,'run',steps=3,buttons=2)
+  restored=self.w.restore(self.i,saved);self.assertEqual(a['state_sha256'],restored['state_sha256']);self.assertEqual(a['screen_sha256'],restored['screen_sha256'])
+  self.assertEqual(base64.b64decode(a['png'])[:8],b'\x89PNG\r\n\x1a\n')
+  from studio_player import export
+  self.assertTrue(export(self.w.cartridge(self.b['id'])[0]).startswith(b'PK'))
+  self.assertEqual(len(self.w.measurements['calibration']['samples']),10)
+ def test_scope_withdrawal_and_pause(self):
+  m=self.w.create(self.i,self.b['id'])['machine']
+  with self.assertRaises(PermissionError):self.w.machine('wrong',m,'observe')
+  p=self.s.withdraw(self.i,self.p['source'],'');self.s.withdraw(self.i,self.p['source'],p['digest'],True)
+  with self.assertRaises(PermissionError):self.w.machine(self.i,m,'run')
+  self.w.pause()
+  with self.assertRaises(RuntimeError):self.w.rpc({'operation':'status'})
+ def test_fuel_and_no_system_imports(self):
+  from studio_runtime import Runtime,Machine
+  r=Runtime()
+  body='(module (memory (export "memory") 1) (func (export "vm_init") (param i32)) (func (export "vm_update") (param i32) (loop br 0)) (func (export "vm_draw")))'
+  m=Machine(r.engine,wasmtime.wat2wasm(body))
+  with self.assertRaises(wasmtime.Trap):m.run(1)
+  with self.assertRaises(PermissionError):Machine(r.engine,wasmtime.wat2wasm('(module (import "wasi_snapshot_preview1" "proc_exit" (func (param i32))))'))
+ def test_ten_machine_limit(self):
+  for _ in range(10):self.w.create(self.i,self.b['id'])
+  with self.assertRaises(ValueError):self.w.create(self.i,self.b['id'])
+ def test_draw_scratch_memory_does_not_change_saved_state(self):
+  from studio_runtime import Runtime,Machine
+  r=Runtime();code=wasmtime.wat2wasm('(module (memory (export "memory") 1) (func (export "vm_init") (param i32)) (func (export "vm_update") (param i32)) (func (export "vm_draw") (i32.store (i32.const 100) (i32.const 9))))')
+  m=Machine(r.engine,code);self.assertEqual(m.state_bytes()[100],0)
+  before=m.snapshot();m.run(3);self.assertEqual(before['memory'],m.snapshot()['memory'])
+ def test_reusable_c_graphics_render_real_pixels(self):
+  source='''#include "village_graphics.h"
+static const uint8_t pixels[4]={1,0,0,1};
+static const uint32_t palette[256]={0x000000,0xff0000};
+static const uint16_t map[1]={0};
+static const uint8_t font[768]={[('A'-32)*8]=128};
+void vm_init(int seed){vm_metric(7,vm_overlap(0,0,2,2,1,1,2,2));}
+void vm_update(int buttons){}
+void vm_draw(void){vm_clear(0x0000ff);vm_sprite(pixels,palette,2,2,2,1,1,0,2);vm_tiles(map,1,1,pixels,2,2,2,palette,-10,-10,0);vm_text8(font,"A",20,20,0xffffff);}
+'''
+  r=self.s.read(self.p['project'],'example.c');self.s.edit(self.p['project'],'example.c',source,r['sha256'])
+  b=self.w.build(self.p['project']);self.assertEqual(b['state'],'passed',b)
+  result=self.w.create(self.i,b['id']);self.assertEqual(result['metrics']['7'],1)
+  from PIL import Image
+  import io
+  frame=Image.open(io.BytesIO(base64.b64decode(result['png'])))
+  self.assertEqual(frame.getpixel((1,1)),(255,0,0,255));self.assertEqual(frame.getpixel((3,1)),(0,0,255,255))
+  self.assertEqual(frame.getpixel((10,10)),(255,0,0,255));self.assertEqual(frame.getpixel((20,20)),(255,255,255,255))
+
+class IsolationTests(unittest.TestCase):
+ def test_no_unrestricted_production_fallback(self):
+  if sys.platform!='darwin':
+   with self.assertRaises(RuntimeError):sandbox(['true'],[],Path('/tmp'))
+if __name__=='__main__':unittest.main()

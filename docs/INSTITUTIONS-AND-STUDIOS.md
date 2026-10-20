@@ -1,0 +1,64 @@
+# Establishing a studio in the Village
+
+The studio is part of the main installation. It has its own **Lead Designer**, approved staff, private Library and Archive, working projects and tiny computers. Other institutions can use the same membership, collection and review foundation; the specialised workbench supplied here is for C studios.
+
+The system prepares the residents and their navigation maps. You provide the source projects and creative direction, review lasting changes, and choose how long it may work. You do not need to write individual prompts, manually index your games or run benchmarks.
+
+## First use
+
+1. Install/update from the repository's main installer. Open **Village Institutions.command** in the installed Local AI folder. It opens the local owner page; opening it starts no model work.
+2. Create a studio with a name and purpose. For example: “Learn from these two games, preserve their character, and build small original experiments.”
+3. Import each C game using its ZIP or a folder on your Mac. Public GitHub imports require a full commit SHA. For a private repository, export/upload its ZIP. Original bytes are retained separately; residents edit working copies. Source files do not have to compile to be studied.
+4. Select **Max** mode and start the **founding review**. Its time and turn allowances are visible and finite. It scans indexed source passages, prepares cited explanations of architecture and hardware dependencies, and compares findings. It proposes four initial residents: Lead Designer, Engine specialist, Systems designer and Playtest reviewer. This is inference over your material and approved knowledge, not model-weight training.
+5. Review the proposed documents and staff. Approval is the final step for publication or activation. Then review the prepared starting maps. The short maps point to approved knowledge and personal memories; they do not load the entire codebase into every turn. Preparing staff or maps again is available without restarting the analysis.
+6. Choose **Install pinned studio tools** once. The optional C compiler and Wasm runtime are installed separately from the main model environment. Add the bundled C example, build its cartridge and run its tests to see the workbench in use. The first successful build also measures up to ten instances automatically; results appear under workshop status. No model call is needed for that measurement.
+7. Select a project and its Lead Designer, give a direction and start a project session. For example: “Find the reusable movement and tile-rendering pieces. Preserve the original files in the Archive. Adapt a small playable example to the workstation, test it, and explain what remains unverified.” The resident reads, searches, edits or patches working files, builds, tests, takes notes and requests focused help. Build failures and bounded tool errors return to it to correct; they are not reported as success.
+8. Inspect the activity and tasks, run a selected cartridge, save a checkpoint or **Download standalone player**. Unzip the download and open `player.html`; it needs neither a running Village nor a model. Arrow keys, Z/X, Enter and Shift supply controls. Saved games download to your computer.
+
+Starting a new session on the same project carries its working notes forward. Restart, restore, a foreground request, or a resource-mode change pauses background work; resuming is explicit. An exhausted session can receive another hour/128 turns through the page. Local inference has no hosted API charge, but uses your computer and electricity. No GitHub Actions are used by this feature.
+
+## How the studio works
+
+**Sources and seeding.** Import records include hashes, provenance, text and a lexical symbol index. ZIP traversal, links, devices and case-colliding entries are refused. Archive originals are preserved even when hardware-specific code is removed from a working copy. Founding studies bounded passages rather than pretending to understand 200,000 lines in one context. Its final comparison uses a bounded selection of its findings; it is not an exhaustive proof that two complete engines have been reconciled. Builds and behavioural evidence remain separate from source interpretation. Additional projects can be imported and studied later.
+
+**Knowledge and memory.** Studio publication goes to its private collection. General Village requests do not gain that access. Staff have approved instructions, fast-access own memories, a deeper-memory glossary, and preferred document pointers. Publishing a memory/document and approving its placement on a map are separate decisions. Residents can search and follow references when needed. Working files, task notes and session notes are drafts, not approved personal memories. Source withdrawal withholds dependent directions. Activity records show the supplied source/context and output; they do not claim to reveal a model's hidden reasoning.
+
+**Staff and collaboration.** Project ownership stays with the selected resident. The initial Lead Designer coordinates the work; other approved studio residents provide focused advice. An owner can propose membership for an existing Village resident on the review page. Grant expansion is explicit, and descendants cannot silently expand their lineage permissions. Helpers consume the same job budget and cannot recursively delegate. The studio does not outsource, use cloud inference, install packages on behalf of residents, or expose a general shell/network tool.
+
+**Concurrency.** At most four studio jobs run, using the existing shared local inference scheduler. A project has one active owner session. Founding, Commons and studio sessions have admission checks to avoid running their separate background modes together. A helper is a bounded turn within its owner's job, not a fifth model. Machine instances are separate from speaking agents: up to ten per institution, forty across the host. Idle machines do not run simulation steps. Three or four project owners can work on different projects; the old rotating teams of four have been superseded by persistent ownership and focused help.
+
+## The tiny computer
+
+The target is portable C compiled to WebAssembly, with a **320 × 180** framebuffer and fixed 60 Hz simulation steps. The downloadable player uses integer nearest-neighbour enlargement: six times the internal resolution fills a 1920 × 1080 image. Its controls and page furniture need additional space. No Game Boy cartridge compatibility or emulator is required.
+
+The SDK provides pixels, rectangles, four simple tone channels, numbered binary assets, saved data and diagnostic metrics. Implement `vm_init(seed)`, `vm_update(buttons)` and `vm_draw()`. Drawing must leave simulation memory unchanged so headless tests can skip intermediate frames. A `studio.json` manifest lists C sources, assets and tests. The bundled example is a complete reference. Residents have an SDK-read action and can build engine layers in C on top of it.
+
+The bundled `village_graphics.h` adds indexed-colour sprites with transparency and integer scaling, camera-based tile rendering, bitmap text using a project-supplied font, and rectangle collision checks. These are ordinary reusable C functions, so residents can inspect and adapt them. They do not have to rebuild those basics for each experiment. Sprite animation can select successive atlas regions; menus and game-specific rules remain project code.
+
+Drawing may use temporary C stack data. The host and exported player restore memory/global writes after drawing, retaining the rendered output. Persistent changes belong in updates. Drawing cannot grow memory or modify saved-game data.
+
+This is a freestanding C target, not a complete operating system or an automatic compatibility layer for every old engine. Standard-library dependencies, hardware registers, interrupt handlers, bank switching and original cartridge/linker assumptions need adapting in the working copy. Useful gameplay, data structures, algorithms and engine code can remain. The owner can try an original Makefile in the macOS build sandbox and inspect its diagnostics; that does not promise an arbitrary historical build will run, or emulate its original hardware. Original native executables are not exposed as an unrestricted resident-run tool.
+
+The version-one save format supports linear memory and exported globals, not mutable function tables. Function-pointer-heavy engines may need an explicit dispatch layer. The SDK does not yet include a pixel-art editor or a 3D Village renderer. The framebuffer/input boundary leaves room for a future in-world screen.
+
+## Execution, tests and resources
+
+A machine executes only the SDK imports: no WASI filesystem, process or socket capabilities. Each entry has instruction fuel, drawing charges and memory bounds. A batch advances at most 600 steps and yields between groups of four. Diagnostic values, state/screen hashes and exact input history let residents test behaviour without continuously sending screenshots to an LLM. A resident can request an actual screenshot for local visual inspection; this explicitly fails if the configured model does not support images. Passing metric assertions is not a claim that visual design is good.
+
+Each successful build retains a source snapshot, hash, report and portable cartridge. Experiments can reset to a seed, save or restore state, and replay bounded input sequences. Explicit saved checkpoints have separate identities from automatically updated recovery state. Withdrawn projects cannot continue running through an already-loaded machine. Machines are not automatically restarted after a gateway restart.
+
+The old strict Game Boy CPU, RAM and cartridge limits were removed. Current host defaults are 16 MiB guest memory, 16 MiB code plus assets, 1 MiB saved game data, a 256 MiB project and 1 GiB institution directory. Builds are serial, bounded to 120 seconds, limited in output size and isolated by macOS `sandbox-exec`; no unrestricted production fallback exists. The shared machine worker uses a 200 ms/second CPU token bucket, with bounded bursts and a 1 GiB RSS threshold checked at request completion. That is a worker budget, not a promise about whole-system usage or transient memory peaks. Inference and compilation consume additional resources.
+
+Automatic calibration reports measured CPU time, elapsed time, guest memory and peak worker RSS for the first real cartridge. Results persist across restarts. Up to ten loaded instances are sampled sequentially; this is not a claim that forty busy instances have been benchmarked, nor that every project runs 100 times faster. More complex cartridges can consume more time. Stop/pause remains available. When a quota is reached, work stops with an explanation rather than deleting original material automatically.
+
+## Recovery and withdrawal
+
+Studio records, originals, approved references, working files and saved machines live under the Village data root and are included in the existing encrypted workspace backup. Use the normal stop-and-backup flow; restored jobs are paused. Incomplete uploads are excluded. Downloaded players and save files are external copies and are not automatically backed up or recalled.
+
+The studio page's **Withdraw a source** previews the exact affected project, withholds derived directions and preserves original archive bytes. Withdrawal is not erasure.
+
+The existing **whole-Village source erasure** is deliberately much broader: it now also deletes all institutions, studio originals, residents, projects, builds and saves because uncited copies cannot reliably be attributed. Its final preview states this scope. Use withdrawal when you only intend to stop using a studio reference. External downloads/backups are outside managed erasure.
+
+## Validation boundary
+
+Real C compilation, Wasmtime execution, replay/checkpoints, local worker transport, fuel traps, forbidden imports, scopes and owner review are tested using authored fixtures. Offline player logic is also exercised with actual Wasm. The authoring host is not your Mac: native sandbox execution, installer permission dialogs, browser layout, your two games and sustained local-model performance are not represented as tested. The runtime compiler fixture is Clang; the pinned production compiler is Zig. Optional native tooling must pass its build on the actual Mac before a project can run. Missing native acceptance is engineering validation, not an instruction for you to manually create all the residents.

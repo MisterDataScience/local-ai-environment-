@@ -26,6 +26,8 @@ def cleanup(engine, server, media_server, lock_file):
                   ('media model', engine.stop_comfy)]
     if engine.__dict__.get('founding') is not None:
         operations.insert(0, ('founding review',engine.founding.shutdown))
+    if engine.__dict__.get('studios') is not None:
+        operations.insert(0, ('studios',engine.studios.shutdown))
     if engine.__dict__.get('commons') is not None:
         operations.insert(0, ('commons', engine.commons.shutdown))
     if engine.shared_llama:

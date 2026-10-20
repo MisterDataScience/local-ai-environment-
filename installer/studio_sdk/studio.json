@@ -1,0 +1,1 @@
+{"format":1,"title":"First workshop experiment","sources":["example.c"],"assets":{},"tests":[{"name":"Move right","seed":1,"inputs":[{"steps":10,"buttons":8}],"expect_metrics":{"0":27,"2":10}}]}

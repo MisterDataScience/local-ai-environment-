@@ -89,7 +89,7 @@ class InstallerTests(unittest.TestCase):
     def test_gateway_manifest_contains_every_runtime_module(self):
         payload = installer.SOURCE / "payload"
         expected = {p.name for p in payload.glob("*.py") if p.name != "check-workflows.py"}
-        expected.add("commons.html")
+        expected.update(("commons.html", "institutions.html"))
         self.assertEqual(set(installer.GATEWAY_FILES), expected)
 
     def test_any_gateway_module_change_invalidates_native_acceptance(self):

@@ -82,7 +82,9 @@ def inventory(root):
     db=village/'village.sqlite'
     if db.is_symlink():raise ValueError('Village database symlink rejected')
     if db.exists():
-        with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as cx:sources.update(r[0] for r in cx.execute('SELECT sha FROM imports'))
+        cx=sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True)
+        try:sources.update(r[0] for r in cx.execute('SELECT sha FROM imports'))
+        finally:cx.close()
     if (village/'archive').exists():
         for p in (village/'archive').iterdir():
             match=re.match(r'^([0-9a-f]{64})(?:\.|$)',p.name)
@@ -107,6 +109,7 @@ def validate_restored(root,config,stage):
         for (cid,) in cx.execute('SELECT id FROM conversations'):
             if hashlib.sha256(cid.encode()).hexdigest() in blocked['conversations']:raise PermissionError('Restored database contains forgotten conversations')
         if cx.execute("SELECT 1 FROM sqlite_master WHERE name='founding_jobs'").fetchone():cx.execute("UPDATE founding_jobs SET state='paused' WHERE state='running'")
+        if cx.execute("SELECT 1 FROM sqlite_master WHERE name='studio_jobs'").fetchone():cx.execute("UPDATE studio_jobs SET state='paused',reason='Restored backup; resume explicitly' WHERE state='running'")
     commons=stage/'commons.sqlite'
     if commons.exists():
         with sqlite3.connect(commons) as cx:
@@ -166,7 +169,7 @@ def deletion_plan(root,config,source_sha):
         counts={table:cx.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in ('messages','lessons','specialists','library_documents','resident_memories','resident_starting_maps') if table in available}
     finally:cx.close()
     plan=dict(format=1,source=source_sha,corrupt_source_conservative_reset=corrupt,source_copies=sorted(sources),conversation_hashes=sorted(hashlib.sha256(c.encode()).hexdigest() for c in cids),counts=counts,
-              effects=['Delete the selected export and overlapping managed export copies','Delete all derived Village Library material, memories, maps, lessons, workshop/practice material and pending reviews because uncited copies cannot be reliably attributed','Remove derived specialists and their stored identities/directions; retain the five baseline roles','Clear Commons/founding caches, retained Village restore copies, native Captain session history, managed project copies and runtime logs','Remove managed workspace backup archives; preserve a deletion ledger that blocks resurrection'],
+              effects=['Delete all institutions, studio residents, original game archives, working projects, machine saves and build outputs as part of the conservative whole-Village reset','Delete the selected export and overlapping managed export copies','Delete all derived Village Library material, memories, maps, lessons, workshop/practice material and pending reviews because uncited copies cannot be reliably attributed','Remove derived specialists and their stored identities/directions; retain the five baseline roles','Clear Commons/founding caches, retained Village restore copies, native Captain session history, managed project copies and runtime logs','Remove managed workspace backup archives; preserve a deletion ledger that blocks resurrection'],
               outside_scope=['Files copied to external projects/downloads, external backups, and storage-device forensic remnants'])
     # Snapshot the affected live state so a stale preview cannot authorize new data.
     state=[]
@@ -226,6 +229,10 @@ def _erase(root,config,source_sha,digest):
         cx.execute('PRAGMA secure_delete=ON')
         with cx:
             tables={r[0] for r in cx.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            # Institution project copies and directions can contain uncited conversation
+            # material. The owner's explicit broad privacy reset includes institutions.
+            for table in ('studio_artifacts','studio_events','studio_jobs','studio_tasks','studio_builds','studio_proposals','studio_files','studio_sources','studio_projects','institution_members','institutions'):
+                if table in tables:cx.execute('DELETE FROM '+table)
             # All derived records are conservatively invalidated; raw unrelated imports remain.
             for table in ('practice_projects','practice_results','practice_cases','facility_entries','workshop_revisions','workshop_items','facility_receipts','resident_changes','resident_change_decisions','resident_starting_map_revisions','resident_starting_maps','resident_memory_revisions','resident_pointers','resident_memories','library_documents','commons_approvals','lessons','proposals','navigation','founding_items','founding_chunks','founding_jobs'):
                 if table in tables:cx.execute('DELETE FROM '+table)
@@ -243,6 +250,9 @@ def _erase(root,config,source_sha,digest):
                 if not leaves:raise RuntimeError('Invalid specialist lineage during erasure')
                 for sid in leaves:cx.execute('DELETE FROM specialists WHERE id=?',(sid,))
             cx.execute("UPDATE profiles SET instruction='',approval='Source erasure'")
+            cx.execute("DELETE FROM profiles WHERE specialist_id LIKE 'studio.%'")
+            cx.execute("DELETE FROM grants WHERE specialist_id LIKE 'studio.%'")
+            cx.execute("DELETE FROM specialists WHERE id LIKE 'studio.%'")
             cx.execute("UPDATE specialists SET tags='[]',approval='Source erasure'")
             cx.execute("UPDATE collections SET note=''")
             cx.execute('DELETE FROM audit')
@@ -252,7 +262,7 @@ def _erase(root,config,source_sha,digest):
     finally:cx.close()
     for source in plan['source_copies']:(root/'village/archive'/(source+'.json')).unlink(missing_ok=True)
     for name in ('commons.sqlite','commons.sqlite-wal','commons.sqlite-shm'):(root/'village'/name).unlink(missing_ok=True)
-    for name in ('jobs','exports','library','practice'):
+    for name in ('jobs','exports','library','practice','institutions'):
         p=root/'village'/name
         if p.exists():shutil.rmtree(p)
     for p in list(root.glob('village.before-restore-*'))+list(root.glob('.village-restore-*')):

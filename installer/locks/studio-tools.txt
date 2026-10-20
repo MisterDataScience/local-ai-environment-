@@ -1,0 +1,3 @@
+# Optional studio toolchain. Apple Silicon and x86_64 development wheels only.
+wasmtime==38.0.0 --hash=sha256:479529425f68cd69f8f4c369abf50d6f44a0e2395f5ce2b9a506c8a695aef65b --hash=sha256:1c46037114350f25b23eb928085b29dc8acfe4de7ba6a59584b51bfc8533e14c --hash=sha256:f6c87bfe9de9a35de5b28fbdac192e2526486e3d0a3be48e107789cf117925fd
+ziglang==0.14.1 --hash=sha256:eae7d46746b8e80a4d1a8369b09f7a6aace973ee39207b1b63cfb6bb086e84dc --hash=sha256:7b880229c41e822c0388318de89dffe034a146ce44a7342b7e74b167329a67b9 --hash=sha256:6eb9d4d759b292c83810dbee2e9e8e3fbfbf01d864e6e9811bae711fd74e1c2f

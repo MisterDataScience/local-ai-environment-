@@ -95,5 +95,25 @@ class GatewayCommonsTests(unittest.TestCase):
             self.assertEqual(caught.exception.code,404)
         finally:server.shutdown();server.server_close();thread.join(2)
 
+    def test_studio_page_and_upload_require_owner_auth_without_starting_models(self):
+        class Stub:
+            config={'api_key':'fixture-key'}
+            def studios_controller(self):raise AssertionError('No unauthorised controller construction')
+        engine=Stub();server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.daemon_threads=True;server.engine=engine
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        base='http://127.0.0.1:'+str(server.server_port)
+        try:
+            with urlopen(base+'/institutions',timeout=3) as response:
+                page=response.read().decode();self.assertIn('Lead Designer',page);self.assertNotIn('fixture-key',page)
+            for path in ('/control/studios','/control/studio-upload?token=test&offset=0'):
+                with self.assertRaises(HTTPError) as caught:urlopen(Request(base+path,data=b'{}'),timeout=3)
+                self.assertEqual(caught.exception.code,401)
+            class Controller:
+                def execute(self,payload):return {'institutions':[]}
+            engine.studios_controller=lambda:Controller()
+            request=Request(base+'/control/studios',data=b'{"operation":"view"}',headers={'Authorization':'Bearer fixture-key'})
+            with urlopen(request,timeout=3) as response:self.assertEqual(json.load(response),{'institutions':[]})
+        finally:server.shutdown();server.server_close();thread.join(2)
+
 
 if __name__=='__main__':unittest.main()

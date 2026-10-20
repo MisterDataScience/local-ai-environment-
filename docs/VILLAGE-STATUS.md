@@ -6,6 +6,12 @@ automatically. The system prepares durable changes; the owner approves them.
 
 ## Implemented
 
+- Integrated institutions and C studios with private collections, prepared Lead
+  Designer/staff proposals, source-based founding and approved memory maps.
+  Bounded 320 × 180 workstations include reusable C graphics helpers, tests,
+  checkpoints, automatic resource measurements and an offline player export.
+  See [Institutions and studios](INSTITUTIONS-AND-STUDIOS.md) for the owner flow
+  and the exact freestanding-C compatibility limits.
 - Approved specialist routing and complete Captain proposals for creation,
   revision, retirement and memory maps. No manual agent setup is required.
 - Finite Commons gatherings with four active places, owner participation, creative

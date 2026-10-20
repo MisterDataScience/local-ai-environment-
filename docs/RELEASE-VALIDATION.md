@@ -1,5 +1,41 @@
 # Integrated release validation
 
+## C studio release, 20 October 2026
+
+Release `2026-10-20-village-studios-1` adds integrated institutions, private studio
+collections, source founding, prepared Lead Designer/staff and memory-map
+proposals, bounded C workstations and a 320 × 180 offline player. Original
+sources are preserved, while publication and lasting memory/access changes
+require final owner review. The studio remains a C workbench; Pyxel was assessed
+as an alternative and was not installed or substituted.
+
+Validation: 375 installer tests (370 passing, five skipped), 136 gateway tests,
+92 JavaScript tests and seven release-script tests, totalling 605 passing checks.
+The skips remain the four native Apple PDF cases and pinned WebUI-wheel case.
+Real C fixtures exercise Wasmtime through the worker process, deterministic
+updates, checkpoints, drawing scratch memory, sprite transparency/scaling, tiles,
+bitmap text, fuel traps, forbidden system imports and machine limits. The exported
+player's JavaScript worker executes real compiled Wasm and restores state/pixels.
+SQLite and HTTP tests cover founding, private access, final approvals, memory
+maps, source withdrawal and authenticated owner controls. Model answers use
+fixtures; their quality is not inferred from these tests.
+
+The native test compiler is Clang from WASI SDK 27; deployment pins Zig 0.14.1
+and Wasmtime 38.0.0. The resumed authoring environment required reinstalling the
+test Wasmtime wheel after its saved native library crashed on import. Tests were
+rerun using the restored dependency. No production dependency was changed for it.
+The final regression run exposed a retained SQLite inventory connection that could
+change a corrupt-source erasure preview when garbage-collected. Inventory now
+closes it explicitly; a regression verifies stable previews across collection.
+
+Python and owner/player JavaScript syntax pass. Exact installer contents,
+permissions, manifest and byte-identical rebuilding are verified. Mac sandbox
+execution, production Zig compilation on the Mac, native installation, browser
+layout and sustained model performance remain target-platform acceptance work.
+The owner's two games were not supplied and are not represented as tested.
+No GitHub Actions were dispatched. See [the studio guide](INSTITUTIONS-AND-STUDIOS.md)
+for the operating flow, compatibility limits and broad source-erasure scope.
+
 ## Consolidated Village release, 19 October 2026
 
 Release `2026-10-19-integrated-village-1` combines installer hardening, Commons,

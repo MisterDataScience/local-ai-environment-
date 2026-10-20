@@ -106,6 +106,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/institutions':
+            from pathlib import Path
+            content=(Path(__file__).parent/'institutions.html').read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type','text/html; charset=utf-8')
+            self.send_header('Content-Length',str(len(content)))
+            self.send_header('Cache-Control','no-store')
+            self.send_header('Referrer-Policy','no-referrer')
+            self.send_header('Content-Security-Policy',"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data: blob:; frame-ancestors 'none'")
+            self.end_headers();self.wfile.write(content);return
         if path == '/modes':
             content = resource_modes.PAGE.encode()
             self.send_response(200)
@@ -174,6 +184,22 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorised():
             return
         path = urlparse(self.path).path
+        if path in ('/control/studios','/control/studio-upload'):
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<=1024*1024:raise ValueError('Studio request exceeds one MiB')
+                data=self.rfile.read(length)
+                if len(data)!=length:raise ValueError('Incomplete studio request')
+                controller=self.server.engine.studios_controller()
+                if path.endswith('studio-upload'):
+                    from urllib.parse import parse_qs
+                    query=parse_qs(urlparse(self.path).query)
+                    result=controller.upload(query.get('token',[''])[0],int(query.get('offset',['-1'])[0]),data)
+                else:result=controller.execute(json.loads(data))
+                return self.json_response(200,result)
+            except (ValueError,KeyError,RuntimeError,PermissionError,OSError,TypeError) as error:
+                self.close_connection=True
+                return self.json_response(409,{'error':str(error)[:1000]})
         if path == '/control/village-upload':
             try:
                 from urllib.parse import parse_qs

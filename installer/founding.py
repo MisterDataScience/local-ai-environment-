@@ -153,6 +153,8 @@ class Founding:
         with self.lock:return self.guard is guard and self.active is not None
 
     def capacity(self):
+        studios=getattr(self.engine,'studios',None)
+        if studios and studios.active:raise RuntimeError('Pause studio sessions and wait for them to drain first')
         status=self.engine.mode_status()
         if status['mode']!='max' or status['transitioning'] or status.get('error') or not self.engine.captain['enabled']:raise RuntimeError('Founding review requires Max and the local Captain')
         if getattr(self.engine,'ollama','http://127.0.0.1:11435') not in ('http://127.0.0.1:11434','http://127.0.0.1:11435'):raise PermissionError('Founding review cannot use remote models')

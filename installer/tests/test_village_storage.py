@@ -85,6 +85,14 @@ class VillageStorageTests(backup_tests.BackupTests):
         storage.erase(self.root,self.config,self.receipt['sha'],plan['digest'])
         self.assertFalse((self.root/'village/archive'/(self.receipt['sha']+'.json')).exists())
 
+    def test_corrupt_source_preview_is_stable_across_connection_collection(self):
+        import gc
+        (self.root/'village/archive'/(self.receipt['sha']+'.json')).write_text('damaged private export')
+        first=storage.deletion_plan(self.root,self.config,self.receipt['sha'])
+        gc.collect()
+        second=storage.deletion_plan(self.root,self.config,self.receipt['sha'])
+        self.assertEqual(first['digest'],second['digest'])
+
     def test_readers_block_recovery_and_stale_preview_cannot_erase_new_data(self):
         cx=village.connect(self.root/'village')
         with self.assertRaises(RuntimeError):backup.snapshot(self.root,self.config)

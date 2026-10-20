@@ -1,3 +1,17 @@
+Studio release 2026-10-20-village-studios-1:
+605 local checks passed; five skipped. Suites: 375 installer tests including
+five skips, 136 payload tests, 92 JavaScript tests and seven release-script tests.
+Studio cases compile real C with a Clang fixture, run Wasmtime in a subprocess,
+check pixels from reusable sprite/tile/font helpers, test fuel and import denial,
+and verify explicit checkpoints, replay, owner approvals, scoped memory maps,
+source withdrawal and the offline player's actual Wasm execution.
+The release package is checked against source, permissions and its manifest;
+repeat builds are byte-identical. No GitHub Actions were used.
+Native Mac sandbox/Zig execution, browser layout, sustained local-model
+performance and the owner's actual C games have not been tested on this host.
+See docs/INSTITUTIONS-AND-STUDIOS.md for normal use and compatibility limits.
+Earlier validation records below are historical.
+
 Consolidated Village release 2026-10-19-integrated-village-1:
 584 local checks passed; five skipped (four native Apple PDF cases and one
 pinned WebUI-wheel compatibility case). Suites: 357 installer tests including
