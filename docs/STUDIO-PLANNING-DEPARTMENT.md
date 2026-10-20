@@ -119,7 +119,28 @@ statuses are deliberately unclassified until the next pass reviews them. The
 existing design leaf is a specification request, not proof that its deliverable
 has been produced or its rule settled.
 
-Decision extraction, gap resolution, system mapping, work orders, acceptance
-checks, coverage review and the implementation task scheduler are still to be
-built. Actual local-model planning quality and native Mac acceptance also remain
-unvalidated.
+The next saved stage now walks the frozen manifest one node at a time. The
+Decision Mapper proposes cited rules and classifies each as settled, hypothesis,
+deferred or open. A separate Design Auditor turn checks each proposal. A leaf's
+instruction cannot be treated as its completed rule: the Lead Designer produces
+that deliverable in a separate saved turn and the auditor checks it before the
+node can advance. Audited open questions return to the Lead Designer, then the
+same node is reviewed again. Repeated unresolved questions or review failures
+block the job and remain visible in its report. Each accepted resolution adds a
+new digest to the integration dossier's revision history; the frozen original
+design job is retained. The host rejects unsupported quotes, invalid statuses,
+missing references and incomplete node coverage. The result is a decision
+ledger, not a list of coding jobs.
+
+In the Institutions page, open a completed design job and choose **Start
+decision inventory**. The job runs bounded saved turns on the installed local
+model and can be paused and resumed. Open **decision ledger** for progress,
+questions and the first page of classified decisions. The owner API supports
+`prepare_integration`, `run_integration`, `integration_report`,
+`integration_node` and `integration_decisions`. Reports are paged; no prompt
+needs the entire game tree at once.
+
+System grouping, cross-system conflict review, work orders, acceptance checks,
+coverage of build-relevant decisions and the implementation task scheduler are
+still to be built. Actual local-model planning quality and native Mac acceptance
+also remain unvalidated.

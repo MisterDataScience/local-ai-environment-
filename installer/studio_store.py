@@ -398,7 +398,10 @@ class Store:
                         row['progress']={'phase':frozen.get('phase'),'status':frozen.get('status'),
                                          'source_design_job':frozen.get('source_design_job'),
                                          'dossier_sha256':frozen.get('dossier_sha256'),
-                                         'nodes':len(frozen.get('manifest',[]))}
+                                         'nodes':len(frozen.get('manifest',[])),
+                                         'processed_nodes':len(frozen.get('reviewed_nodes',[])),
+                                         'decisions':len(frozen.get('decisions',[])),
+                                         'unresolved_issues':sum(x.get('resolved') is not True for x in frozen.get('issues',[]))}
                     if key=='jobs' and row.get('kind')=='design' and isinstance(row.get('progress'),dict):
                         state=row['progress'].get('design',{})
                         if state:
