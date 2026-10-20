@@ -92,4 +92,102 @@ take the accepted dossier and produce an implementation package:
   chosen to match the claim being checked;
 - a coverage check that every build-relevant design decision is implemented,
   tested, or explicitly deferred;
-- a dependency graph that rejects missing references and cycle
+- a dependency graph that rejects missing references and cycles, then marks
+  only prerequisite-ready tasks as runnable.
+
+If this department finds an unresolved game rule, it returns that question to
+the Lead Designer for a design decision before implementation. It does not ask a
+coder to invent the rule.
+
+This is an assembly line in the sense of clear handoffs and quality gates, not a
+requirement to keep every resident occupied. The implementation scheduler can
+run the ready work that fits the machine's concurrency limit. If no task is
+ready, agents can wait; filling idle time with unrelated work would risk
+fragmenting attention and context. Some implementation tasks can run in
+parallel when their prerequisites are satisfied, while integration-dependent
+tasks wait.
+
+The first host stage of that middle department is implemented: `prepare_integration`
+accepts only a completed, audited design job from the same institution, saves an
+immutable versioned copy of its selected game, context, candidates, entire tree and
+final review, and indexes every node with a source reference. `integration_report`
+pages through the manifest, while `integration_node` retrieves one original node.
+Repeated preparation of the same design job returns the same frozen copy. This
+stage performs no model call and creates no implementation tasks. Node decision
+statuses are deliberately unclassified until the next pass reviews them. The
+existing design leaf is a specification request, not proof that its deliverable
+has been produced or its rule settled.
+
+The next saved stage now walks the frozen manifest one node at a time. The
+Decision Mapper proposes cited rules and classifies each as settled, hypothesis,
+deferred or open. A separate Design Auditor turn checks each proposal. A leaf's
+instruction cannot be treated as its completed rule: the Lead Designer produces
+that deliverable in a separate saved turn and the auditor checks it before the
+node can advance. Audited open questions return to the Lead Designer, then the
+same node is reviewed again. Repeated unresolved questions or review failures
+block the job and remain visible in its report. Each accepted resolution adds a
+new digest to the integration dossier's revision history; the frozen original
+design job is retained. The host rejects unsupported quotes, invalid statuses,
+missing references and incomplete node coverage. The result is a decision
+ledger, not a list of coding jobs.
+
+In the Institutions page, open a completed design job and choose **Start
+decision inventory**. The job runs bounded saved turns on the installed local
+model and can be paused and resumed. Open **decision ledger** for progress,
+questions and the first page of classified decisions. The owner API supports
+`prepare_integration`, `run_integration`, `integration_report`,
+`integration_node` and `integration_decisions`. Reports are paged; no prompt
+needs the entire game tree at once.
+
+After the inventory completes, choose **Start system mapping**. The host
+starts bounded Integrator passes over cited decisions. The Systems Integrator
+can group related rules across design branches and split one branch into
+several gameplay systems. Each decision must be assigned exactly once;
+existing system names are offered as candidates for reuse. After grouping,
+the host derives cross-system prerequisite links and queues pair reviews. A
+separate Design Auditor reviews each saved pass. A cited unresolved rule
+returns to the Lead Designer, whose audited answer creates a new design
+version. The old ledger and map are invalidated and inventory runs again
+before mapping can finish. System memberships and decision IDs are paged
+through `integration_systems`. The mapping does not produce work orders or
+claim to have run gameplay checks. Pair review uses summaries and cited
+samples rather than all decisions at once, so it cannot guarantee discovery
+of every implicit cross-system conflict.
+
+## Production planning and implementation handoff
+
+After system mapping completes, choose **Start work-order planning**. The
+Production Planner works through bounded batches of accepted decisions. A
+separate auditor reviews each batch. The host checks that every build-relevant
+decision is implemented or explicitly deferred, that hypotheses have an
+experiment, and that dependencies are valid and acyclic. A missing game rule
+returns to the Lead Designer before a ticket can be accepted.
+
+The middle department is intended to preserve organizational learning, not
+only pass implementation tickets downstream. Every assignment should return
+its project result and an evidence-backed learning packet: what was attempted,
+what the relevant test or playtest observed, what failed or remains uncertain,
+and what should change next. Even a weak demo can improve the studio when its
+failure narrows uncertainty or improves a reusable test. The agent Studio Lead
+should use accepted lessons and capability records to adjust staffing, tools,
+and the next iteration.
+
+When planning completes, **Open production queue** shows each order and its
+status. Choose the base project in Workshop, then dispatch ready work. Up to
+four approved specialists receive isolated project copies. A specialist's
+report and evidence go through owner review; accepting merges conflict-free
+changes and unlocks dependent orders. Revision returns the order to the queue.
+
+For C cartridge orders whose planned check is an automated test or simulation,
+the specialist must add a named acceptance case before editing C or header
+files, observe it fail, make the code change, then make the same case pass.
+These cartridge checks are declared in `studio.json`: bounded input sequences
+and expected SDK metrics. The test definition is JSON, the game is C, and the
+host runs the cartridge in its sandbox. This is not a general native-language
+test runner, and metric checks do not prove visual quality. Other project
+types still need their native test runner connected before they can use the
+same enforced test-first gate.
+
+Actual local-model planning quality and native Mac acceptance remain
+unvalidated.
+
