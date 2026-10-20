@@ -454,6 +454,8 @@ def commit_mapping(state, result):
             raise ValueError("System map still contains unresolved design questions")
         state["phase"] = "system_map_complete"
         state["status"] = "awaiting_work_orders"
+    else:
+        state["phase"] = "system_mapping"
 
 
 def restart_inventory_after_mapping_resolution(state):
