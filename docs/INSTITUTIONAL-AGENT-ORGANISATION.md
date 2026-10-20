@@ -89,6 +89,84 @@ can be asserted, while independent test agents add integration, regression,
 playtest, and visual checks appropriate to the project. Each result states
 exactly what was measured and what it cannot establish.
 
+## The middle department as a learning engine
+
+The Design Integration and Production Planning department should stay attached
+to the studio's ongoing work. Its job is not finished when it hands tickets to
+implementation. It converts the accepted design into an agent-led team, guides
+bounded attempts, evaluates evidence, and returns what the studio learned to
+its persistent records. Each run can improve the next run even when its demo is
+weak or the target behavior is not achieved.
+
+### Operating loop
+
+1. **Orient.** The Studio Lead opens the accepted design version, relevant
+   institution and project memories, archive examples, unresolved risks, and
+   current model/tool/hardware capability records. Agents retrieve relevant
+   excerpts rather than loading the whole history.
+2. **Plan and audit.** A Production Planner turns accepted decisions into small
+   outcomes, dependencies, hypotheses, and checks. An independent planning
+   reviewer verifies coverage and catches hidden design choices. Unresolved
+   rules return to design.
+3. **Staff.** The Studio Lead appoints a Lead Developer for each coherent area.
+   That lead selects continuing specialists and, when needed, recruits
+   temporary Village agents for bounded work. Selection uses approved
+   capability evidence and relevant memories. The task packet names the lead,
+   decision IDs, inputs, outputs, allowed tools, check, and evidence to retain.
+4. **Execute and coordinate.** Lead Developers manage small agent teams. They
+   can split work into bounded subtasks, give each worker only the context and
+   permissions needed, retain the integration picture, and ask for help from a
+   specifically assigned test, art, systems, or engineering specialist. Saved
+   handoffs and project notes carry context across turns, pauses, and model
+   changes. Agents work in parallel only where interfaces and prerequisites
+   allow it.
+5. **Evaluate independently.** A test or review agent who did not make the
+   change checks the planned behavior. It records the exact build/source
+   version, inputs or seed, runner and tool versions, observed metrics or
+   screenshots, outcome, and limits of the check. A failed test is evidence,
+   not a completed success claim. Playtest and visual review are kept distinct
+   from deterministic code assertions.
+6. **Retrospect.** The Lead Developer closes the assignment with the outcome,
+   evidence, remaining uncertainty, rework cause, and a recommended next
+   experiment or change. A separate learning reviewer checks whether each
+   proposed lesson follows from the evidence. Temporary access ends when the
+   assignment closes; useful records remain with their provenance.
+7. **Improve the next run.** The Studio Lead reviews accepted lessons and team
+   performance, then updates staffing, task decomposition, prompts, checks,
+   tool choice, or role capability records. The next plan cites the records it
+   used, so the studio can trace which experience changed its behavior.
+
+A weak demo can still produce a useful closeout. For example, if a movement
+prototype feels unresponsive, the studio should retain the build digest, input
+sequence, seed, measured response, playtest observation, and uncertainty about
+whether the cause is input handling or animation timing. The accepted lesson
+might be a better latency test or an improved review protocol, even if the demo
+is discarded. Do not label a result a lesson merely because it sounds
+plausible: retain evidence, scope, confidence, and any contradictory result.
+
+### What the department returns
+
+Each completed production cycle returns both:
+
+- **Project output:** code, content, assets, test additions, a working demo,
+  integration result, or an explicit blocked/failed outcome.
+- **Studio improvement:** a versioned evidence packet and reviewed proposals
+  for team/project memory, institutional Library or Archive records, role
+  capability evidence, and the next bounded experiment.
+
+A cycle is useful when it resolves a design decision, rejects a hypothesis,
+finds a defect, improves a test, reveals a tool limit, or narrows uncertainty.
+Demo quality alone is not the department's measure of whether the studio
+learned.
+
+The saved planning, audit, work-order and dependency logic already provides
+part of this loop. The current implementation does not yet provide persistent
+Lead Developer teams with bounded subdelegation, temporary appointments,
+independent test-agent dispatch, automatic task retrospectives, or reviewed
+learning proposals wired into institutional memory and archive search. Those
+are the concrete gaps between the present middle department and this
+agent-native learning loop.
+
 ## Change over time
 
 Roles describe responsibilities and capability requirements, not fixed model
