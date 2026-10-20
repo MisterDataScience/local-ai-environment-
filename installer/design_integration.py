@@ -123,11 +123,12 @@ def context(state):
                           "resolution": state["resolutions"].get(parent)})
         parent = ancestor["parent"]
     ancestors.reverse()
+    ancestor_chain = [a["id"] for a in ancestors]
     if len(ancestors) > 3:
         ancestors = [ancestors[0], *ancestors[-2:]]
     selected = state["dossier"]["selected"]
     related = []
-    for dep in entry["prerequisites"][:4]:
+    for dep in entry["prerequisites"]:
         decision = by_id[dep]
         related.append({"id": dep, "answer": decision["answer"],
                         "resolution": state["resolutions"].get(dep)})
@@ -136,7 +137,8 @@ def context(state):
             "design_version_sha256": state["design_version_sha256"],
             "selected": {"title": selected["title"], "root_answer": selected["root_answer"][:500],
                          "contract": {key: str(val)[:300] for key, val in selected["contract"].items()}},
-            "node": current, "ancestors": ancestors, "prerequisites": related,
+            "node": current, "ancestor_chain": ancestor_chain,
+            "ancestors": ancestors, "prerequisites": related,
             "approved_lessons": [
                 {"id": doc["id"], "title": doc["title"], "excerpt": doc["text"][:350]}
                 for doc in state["dossier"]["context"].get("approved_lessons", [])[:2]],

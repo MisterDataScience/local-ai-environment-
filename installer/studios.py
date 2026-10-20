@@ -336,6 +336,38 @@ class Studios:
         return self.infer(jid,system,packet)
 
 
+    def integration_infer(self,jid,system,packet):
+        """Keep the full current node and result; compact optional surrounding text."""
+        packet=json.loads(encoded(packet))
+        preset=getattr(self.engine,'text_models',{}).get(self.engine.captain['model_id'],{'num_ctx':16384})
+        limit=min(14000,preset['num_ctx']-2560)-len(system.encode())
+        def fits():
+            return len(encoded(packet).encode())<=limit
+        if not fits():packet['approved_lessons']=[]
+        if not fits():
+            for dep in packet.get('prerequisites',[]):
+                dep['answer']=str(dep.get('answer',''))[:200]
+                resolution=dep.get('resolution')
+                if resolution:dep['resolution']={'node_id':resolution['node_id'],
+                                                   'content':resolution['content'][:200],
+                                                   'sha256':resolution['sha256']}
+        if not fits():
+            for ancestor in packet.get('ancestors',[]):
+                ancestor['answer']=str(ancestor.get('answer',''))[:300]
+                resolution=ancestor.get('resolution')
+                if resolution:ancestor['resolution']={'node_id':resolution['node_id'],
+                                                       'content':resolution['content'][:300],
+                                                       'sha256':resolution['sha256']}
+            chosen=packet.get('selected',{})
+            chosen['root_answer']=str(chosen.get('root_answer',''))[:240]
+            chosen['contract']={k:str(v)[:160] for k,v in chosen.get('contract',{}).items()}
+        if not fits():
+            packet['already_recorded']=[{'id':d['id'],'claim':d['claim'][:120]}
+                                        for d in packet.get('already_recorded',[])]
+        if not fits():
+            raise ValueError('This design node and review result exceed the local context. Split the design deliverable or increase the configured context allowance.')
+        return self.infer(jid,system,packet)
+
     def integration_step(self,row,progress):
         """One saved inference or audit turn for one original design node."""
         state=progress['integration']
@@ -359,14 +391,14 @@ class Studios:
                                             kind='missing_deliverable',resolved=False))
                 state['phase']='lead_resolve'
                 return progress,False
-            raw=self.infer(row['id'],INTEGRATION_MAP,dict(packet,task='List the explicit decisions at this node, with exact source quotes. Return open questions when a game rule is missing or conflicts with another supplied decision.'))
+            raw=self.integration_infer(row['id'],INTEGRATION_MAP,dict(packet,task='List the explicit decisions at this node, with exact source quotes. Return open questions when a game rule is missing or conflicts with another supplied decision.'))
             result=design_integration.inventory(game_plan.parse(raw),state)
             state['pending']={'inventory':result}
             state['phase']='inventory_audit'
             return progress,False
         if state['phase']=='inventory_audit':
             proposed=state['pending']['inventory']
-            raw=self.infer(row['id'],INTEGRATION_AUDIT,dict(packet,stage='decision inventory review',result=proposed))
+            raw=self.integration_infer(row['id'],INTEGRATION_AUDIT,dict(packet,stage='decision inventory review',result=proposed))
             review=game_plan.audit(game_plan.parse(raw))
             if review['verdict']=='revise':
                 state['retry']+=1
@@ -403,7 +435,7 @@ class Studios:
             return progress,state['phase']=='inventory_complete'
         if state['phase']=='lead_resolve':
             pending=state['pending']
-            raw=self.infer(row['id'],INTEGRATION_LEAD,dict(packet,stage='Lead Designer design resolution',
+            raw=self.integration_infer(row['id'],INTEGRATION_LEAD,dict(packet,stage='Lead Designer design resolution',
                 question=pending['question'],reason=pending['reason'],
                 repair=pending.get('repair','')))
             result=design_integration.lead_result(game_plan.parse(raw))

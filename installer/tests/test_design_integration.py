@@ -66,6 +66,20 @@ class IntegrationFreezeTests(unittest.TestCase):
         design["nodes"][2]["leaf"]["depends_on"] = ["missing"]
         with self.assertRaises(ValueError):integration.freeze("design:1", design)
 
+    def test_context_lists_every_prerequisite_id(self):
+        design = accepted()
+        extra = json.loads(json.dumps(design["nodes"][-1]))
+        extra["id"] = "G0.6"
+        extra["question"] = "How does the sixth system interact with the plates?"
+        extra["leaf"]["depends_on"] = ["G0." + str(i) for i in range(1, 6)]
+        design["nodes"][0]["children"].append("G0.6")
+        design["nodes"].append(extra)
+        state = integration.freeze("design:1", design)
+        state["cursor"] = len(state["manifest"]) - 1
+        packet = integration.context(state)
+        self.assertEqual([d["id"] for d in packet["prerequisites"]],
+                         extra["leaf"]["depends_on"])
+
     def test_multiple_batches_cover_one_node_without_repeating_decisions(self):
         state = integration.freeze("design:1", accepted())
         state["phase"] = "inventory"
