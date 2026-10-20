@@ -393,6 +393,12 @@ class Store:
                         if field in row and row[field]:
                             try:row[field]=json.loads(row[field])
                             except (ValueError,TypeError):pass
+                    if key=='jobs' and row.get('kind')=='integration' and isinstance(row.get('progress'),dict):
+                        frozen=row['progress'].get('integration',{})
+                        row['progress']={'phase':frozen.get('phase'),'status':frozen.get('status'),
+                                         'source_design_job':frozen.get('source_design_job'),
+                                         'dossier_sha256':frozen.get('dossier_sha256'),
+                                         'nodes':len(frozen.get('manifest',[]))}
                     if key=='jobs' and row.get('kind')=='design' and isinstance(row.get('progress'),dict):
                         state=row['progress'].get('design',{})
                         if state:

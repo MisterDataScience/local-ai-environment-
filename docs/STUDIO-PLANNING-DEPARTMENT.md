@@ -108,6 +108,18 @@ fragmenting attention and context. Some implementation tasks can run in
 parallel when their prerequisites are satisfied, while integration-dependent
 tasks wait.
 
-That middle department and its task scheduler are not implemented in this
-release. The present planning stage ends with a reviewed design dossier; actual
-local-model planning quality and native Mac acceptance also remain unvalidated.
+The first host stage of that middle department is implemented: `prepare_integration`
+accepts only a completed, audited design job from the same institution, saves an
+immutable versioned copy of its selected game, context, candidates, entire tree and
+final review, and indexes every node with a source reference. `integration_report`
+pages through the manifest, while `integration_node` retrieves one original node.
+Repeated preparation of the same design job returns the same frozen copy. This
+stage performs no model call and creates no implementation tasks. Node decision
+statuses are deliberately unclassified until the next pass reviews them. The
+existing design leaf is a specification request, not proof that its deliverable
+has been produced or its rule settled.
+
+Decision extraction, gap resolution, system mapping, work orders, acceptance
+checks, coverage review and the implementation task scheduler are still to be
+built. Actual local-model planning quality and native Mac acceptance also remain
+unvalidated.
