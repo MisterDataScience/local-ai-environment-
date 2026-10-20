@@ -78,6 +78,36 @@ The final integration review receives a summary of every top-level branch,
 while each node receives its own review. No player test or build is run by this
 department.
 
-The next stage should translate accepted design decisions into code and content
-tasks with concrete dependencies, acceptance checks, and build or play evidence.
-That task scheduler and real local-model quality have not been validated here.
+## The next department in the studio line
+
+The next planned stage is a **Design Integration and Production Planning
+department**, between the Lead Designer's design tree and implementation. It
+will not choose a different game or quietly fill gaps with new rules. It will
+take the accepted dossier and produce an implementation package:
+
+- bounded code, asset, and content tasks linked to the design decision IDs they
+  implement;
+- explicit input files, outputs, prerequisites, ownership, and acceptance
+  evidence for each task;
+- code checks, deterministic simulations, content inspections, or player tests
+  chosen to match the claim being checked;
+- a coverage check that every build-relevant design decision is implemented,
+  tested, or explicitly deferred;
+- a dependency graph that rejects missing references and cycles, then marks
+  only prerequisite-ready tasks as runnable.
+
+If this department finds an unresolved game rule, it returns that question to
+the Lead Designer for a design decision before implementation. It does not ask a
+coder to invent the rule.
+
+This is an assembly line in the sense of clear handoffs and quality gates, not a
+requirement to keep every resident occupied. The implementation scheduler can
+run the ready work that fits the machine's concurrency limit. If no task is
+ready, agents can wait; filling idle time with unrelated work would risk
+fragmenting attention and context. Some implementation tasks can run in
+parallel when their prerequisites are satisfied, while integration-dependent
+tasks wait.
+
+That middle department and its task scheduler are not implemented in this
+release. The present planning stage ends with a reviewed design dossier; actual
+local-model planning quality and native Mac acceptance also remain unvalidated.
