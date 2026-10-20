@@ -249,22 +249,50 @@ class SystemMappingTests(unittest.TestCase):
     def test_system_index_covers_all_decisions_and_explicit_links(self):
         state = self.ledger()
         integration.begin_system_mapping(state)
-        self.assertEqual(len(state["systems"]), 6)
+        while state["mapping_queue"] and state["mapping_queue"][0]["kind"] == "group":
+            packet = integration.mapping_packet(state)
+            names = {"G0": "Gate Mechanics", "G0.1": "Gate Mechanics",
+                     "G0.2": "Gate Control", "G0.3": "Player Feedback",
+                     "G0.4": "Level Flow", "G0.5": "Puzzle Rules"}
+            groups = {}
+            for decision in packet["decisions"]:
+                name = names[decision["node_id"]]
+                groups.setdefault(name, []).append(decision["id"])
+            proposals = []
+            for name, ids in groups.items():
+                known = next((s for s in packet["known_systems"] if s["name"] == name), None)
+                proposals.append(dict(id=known["id"] if known else "", name=name,
+                    decision_ids=ids, summary="A coherent set of rules controls " + name + "."))
+            result = integration.mapping_result(dict(systems=proposals, issues=[]), packet)
+            integration.commit_mapping(state, result)
+            state["phase"] = "system_mapping" if state["mapping_cursor"] < len(state["mapping_queue"]) else state["phase"]
+        self.assertEqual(len(state["systems"]), 5)
         self.assertEqual({d for system in state["systems"] for d in system["decision_ids"]},
                          {row["id"] for row in state["decisions"]})
-        self.assertIn(dict(**{"from": "G0.1", "to": "G0.2"},
+        gate = next(system for system in state["systems"] if system["name"] == "Gate Mechanics")
+        self.assertEqual(len(gate["decision_ids"]), 2)
+        self.assertNotEqual(
+            next(system["id"] for system in state["systems"]
+                 if "G0.4:D1" in system["decision_ids"]),
+            next(system["id"] for system in state["systems"]
+                 if "G0.5:D1" in system["decision_ids"]))
+        self.assertIn(dict(**{"from": gate["id"], "to": "system:gate-control"},
                            prerequisite_node="G0.1", dependent_node="G0.2"),
                       state["system_links"])
         self.assertEqual(integration.systems_page(state, 0, 2)["next_offset"], 2)
+        detail = integration.systems_page(state, system_id=gate["id"], limit=1)
+        self.assertEqual(detail["decision_total"], 2)
+        self.assertIsNotNone(detail["next_decision_offset"])
         self.assertEqual(state["work_orders"], [])
-        with self.assertRaises(ValueError):
-            integration.begin_system_mapping(state)
+        self.assertEqual(state["phase"], "system_mapping")
 
     def test_mapping_rejects_uncited_or_unrelated_lead_question(self):
         state = self.ledger()
         integration.begin_system_mapping(state)
         packet = integration.mapping_packet(state)
-        result = dict(summary="The gate contains an explicit player-facing rule.",
+        result = dict(systems=[dict(id="", name="Gate Mechanics",
+                          decision_ids=[d["id"] for d in packet["decisions"]],
+                          summary="The gate contains an explicit player-facing rule.")],
                       issues=[dict(node_id="G0.2", decision_ids=["missing"],
                                    question="Which plate combination opens the gate?")])
         with self.assertRaises(ValueError):
@@ -273,13 +301,29 @@ class SystemMappingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             integration.mapping_result(result, packet)
 
+    def test_grouping_requires_exactly_one_system_for_each_decision(self):
+        state = self.ledger()
+        integration.begin_system_mapping(state)
+        packet = integration.mapping_packet(state)
+        ids = [row["id"] for row in packet["decisions"]]
+        malformed = dict(systems=[dict(id="", name="Gate Mechanics",
+            decision_ids=ids[:-1], summary="A coherent system for the supplied gate rules.")],
+            issues=[])
+        with self.assertRaises(ValueError):
+            integration.mapping_result(malformed, packet)
+        malformed["systems"][0]["decision_ids"] = ids + [ids[0]]
+        with self.assertRaises(ValueError):
+            integration.mapping_result(malformed, packet)
+
     def test_audited_gap_returns_to_lead_then_invalidates_old_map(self):
         state = self.ledger()
         integration.begin_system_mapping(state)
         packet = integration.mapping_packet(state)
         cited = packet["decisions"][0]
         proposal = integration.mapping_result(dict(
-            summary="The gate state depends on a rule not yet specified.",
+            systems=[dict(id="", name="Gate Mechanics",
+                          decision_ids=[d["id"] for d in packet["decisions"]],
+                          summary="The gate state depends on a rule not yet specified.")],
             issues=[dict(node_id=cited["node_id"], decision_ids=[cited["id"]],
                          question="Which exact plate combination opens the gate?")]), packet)
         integration.commit_mapping(state, proposal)
@@ -313,7 +357,17 @@ class SystemMappingTests(unittest.TestCase):
         def answer(jid, system, packet):
             calls.append(packet["item"]["kind"])
             if system.startswith("You are the Systems Integrator."):
-                return json.dumps(dict(summary="The cited decisions form a bounded game system.",
+                if packet["item"]["kind"] == "group":
+                    groups = []
+                    for decision in packet["decisions"]:
+                        name = "Subsystem " + decision["node_id"]
+                        known = next((s for s in packet["known_systems"]
+                                      if s["name"] == name), None)
+                        groups.append(dict(id=known["id"] if known else "", name=name,
+                            decision_ids=[decision["id"]],
+                            summary="The cited rule belongs to " + name + "."))
+                    return json.dumps(dict(systems=groups, issues=[]))
+                return json.dumps(dict(summary="The systems interact without a missing rule.",
                                        issues=[]))
             return json.dumps(dict(verdict="accept",
                 checks={key: True for key in game.AUDIT_CHECKS},
@@ -327,9 +381,11 @@ class SystemMappingTests(unittest.TestCase):
                 break
         self.assertTrue(done)
         self.assertEqual(state["phase"], "system_map_complete")
-        self.assertEqual(len(calls), 2 * len(state["mapping_queue"]))
+        self.assertEqual(len(calls), 34)
+        self.assertEqual(len(state["system_interactions"]), 15)
         self.assertEqual(state["work_orders"], [])
 
 
 if __name__ == "__main__":
     unittest.main()
+
