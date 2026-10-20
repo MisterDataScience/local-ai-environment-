@@ -372,6 +372,16 @@ class WorkOrderPlanningTests(unittest.TestCase):
         proposal["work_orders"][1]["check"]["method"] = "experiment"
         self.assertEqual(len(integration.work_order_result(proposal, packet)["work_orders"]), 4)
 
+    def test_planner_cannot_drop_a_required_prerequisite(self):
+        state = self.mapped()
+        integration.begin_work_order_planning(state)
+        packet = integration.work_order_packet(state)
+        proposal = self.proposal(packet)
+        dependent = next(task for task in proposal["work_orders"] if task["decision_ids"] == ["G0.2:D1"])
+        dependent["prerequisite_decision_ids"] = []
+        with self.assertRaises(ValueError):
+            integration.work_order_result(proposal, packet)
+
     def test_deferred_decision_is_explicitly_covered_without_a_task(self):
         state = self.mapped()
         state["decisions"][1]["status"] = "deferred"
@@ -381,6 +391,18 @@ class WorkOrderPlanningTests(unittest.TestCase):
         self.assertEqual({row["decision_id"] for row in result["deferred"]},
                          {"G0.1:D1", "G0.2:D1"})
         self.assertNotIn("G0.1:D1", [key for task in result["work_orders"] for key in task["decision_ids"]])
+
+    def test_settled_decision_cannot_be_arbitrarily_deferred(self):
+        state = self.mapped()
+        integration.begin_work_order_planning(state)
+        packet = integration.work_order_packet(state)
+        proposal = self.proposal(packet)
+        proposal["work_orders"] = [task for task in proposal["work_orders"]
+                                   if "G0.3:D1" not in task["decision_ids"]]
+        proposal["deferred"].append({"decision_id": "G0.3:D1",
+                                     "reason": "The planner would prefer to postpone this work."})
+        with self.assertRaises(ValueError):
+            integration.work_order_result(proposal, packet)
 
     def test_missing_rule_returns_before_work_orders_are_created(self):
         state = self.mapped()

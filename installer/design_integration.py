@@ -695,11 +695,15 @@ def work_order_packet(state):
     prerequisite_ids = set()
     for key in ids:
         decision = decisions[key]
+        required_nodes = set(manifest[decision["node_id"]]["prerequisites"])
+        required_decisions = [row["id"] for row in state["decisions"]
+                              if row["node_id"] in required_nodes]
         batch.append({"id": key, "node_id": decision["node_id"],
                       "claim": decision["claim"][:500], "status": decision["status"],
                       "quote": decision["quote"][:400], "source_ref": decision["source_ref"],
-                      "system_id": system["id"], "system_name": system["name"]})
-        prerequisite_ids.update(manifest[decision["node_id"]]["prerequisites"])
+                      "system_id": system["id"], "system_name": system["name"],
+                      "required_prerequisite_decision_ids": required_decisions})
+        prerequisite_ids.update(required_nodes)
     prerequisite_decisions = [
         {"id": decision["id"], "node_id": decision["node_id"],
          "claim": decision["claim"][:300], "status": decision["status"]}
@@ -766,10 +770,13 @@ def work_order_result(value, packet):
                 len(refs) != len(set(refs)) or any(key not in available for key in refs)):
             raise ValueError("A work order must cite decisions from its supplied system batch")
         prerequisites = task["prerequisite_decision_ids"]
+        task_prerequisite_ids = {key for decision_id in refs
+                                 for key in available[decision_id]["required_prerequisite_decision_ids"]}
         if (not isinstance(prerequisites, list) or any(not isinstance(key, str) for key in prerequisites) or
                 len(prerequisites) != len(set(prerequisites)) or
-                any(key not in valid_prerequisites for key in prerequisites)):
-            raise ValueError("Prerequisites must cite decisions from supplied design prerequisites")
+                any(key not in valid_prerequisites or key not in task_prerequisite_ids
+                    for key in prerequisites) or set(prerequisites) != task_prerequisite_ids):
+            raise ValueError("A work order must preserve all supplied design prerequisites for its decisions")
         for field in ("inputs", "outputs", "evidence"):
             values = task[field]
             if (not isinstance(values, list) or not 1 <= len(values) <= 8 or
@@ -812,6 +819,11 @@ def work_order_result(value, packet):
             raise ValueError("A deferral must reference a supplied design decision")
         if not isinstance(row["reason"], str) or not 15 <= len(row["reason"].strip()) <= 400:
             raise ValueError("A deferral needs a clear reason")
+        if available[key]["status"] != "deferred":
+            blockers = available[key]["required_prerequisite_decision_ids"]
+            if not any(all_decisions[dependency]["status"] == "deferred"
+                       for dependency in blockers if dependency in all_decisions):
+                raise ValueError("A settled decision may be deferred only when an approved prerequisite is deferred")
         deferred_ids.append(key)
     batch_ids = set(available)
     if set(assigned) & set(deferred_ids):
@@ -871,6 +883,10 @@ def validate_work_orders(state):
     """Derive task dependencies and enforce traceability and acyclic scheduling."""
     errors = []
     decisions = {row["id"]: row for row in state.get("decisions", [])}
+    decision_ids_by_node = {}
+    for decision in decisions.values():
+        decision_ids_by_node.setdefault(decision["node_id"], set()).add(decision["id"])
+    required_by_node = {row["id"]: row["prerequisites"] for row in state.get("manifest", [])}
     orders = state.get("work_orders", [])
     by_id = {row.get("id"): row for row in orders}
     if len(by_id) != len(orders) or None in by_id:
@@ -901,12 +917,20 @@ def validate_work_orders(state):
                 errors.append("Deferred decision " + key + " needs one explicit deferral and no implementation task")
         elif not tasks or defer_rows:
             errors.append("Decision " + key + " must be covered by a work order")
-        if decision.get("status") == "hypothesis" and not any(
+        if decision.get("status") == "hypothesis" and tasks and not any(
                 by_id[task_id].get("check", {}).get("method") == "experiment"
                 for task_id in tasks if task_id in by_id):
             errors.append("Hypothesis " + key + " needs an experiment work order")
     for order in orders:
         dependencies = set()
+        expected_prerequisites = set()
+        for decision_id in order.get("decision_ids", []):
+            decision = decisions.get(decision_id)
+            if decision:
+                for node_id in required_by_node.get(decision["node_id"], []):
+                    expected_prerequisites.update(decision_ids_by_node.get(node_id, set()))
+        if set(order.get("prerequisite_decision_ids", [])) != expected_prerequisites:
+            errors.append("Work order " + order["id"] + " omits or adds a design prerequisite")
         for decision_id in order.get("prerequisite_decision_ids", []):
             if decision_id not in decisions:
                 errors.append("Work order " + order["id"] + " references an unknown prerequisite decision")
