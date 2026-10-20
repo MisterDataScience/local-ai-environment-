@@ -67,6 +67,11 @@ def freeze(design_job_id, design):
         "reviewed_nodes": [],
         "partial_decisions": [],
         "batches_for_node": 0,
+        "systems": [],
+        "system_links": [],
+        "mapping_queue": [],
+        "mapping_cursor": 0,
+        "mapping_enabled": False,
     }
 
 
@@ -85,6 +90,9 @@ def report(state, offset=0, limit=100):
         "manifest_total": len(manifest),
         "processed_nodes": len(state.get("reviewed_nodes", [])),
         "decision_count": len(state.get("decisions", [])),
+        "system_count": len(state.get("systems", [])),
+        "mapping_done": state.get("mapping_cursor", 0),
+        "mapping_total": len(state.get("mapping_queue", [])),
         "issue_count": len(state.get("issues", [])),
         "design_version_sha256": state.get("design_version_sha256", state["dossier_sha256"]),
         "pending_question": (state.get("pending") or {}).get("question"),
@@ -157,11 +165,13 @@ def lead_result(value):
     return value
 
 
-def accept_resolution(state, question, result, review):
+def accept_resolution(state, question, result, review, node_id=None):
     game_scaffold.audit(review)
     if review["verdict"] != "accept":
         raise ValueError("A rejected resolution cannot enter the versioned dossier")
-    node_id = state["manifest"][state["cursor"]]["id"]
+    node_id = node_id or state["manifest"][state["cursor"]]["id"]
+    if node_id not in {entry["id"] for entry in state["manifest"]}:
+        raise ValueError("Resolution references an unknown design node")
     previous = state["resolutions"].get(node_id)
     record = {"node_id": node_id, "question": question,
               "content": result["content"], "status": result["status"],
@@ -257,6 +267,8 @@ def commit_inventory(state, inventory_result):
             raise ValueError("Decision inventory did not cover every design node")
         state["phase"] = "inventory_complete"
         state["status"] = "awaiting_system_mapping"
+        if state.get("mapping_enabled"):
+            begin_system_mapping(state)
     else:
         state["phase"] = "inventory"
         state["status"] = "inventory_running"
@@ -270,3 +282,210 @@ def decisions_page(state, offset=0, limit=100):
             "design_version_sha256": state["design_version_sha256"],
             "total": len(rows), "offset": offset, "decisions": rows[offset:offset + limit],
             "next_offset": offset + limit if offset + limit < len(rows) else None}
+
+
+def begin_system_mapping(state):
+    """Rebuild a deterministic, cited system index from the complete ledger."""
+    if state["phase"] != "inventory_complete" or state["cursor"] != len(state["manifest"]):
+        raise ValueError("A complete decision ledger is required before mapping systems")
+    if state.get("pending") or state.get("partial_decisions") or any(
+            issue.get("resolved") is False for issue in state["issues"]):
+        raise ValueError("Unresolved design questions prevent system mapping")
+    node_ids = {entry["id"] for entry in state["manifest"]}
+    decisions = state["decisions"]
+    manifest_by_id = {entry["id"]: entry for entry in state["manifest"]}
+    if (len(state.get("reviewed_nodes", [])) != len(node_ids) or
+            set(state["reviewed_nodes"]) != node_ids or
+            {row["node_id"] for row in decisions} != node_ids or
+            len({row["id"] for row in decisions}) != len(decisions) or
+            any(row["source_ref"] != manifest_by_id[row["node_id"]]["source_ref"] or
+                row["status"] == "open" for row in decisions)):
+        raise ValueError("The decision ledger contains duplicate, missing or open decisions")
+    root = state["manifest"][0]["id"]
+    by_id = {entry["id"]: entry for entry in state["manifest"]}
+    def system_for(node_id):
+        seen = set()
+        while by_id[node_id]["parent"] not in (None, root):
+            if node_id in seen:
+                raise ValueError("Cycle in dossier ancestry")
+            seen.add(node_id)
+            node_id = by_id[node_id]["parent"]
+        return node_id
+    systems = {}
+    for row in decisions:
+        sid = system_for(row["node_id"])
+        if sid not in systems:
+            source = next(n for n in state["dossier"]["nodes"] if n["id"] == sid)
+            systems[sid] = {"id": sid, "name": source["question"][:160],
+                            "source_ref": state["source_design_job"] + "#" + sid,
+                            "decision_ids": [], "summary": ""}
+        systems[sid]["decision_ids"].append(row["id"])
+    links = []
+    seen = set()
+    for entry in state["manifest"]:
+        target = system_for(entry["id"])
+        for prerequisite in entry["prerequisites"]:
+            origin = system_for(prerequisite)
+            if origin != target and origin in systems and target in systems:
+                key = (origin, target, prerequisite, entry["id"])
+                if key not in seen:
+                    seen.add(key)
+                    links.append({"from": origin, "to": target,
+                                  "prerequisite_node": prerequisite,
+                                  "dependent_node": entry["id"]})
+    state["systems"] = list(systems.values())
+    state["system_links"] = links
+    queue = []
+    for system in state["systems"]:
+        for offset in range(0, len(system["decision_ids"]), 4):
+            queue.append({"kind": "system", "system": system["id"], "offset": offset})
+    # Compare each system pair after its own batches have been reviewed.
+    for i, left in enumerate(state["systems"]):
+        for right in state["systems"][i + 1:]:
+            link_count = sum({link["from"], link["to"]} == {left["id"], right["id"]}
+                             for link in links)
+            for offset in range(0, max(1, link_count), 32):
+                queue.append({"kind": "pair", "left": left["id"],
+                              "right": right["id"], "offset": offset})
+    state["mapping_queue"] = queue
+    state["mapping_cursor"] = 0
+    state["mapping_enabled"] = True
+    state["pending"] = None
+    state["retry"] = 0
+    state["phase"] = "system_mapping"
+    state["status"] = "system_mapping_running"
+
+
+def context_for_node(state, node_id):
+    index = next((i for i, entry in enumerate(state["manifest"]) if entry["id"] == node_id), None)
+    if index is None:
+        raise ValueError("Unknown design node for system question")
+    return context(dict(state, cursor=index))
+
+
+def mapping_packet(state):
+    if state["phase"] not in ("system_mapping", "system_map_audit"):
+        raise ValueError("System mapping is not active")
+    item = state["mapping_queue"][state["mapping_cursor"]]
+    systems = {system["id"]: system for system in state["systems"]}
+    decisions = {row["id"]: row for row in state["decisions"]}
+    def excerpt(ids):
+        return [{"id": key, "node_id": decisions[key]["node_id"],
+                 "status": decisions[key]["status"], "claim": decisions[key]["claim"][:350],
+                 "quote": decisions[key]["quote"][:300],
+                 "source_ref": decisions[key]["source_ref"]}
+                for key in ids]
+    if item["kind"] == "system":
+        system = systems[item["system"]]
+        return {"item": item, "system": system, "decisions": excerpt(
+            system["decision_ids"][item["offset"]:item["offset"] + 4]),
+            "links": [link for link in state["system_links"]
+                      if system["id"] in (link["from"], link["to"])][:24],
+            "selected": {key: str(value)[:300] for key, value in state["dossier"]["selected"]["contract"].items()},
+            "design_version_sha256": state["design_version_sha256"]}
+    left, right = systems[item["left"]], systems[item["right"]]
+    return {"item": item, "systems": [
+        {"id": system["id"], "name": system["name"],
+         "summary": system["summary"][:600],
+         "decision_count": len(system["decision_ids"]),
+         "sample": excerpt(system["decision_ids"][:3])}
+        for system in (left, right)],
+        "links": [link for link in state["system_links"]
+                  if {link["from"], link["to"]} == {left["id"], right["id"]}][
+                      item["offset"]:item["offset"] + 32],
+        "selected": state["dossier"]["selected"]["contract"],
+        "design_version_sha256": state["design_version_sha256"]}
+
+
+def mapping_result(value, packet):
+    if not isinstance(value, dict) or set(value) != {"summary", "issues"}:
+        raise ValueError("System map proposal has an invalid shape")
+    if not isinstance(value["summary"], str) or not 20 <= len(value["summary"].strip()) <= 600:
+        raise ValueError("System map needs a bounded summary")
+    issues = value["issues"]
+    if not isinstance(issues, list) or len(issues) > 1:
+        raise ValueError("System map must return at most one issue per saved turn")
+    available = {d["id"]: d["node_id"] for d in packet.get("decisions", [])}
+    for system in packet.get("systems", []):
+        available.update({d["id"]: d["node_id"] for d in system["sample"]})
+    checked = []
+    for issue in issues:
+        if not isinstance(issue, dict) or set(issue) != {"node_id", "decision_ids", "question"}:
+            raise ValueError("System issue needs node, cited decisions and a question")
+        ids = issue["decision_ids"]
+        if not isinstance(ids, list) or not ids or len(ids) > 6 or len(set(ids)) != len(ids):
+            raise ValueError("System issue must cite bounded unique decisions")
+        if any(key not in available for key in ids) or issue["node_id"] not in (
+                available[key] for key in ids):
+            raise ValueError("System issue must target one of its cited design nodes")
+        if not isinstance(issue["question"], str) or not 15 <= len(issue["question"].strip()) <= 600:
+            raise ValueError("System issue needs a specific Lead Designer question")
+        checked.append(issue)
+    return {"summary": value["summary"].strip(), "issues": checked}
+
+
+def commit_mapping(state, result):
+    item = state["mapping_queue"][state["mapping_cursor"]]
+    if result["issues"]:
+        issue = result["issues"][0]
+        node_id = issue["node_id"]
+        if sum(row["node_id"] == node_id for row in state["revision_history"]) >= 2:
+            state["phase"] = "blocked"
+            state["status"] = "blocked"
+            state["issues"].append(dict(kind="mapping_unresolved", **issue))
+            return
+        state["pending"] = {"question": issue["question"],
+                            "reason": "Audited system mapping found a design conflict or missing rule.",
+                            "node_id": node_id, "decision_ids": issue["decision_ids"]}
+        state["issues"].append(dict(kind="system_gap", resolved=False, **issue))
+        state["phase"] = "mapping_lead_resolve"
+        return
+    if item["kind"] == "system":
+        system = next(s for s in state["systems"] if s["id"] == item["system"])
+        system["summary"] = result["summary"]
+    state["mapping_cursor"] += 1
+    state["pending"] = None
+    state["retry"] = 0
+    if state["mapping_cursor"] == len(state["mapping_queue"]):
+        covered = [key for system in state["systems"] for key in system["decision_ids"]]
+        if sorted(covered) != sorted(row["id"] for row in state["decisions"]):
+            raise ValueError("System map omitted or repeated a decision")
+        if any(issue.get("resolved") is False for issue in state["issues"]):
+            raise ValueError("System map still contains unresolved design questions")
+        state["phase"] = "system_map_complete"
+        state["status"] = "awaiting_work_orders"
+
+
+def restart_inventory_after_mapping_resolution(state):
+    """Re-inventory the changed design version before trusting any system assignment."""
+    state["decisions"] = []
+    state["reviewed_nodes"] = []
+    state["partial_decisions"] = []
+    state["batches_for_node"] = 0
+    state["cursor"] = 0
+    state["systems"] = []
+    state["system_links"] = []
+    state["mapping_queue"] = []
+    state["mapping_cursor"] = 0
+    state["pending"] = None
+    state["retry"] = 0
+    for entry in state["manifest"]:
+        entry["decision_status"] = "unclassified"
+    state["phase"] = "inventory"
+    state["status"] = "inventory_running"
+
+
+def systems_page(state, offset=0, limit=100, link_offset=0):
+    if (type(offset) is not int or offset < 0 or type(limit) is not int or
+            not 1 <= limit <= 100 or type(link_offset) is not int or link_offset < 0):
+        raise ValueError("Invalid system page")
+    rows = state.get("systems", [])
+    links = state.get("system_links", [])
+    return {"phase": state["phase"], "design_version_sha256": state["design_version_sha256"],
+            "total": len(rows), "offset": offset, "systems": rows[offset:offset + limit],
+            "next_offset": offset + limit if offset + limit < len(rows) else None,
+            "links": links[link_offset:link_offset + limit],
+            "link_total": len(links), "link_offset": link_offset,
+            "next_link_offset": link_offset + limit if link_offset + limit < len(links) else None,
+            "mapping_done": state.get("mapping_cursor", 0),
+            "mapping_total": len(state.get("mapping_queue", []))}

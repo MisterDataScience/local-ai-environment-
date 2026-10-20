@@ -228,5 +228,108 @@ class IntegrationApiTests(unittest.TestCase):
             self.studios.execute({"operation": "prepare_integration",
                                   "institution": self.institution, "job": self.design_job})
 
+
+class SystemMappingTests(unittest.TestCase):
+    def ledger(self):
+        design = accepted()
+        design["nodes"][2]["leaf"]["depends_on"] = ["G0.1"]
+        state = integration.freeze("design:1", design)
+        state["decisions"] = [
+            dict(id=entry["id"] + ":D1", node_id=entry["id"],
+                 status="settled", claim="The reviewed rule for " + entry["id"],
+                 quote="The rule defines the plate state",
+                 source_ref=entry["source_ref"],
+                 design_version_sha256=state["design_version_sha256"])
+            for entry in state["manifest"]]
+        state["cursor"] = len(state["manifest"])
+        state["reviewed_nodes"] = [entry["id"] for entry in state["manifest"]]
+        state["phase"] = "inventory_complete"
+        return state
+
+    def test_system_index_covers_all_decisions_and_explicit_links(self):
+        state = self.ledger()
+        integration.begin_system_mapping(state)
+        self.assertEqual(len(state["systems"]), 6)
+        self.assertEqual({d for system in state["systems"] for d in system["decision_ids"]},
+                         {row["id"] for row in state["decisions"]})
+        self.assertIn(dict(**{"from": "G0.1", "to": "G0.2"},
+                           prerequisite_node="G0.1", dependent_node="G0.2"),
+                      state["system_links"])
+        self.assertEqual(integration.systems_page(state, 0, 2)["next_offset"], 2)
+        self.assertEqual(state["work_orders"], [])
+        with self.assertRaises(ValueError):
+            integration.begin_system_mapping(state)
+
+    def test_mapping_rejects_uncited_or_unrelated_lead_question(self):
+        state = self.ledger()
+        integration.begin_system_mapping(state)
+        packet = integration.mapping_packet(state)
+        result = dict(summary="The gate contains an explicit player-facing rule.",
+                      issues=[dict(node_id="G0.2", decision_ids=["missing"],
+                                   question="Which plate combination opens the gate?")])
+        with self.assertRaises(ValueError):
+            integration.mapping_result(result, packet)
+        result["issues"][0]["decision_ids"] = [packet["decisions"][0]["id"]]
+        with self.assertRaises(ValueError):
+            integration.mapping_result(result, packet)
+
+    def test_audited_gap_returns_to_lead_then_invalidates_old_map(self):
+        state = self.ledger()
+        integration.begin_system_mapping(state)
+        packet = integration.mapping_packet(state)
+        cited = packet["decisions"][0]
+        proposal = integration.mapping_result(dict(
+            summary="The gate state depends on a rule not yet specified.",
+            issues=[dict(node_id=cited["node_id"], decision_ids=[cited["id"]],
+                         question="Which exact plate combination opens the gate?")]), packet)
+        integration.commit_mapping(state, proposal)
+        self.assertEqual(state["phase"], "mapping_lead_resolve")
+        self.assertFalse(state["issues"][-1]["resolved"])
+        audit = dict(verdict="accept",
+                     checks={key: True for key in game.AUDIT_CHECKS}, findings=[],
+                     reason="The rule now resolves the gate state.")
+        before = state["design_version_sha256"]
+        integration.accept_resolution(state, state["pending"]["question"],
+            dict(content="The gate opens only when all three plates are pressed.",
+                 status="settled", reason="The outcome is now specific."),
+            audit, node_id=cited["node_id"])
+        state["issues"][-1]["resolved"] = True
+        integration.restart_inventory_after_mapping_resolution(state)
+        self.assertEqual(state["phase"], "inventory")
+        self.assertEqual(state["cursor"], 0)
+        self.assertEqual(state["decisions"], [])
+        self.assertEqual(state["systems"], [])
+        self.assertNotEqual(state["design_version_sha256"], before)
+        self.assertTrue(state["mapping_enabled"])
+
+    def test_runner_reviews_every_saved_pass_before_completing(self):
+        test = IntegrationApiTests("test_incomplete_source_cannot_be_frozen")
+        test.setUp()
+        self.addCleanup(test.doCleanups)
+        studio = test.studios
+        state = self.ledger()
+        integration.begin_system_mapping(state)
+        calls = []
+        def answer(jid, system, packet):
+            calls.append(packet["item"]["kind"])
+            if system.startswith("You are the Systems Integrator."):
+                return json.dumps(dict(summary="The cited decisions form a bounded game system.",
+                                       issues=[]))
+            return json.dumps(dict(verdict="accept",
+                checks={key: True for key in game.AUDIT_CHECKS},
+                findings=[], reason="The system summary is traceable."))
+        studio.infer = answer
+        progress = dict(integration=state)
+        done = False
+        for _ in range(60):
+            progress, done = studio.integration_step({"id": "test-mapping"}, progress)
+            if done:
+                break
+        self.assertTrue(done)
+        self.assertEqual(state["phase"], "system_map_complete")
+        self.assertEqual(len(calls), 2 * len(state["mapping_queue"]))
+        self.assertEqual(state["work_orders"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

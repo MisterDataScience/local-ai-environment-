@@ -140,7 +140,21 @@ questions and the first page of classified decisions. The owner API supports
 `integration_node` and `integration_decisions`. Reports are paged; no prompt
 needs the entire game tree at once.
 
-System grouping, cross-system conflict review, work orders, acceptance checks,
-coverage of build-relevant decisions and the implementation task scheduler are
-still to be built. Actual local-model planning quality and native Mac acceptance
-also remain unvalidated.
+After the inventory completes, choose **Start system mapping**. The host
+reconstructs a cited system index from the complete ledger: each top-level
+design branch is a system, root decisions remain in a global system, and
+cross-system links come only from explicit leaf prerequisites. The Systems
+Integrator reviews bounded decision batches and saved system pairs; the
+Design Auditor independently checks each saved proposal. A cited unresolved
+rule returns to the Lead Designer, whose audited answer creates a new design
+version. The old ledger and map are invalidated and inventory runs again
+before mapping can finish. The final host gate checks every decision ID is
+mapped exactly once and no unresolved question remains. The owner API adds
+`start_system_mapping` and paged `integration_systems` reads. The mapping
+does not produce work orders or claim to have run gameplay checks. Pair review
+uses summaries and cited samples rather than all decisions at once, so it
+cannot guarantee discovery of every implicit cross-system conflict.
+
+Work orders, acceptance checks, coverage of build-relevant decisions and the
+implementation task scheduler are still to be built. Actual local-model
+planning quality and native Mac acceptance also remain unvalidated.
