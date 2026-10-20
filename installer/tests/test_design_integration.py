@@ -360,6 +360,47 @@ class WorkOrderPlanningTests(unittest.TestCase):
         self.assertEqual(page["total"], len(state["decisions"]))
         self.assertEqual(page["next_offset"], 2)
 
+    def test_dispatch_respects_cap_and_owner_review_gates_dependents(self):
+        state = self.mapped()
+        integration.begin_work_order_planning(state)
+        while state["phase"] == "work_order_planning":
+            packet = integration.work_order_packet(state)
+            integration.commit_work_order_pass(
+                state, integration.work_order_result(self.proposal(packet), packet))
+        with self.assertRaises(ValueError):
+            integration.dispatch_work_orders(state, 5)
+        first = integration.dispatch_work_orders(state, 4)
+        self.assertEqual(first["running"], 4)
+        self.assertEqual(len(first["claimed"]), 4)
+        order = next(row for row in state["work_orders"] if row["depends_on"])
+        parent = next(row for row in state["work_orders"] if row["id"] in order["depends_on"])
+        self.assertEqual(parent["status"], "running")
+        self.assertNotEqual(order["status"], "running")
+        with self.assertRaises(ValueError):
+            integration.report_work_order(state, parent["id"], "done", ["test log"], "passed")
+        integration.report_work_order(state, parent["id"],
+            "Implementation follows the approved rule and passes its check.",
+            ["automated test output: all cases passed"], "passed")
+        self.assertEqual(parent["status"], "review")
+        self.assertNotEqual(order["status"], "running")
+        integration.review_work_order(state, parent["id"], "accept", "Evidence reviewed.")
+        self.assertEqual(parent["status"], "done")
+        self.assertIn(order, integration.dispatch_work_orders(state, 4)["claimed"])
+
+    def test_failed_check_cannot_be_accepted_or_unlock_dependents(self):
+        state = self.mapped()
+        integration.begin_work_order_planning(state)
+        while state["phase"] == "work_order_planning":
+            packet = integration.work_order_packet(state)
+            integration.commit_work_order_pass(
+                state, integration.work_order_result(self.proposal(packet), packet))
+        order = integration.dispatch_work_orders(state, 1)["claimed"][0]
+        integration.report_work_order(state, order["id"],
+            "Implementation attempt failed the check.", ["failure output"], "failed")
+        with self.assertRaises(ValueError):
+            integration.review_work_order(state, order["id"], "accept")
+        self.assertEqual(order["status"], "review")
+
     def test_hypothesis_requires_a_planned_experiment(self):
         state = self.mapped()
         state["decisions"][1]["status"] = "hypothesis"

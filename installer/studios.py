@@ -927,6 +927,25 @@ class Studios:
                 if not row:raise ValueError('Integration dossier unavailable')
                 return design_integration.work_orders_page(json.loads(row['progress'])['integration'],
                                                            r.get('offset',0),r.get('limit',100))
+        if op in ('dispatch_work_orders','report_work_order','review_work_order'):
+            # Serialize queue claims and review transitions with the persisted
+            # dossier so parallel owner requests cannot exceed the worker cap.
+            with self.store.db() as cx,cx:
+                row=cx.execute("SELECT progress FROM studio_jobs WHERE id=? AND institution=? AND kind='integration'",
+                               (r['job'],iid)).fetchone()
+                if not row:raise ValueError('Integration dossier unavailable')
+                progress=json.loads(row['progress'])
+                state=progress['integration']
+                if op=='dispatch_work_orders':
+                    result=design_integration.dispatch_work_orders(state,r.get('limit',4))
+                elif op=='report_work_order':
+                    result=design_integration.report_work_order(state,r.get('work_order'),
+                        r.get('result'),r.get('evidence'),r.get('check_status'))
+                else:
+                    result=design_integration.review_work_order(state,r.get('work_order'),
+                        r.get('decision'),r.get('notes',''))
+                cx.execute("UPDATE studio_jobs SET progress=? WHERE id=?",(encoded(progress),r['job']))
+            return result
         if op=='integration_systems':
             with self.store.db() as cx:
                 row=cx.execute("SELECT progress FROM studio_jobs WHERE id=? AND institution=? AND kind='integration'",

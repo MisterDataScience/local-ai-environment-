@@ -978,3 +978,74 @@ def work_orders_page(state, offset=0, limit=100):
             "deferred": state.get("work_order_deferred", [])[offset:offset + limit],
             "gate": state.get("work_order_gate")}
 
+
+MAX_WORK_ORDER_CONCURRENCY = 4
+
+
+def dispatch_work_orders(state, limit=MAX_WORK_ORDER_CONCURRENCY):
+    """Claim dependency-ready orders without exceeding the host concurrency cap."""
+    if state.get("phase") != "work_order_complete" or not state.get("work_order_gate", {}).get("passed"):
+        raise ValueError("A validated, complete work-order plan is required")
+    if type(limit) is not int or not 1 <= limit <= MAX_WORK_ORDER_CONCURRENCY:
+        raise ValueError("Concurrency must be between 1 and the host limit of 4")
+    orders = state["work_orders"]
+    by_id = {row["id"]: row for row in orders}
+    running = sum(row.get("status") == "running" for row in orders)
+    available = max(0, limit - running)
+    claimed = []
+    for order in orders:
+        if available == 0:
+            break
+        if order.get("status", "planned") != "planned":
+            continue
+        dependencies = order.get("depends_on", [])
+        if all(by_id.get(dep, {}).get("status") == "done" for dep in dependencies):
+            order["status"] = "running"
+            order["dispatch_count"] = order.get("dispatch_count", 0) + 1
+            claimed.append(order)
+            available -= 1
+    return {"limit": limit, "running": running + len(claimed),
+            "claimed": claimed,
+            "blocked": sum(row.get("status", "planned") == "planned" and
+                            any(by_id.get(dep, {}).get("status") != "done"
+                                for dep in row.get("depends_on", [])) for row in orders)}
+
+
+def report_work_order(state, work_order_id, result, evidence, check_status):
+    """Record a worker's completion claim for owner review; do not unblock dependents."""
+    order = next((row for row in state.get("work_orders", [])
+                  if row.get("id") == work_order_id), None)
+    if order is None or order.get("status") != "running":
+        raise ValueError("Only a running work order can be reported")
+    if not isinstance(result, str) or not 20 <= len(result.strip()) <= 2000:
+        raise ValueError("A bounded implementation result is required")
+    if (not isinstance(evidence, list) or not 1 <= len(evidence) <= 8 or
+            any(not isinstance(item, str) or not 3 <= len(item.strip()) <= 500 for item in evidence)):
+        raise ValueError("Provide one to eight concrete evidence references or excerpts")
+    if check_status not in ("passed", "failed"):
+        raise ValueError("Report whether the planned check passed or failed")
+    order["implementation_report"] = {"result": result.strip(),
+        "evidence": [item.strip() for item in evidence], "check_status": check_status}
+    order["status"] = "review"
+    return {"id": work_order_id, "status": "review", "check_status": check_status}
+
+
+def review_work_order(state, work_order_id, decision, notes=""):
+    """Owner review is the gate that marks a task done and unlocks dependents."""
+    order = next((row for row in state.get("work_orders", [])
+                  if row.get("id") == work_order_id), None)
+    if order is None or order.get("status") != "review" or not order.get("implementation_report"):
+        raise ValueError("A reported work order is required for review")
+    if decision not in ("accept", "revise"):
+        raise ValueError("Review decision must be accept or revise")
+    if not isinstance(notes, str) or len(notes) > 1000:
+        raise ValueError("Review notes must be bounded text")
+    report = order["implementation_report"]
+    if decision == "accept" and report["check_status"] != "passed":
+        raise ValueError("A failed planned check cannot be accepted as complete")
+    order["review"] = {"decision": decision, "notes": notes.strip()}
+    order["status"] = "done" if decision == "accept" else "planned"
+    if decision == "revise":
+        order.pop("implementation_report", None)
+    return {"id": work_order_id, "status": order["status"]}
+
