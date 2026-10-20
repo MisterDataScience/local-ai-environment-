@@ -286,6 +286,181 @@ class SystemMappingTests(unittest.TestCase):
         self.assertEqual(state["work_orders"], [])
         self.assertEqual(state["phase"], "system_mapping")
 
+
+class WorkOrderPlanningTests(unittest.TestCase):
+    def mapped(self):
+        state = SystemMappingTests.ledger(None)
+        ids = [row["id"] for row in state["decisions"]]
+        system = {"id": "system:gate-game", "name": "Gate game", "summary": "Rules for the gate game.",
+                  "decision_ids": ids}
+        state["systems"] = [system]
+        for row in state["decisions"]:
+            row["system_id"] = system["id"]
+        state["phase"] = "system_map_complete"
+        state["status"] = "awaiting_work_orders"
+        return state
+
+    def task_for(self, decision, packet):
+        prerequisite_ids = {row["id"] for row in packet["prerequisite_decisions"]}
+        matching = next((node for node in packet["decisions"]
+                         if node["id"] == decision["id"]), None)
+        # The fixture has one explicit dependency: G0.2 depends on G0.1.
+        prerequisite_rows = {row["id"]: row for row in packet["prerequisite_decisions"]}
+        deps = [key for key in prerequisite_ids if key == "G0.1:D1" and
+                prerequisite_rows[key]["status"] != "deferred"] if matching and matching["node_id"] == "G0.2" else []
+        method = "experiment" if decision["status"] == "hypothesis" else "automated_test"
+        return {"title": "Implement " + decision["node_id"], "kind": "code",
+                "decision_ids": [decision["id"]], "inputs": ["Approved rule " + decision["id"]],
+                "outputs": ["Game implementation for " + decision["id"]],
+                "prerequisite_decision_ids": deps, "responsible_role": "Gameplay programmer",
+                "done_when": "The output follows the cited rule and the stated checks pass.",
+                "check": {"method": method, "procedure": "Run the check for the cited rule and its edge cases.",
+                          "expected_result": "The observed result matches the expected design rule."},
+                "evidence": ["Save the test result and relevant output"]}
+
+    def proposal(self, packet):
+        tasks, deferred = [], []
+        prerequisite_rows = {row["id"]: row for row in packet["prerequisite_decisions"]}
+        for decision in packet["decisions"]:
+            blocked = decision["status"] == "deferred" or (
+                decision["node_id"] == "G0.2" and any(
+                    prerequisite_rows[key]["status"] == "deferred"
+                    for key in prerequisite_rows if key == "G0.1:D1"))
+            if blocked:
+                deferred.append({"decision_id": decision["id"], "reason": "The approved design or a prerequisite defers this implementation."})
+            else:
+                tasks.append(self.task_for(decision, packet))
+        return {"work_orders": tasks, "deferred": deferred, "issues": []}
+
+    def test_work_orders_require_accepted_system_map(self):
+        state = self.mapped()
+        state["phase"] = "inventory_complete"
+        with self.assertRaises(ValueError):
+            integration.begin_work_order_planning(state)
+        state["phase"] = "system_map_complete"
+        integration.begin_work_order_planning(state)
+        self.assertEqual(state["phase"], "work_order_planning")
+        self.assertEqual(state["work_order_queue"][0], {"system": "system:gate-game", "offset": 0})
+
+    def test_planning_covers_decisions_and_derives_task_dependencies(self):
+        state = self.mapped()
+        integration.begin_work_order_planning(state)
+        while state["phase"] == "work_order_planning":
+            packet = integration.work_order_packet(state)
+            result = integration.work_order_result(self.proposal(packet), packet)
+            integration.commit_work_order_pass(state, result)
+        self.assertEqual(state["phase"], "work_order_complete")
+        self.assertTrue(state["work_order_gate"]["passed"])
+        self.assertEqual(len(state["work_orders"]), len(state["decisions"]))
+        dependant = next(order for order in state["work_orders"] if "G0.2:D1" in order["decision_ids"])
+        prerequisite = next(order for order in state["work_orders"] if "G0.1:D1" in order["decision_ids"])
+        self.assertEqual(dependant["depends_on"], [prerequisite["id"]])
+        self.assertEqual(dependant["check_status"], "planned")
+        page = integration.work_orders_page(state, 0, 2)
+        self.assertEqual(page["total"], len(state["decisions"]))
+        self.assertEqual(page["next_offset"], 2)
+
+    def test_hypothesis_requires_a_planned_experiment(self):
+        state = self.mapped()
+        state["decisions"][1]["status"] = "hypothesis"
+        integration.begin_work_order_planning(state)
+        packet = integration.work_order_packet(state)
+        proposal = self.proposal(packet)
+        proposal["work_orders"][1]["check"]["method"] = "automated_test"
+        with self.assertRaises(ValueError):
+            integration.work_order_result(proposal, packet)
+        proposal["work_orders"][1]["check"]["method"] = "experiment"
+        self.assertEqual(len(integration.work_order_result(proposal, packet)["work_orders"]), 4)
+
+    def test_deferred_decision_is_explicitly_covered_without_a_task(self):
+        state = self.mapped()
+        state["decisions"][1]["status"] = "deferred"
+        integration.begin_work_order_planning(state)
+        packet = integration.work_order_packet(state)
+        result = integration.work_order_result(self.proposal(packet), packet)
+        self.assertEqual({row["decision_id"] for row in result["deferred"]},
+                         {"G0.1:D1", "G0.2:D1"})
+        self.assertNotIn("G0.1:D1", [key for task in result["work_orders"] for key in task["decision_ids"]])
+
+    def test_missing_rule_returns_before_work_orders_are_created(self):
+        state = self.mapped()
+        integration.begin_work_order_planning(state)
+        packet = integration.work_order_packet(state)
+        issue = {"node_id": "G0.2", "decision_ids": ["G0.2:D1"],
+                 "question": "Which plate combination opens the gate?"}
+        result = integration.work_order_result({"work_orders": [], "deferred": [], "issues": [issue]}, packet)
+        integration.commit_work_order_pass(state, result)
+        self.assertEqual(state["phase"], "work_order_lead_resolve")
+        self.assertEqual(state["work_orders"], [])
+        self.assertEqual(state["pending"]["question"], issue["question"])
+
+    def test_accepted_lead_resolution_invalidates_plan_and_restarts_review_chain(self):
+        state = self.mapped()
+        integration.begin_work_order_planning(state)
+        packet = integration.work_order_packet(state)
+        issue = {"node_id": "G0.2", "decision_ids": ["G0.2:D1"],
+                 "question": "Which plate combination opens the gate?"}
+        result = integration.work_order_result({"work_orders": [], "deferred": [], "issues": [issue]}, packet)
+        integration.commit_work_order_pass(state, result)
+        review = dict(verdict="accept", checks={key: True for key in game.AUDIT_CHECKS},
+                      findings=[], reason="The design resolution is specific and traceable.")
+        before = state["design_version_sha256"]
+        integration.accept_resolution(state, issue["question"],
+            {"content": "The gate opens only when all three plates are pressed.",
+             "status": "settled", "reason": "This defines the missing gate outcome."},
+            review, node_id=issue["node_id"])
+        state["issues"][-1]["resolved"] = True
+        integration.restart_inventory_after_mapping_resolution(state)
+        self.assertEqual(state["phase"], "inventory")
+        self.assertEqual(state["work_orders"], [])
+        self.assertTrue(state["mapping_enabled"])
+        self.assertTrue(state["work_orders_enabled"])
+        self.assertNotEqual(state["design_version_sha256"], before)
+
+    def test_host_gate_rejects_dependency_cycles_and_missing_coverage(self):
+        state = self.mapped()
+        state["work_orders"] = [
+            {"id": "WO-0001", "decision_ids": ["G0:D1"], "prerequisite_decision_ids": ["G0.1:D1"], "depends_on": []},
+            {"id": "WO-0002", "decision_ids": ["G0.1:D1"], "prerequisite_decision_ids": ["G0:D1"], "depends_on": []},
+        ]
+        gate = integration.validate_work_orders(state)
+        self.assertFalse(gate["passed"])
+        self.assertTrue(any("cycle" in error for error in gate["errors"]))
+        state["work_orders"] = []
+        self.assertFalse(integration.validate_work_orders(state)["passed"])
+
+    def test_runner_saves_planner_and_auditor_as_separate_turns(self):
+        fixture = IntegrationApiTests("test_incomplete_source_cannot_be_frozen")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        studio = fixture.studios
+        state = self.mapped()
+        integration.begin_work_order_planning(state)
+        calls = []
+        def answer(jid, system, packet):
+            if system.startswith("You are the Production Planner."):
+                calls.append("planner")
+                return json.dumps(self.proposal(packet))
+            calls.append("auditor")
+            return json.dumps(dict(verdict="accept",
+                checks={key: True for key in game.AUDIT_CHECKS},
+                findings=[], reason="Every task is traceable and checkable."))
+        studio.infer = answer
+        progress = {"integration": state}
+        done = False
+        for _ in range(20):
+            progress, done = studio.integration_step({"id": "test-work-orders"}, progress)
+            if done:
+                break
+        self.assertTrue(done)
+        self.assertEqual(state["phase"], "work_order_complete")
+        self.assertEqual(calls.count("planner"), 2)
+        self.assertEqual(calls.count("auditor"), 2)
+
+
+class SystemMappingContinuationTests(unittest.TestCase):
+    ledger = SystemMappingTests.ledger
+
     def test_mapping_rejects_uncited_or_unrelated_lead_question(self):
         state = self.ledger()
         integration.begin_system_mapping(state)

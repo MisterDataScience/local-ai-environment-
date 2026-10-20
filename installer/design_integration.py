@@ -70,9 +70,16 @@ def freeze(design_job_id, design):
         "batches_for_node": 0,
         "systems": [],
         "system_links": [],
+        "system_interactions": [],
         "mapping_queue": [],
         "mapping_cursor": 0,
         "mapping_enabled": False,
+        "work_orders": [],
+        "work_order_deferred": [],
+        "work_order_queue": [],
+        "work_order_cursor": 0,
+        "work_orders_enabled": False,
+        "work_order_gate": None,
     }
 
 
@@ -94,6 +101,10 @@ def report(state, offset=0, limit=100):
         "system_count": len(state.get("systems", [])),
         "mapping_done": state.get("mapping_cursor", 0),
         "mapping_total": len(state.get("mapping_queue", [])),
+        "work_order_count": len(state.get("work_orders", [])),
+        "work_order_done": state.get("work_order_cursor", 0),
+        "work_order_total": len(state.get("work_order_queue", [])),
+        "work_order_gate": state.get("work_order_gate"),
         "issue_count": len(state.get("issues", [])),
         "design_version_sha256": state.get("design_version_sha256", state["dossier_sha256"]),
         "pending_question": (state.get("pending") or {}).get("question"),
@@ -553,6 +564,8 @@ def _finish_system_mapping(state):
         raise ValueError("System map still contains unresolved design questions")
     state["phase"] = "system_map_complete"
     state["status"] = "awaiting_work_orders"
+    if state.get("work_orders_enabled"):
+        begin_work_order_planning(state)
 
 
 def restart_inventory_after_mapping_resolution(state):
@@ -564,8 +577,14 @@ def restart_inventory_after_mapping_resolution(state):
     state["cursor"] = 0
     state["systems"] = []
     state["system_links"] = []
+    state["system_interactions"] = []
     state["mapping_queue"] = []
     state["mapping_cursor"] = 0
+    state["work_orders"] = []
+    state["work_order_deferred"] = []
+    state["work_order_queue"] = []
+    state["work_order_cursor"] = 0
+    state["work_order_gate"] = None
     state["pending"] = None
     state["retry"] = 0
     for entry in state["manifest"]:
@@ -604,4 +623,334 @@ def systems_page(state, offset=0, limit=100, link_offset=0,
             "next_link_offset": link_offset + limit if link_offset + limit < len(links) else None,
             "mapping_done": state.get("mapping_cursor", 0),
             "mapping_total": len(state.get("mapping_queue", []))}
+
+
+WORK_ORDER_CHECKS = {
+    "automated_test", "simulation", "content_inspection", "asset_inspection",
+    "playtest", "experiment"
+}
+WORK_ORDER_KINDS = {"code", "content", "asset", "experiment", "integration"}
+
+
+def begin_work_order_planning(state):
+    """Start saved production-planning passes over an accepted system map."""
+    if state.get("phase") != "system_map_complete":
+        raise ValueError("An accepted system map is required before work-order planning")
+    if state.get("pending") or any(issue.get("resolved") is False for issue in state.get("issues", [])):
+        raise ValueError("Unresolved design questions prevent work-order planning")
+    decisions = state.get("decisions", [])
+    systems = state.get("systems", [])
+    system_ids = {system.get("id") for system in systems}
+    decision_ids = {row.get("id") for row in decisions}
+    assigned = [decision_id for system in systems for decision_id in system.get("decision_ids", [])]
+    if (len(decision_ids) != len(decisions) or len(assigned) != len(decision_ids) or
+            set(assigned) != decision_ids):
+        raise ValueError("The system map must assign every decision exactly once")
+    # Older accepted maps stored membership only on each system record.
+    owner = {decision_id: system["id"] for system in systems
+             for decision_id in system.get("decision_ids", [])}
+    for row in decisions:
+        if row.get("system_id") not in system_ids:
+            row["system_id"] = owner[row["id"]]
+        if row["system_id"] != owner[row["id"]]:
+            raise ValueError("Decision and system membership records disagree")
+    state["work_orders"] = []
+    state["work_order_deferred"] = []
+    state["work_order_queue"] = []
+    for system in systems:
+        ids = system["decision_ids"]
+        for offset in range(0, len(ids), 4):
+            state["work_order_queue"].append({"system": system["id"], "offset": offset})
+    state["work_order_cursor"] = 0
+    state["work_orders_enabled"] = True
+    state["mapping_enabled"] = True
+    state["work_order_gate"] = None
+    state["pending"] = None
+    state["retry"] = 0
+    if not state["work_order_queue"]:
+        state["work_order_gate"] = validate_work_orders(state)
+        if not state["work_order_gate"]["passed"]:
+            state["phase"] = "blocked"
+            state["status"] = "blocked"
+            raise ValueError("Work-order handoff gate failed")
+        state["phase"] = "work_order_complete"
+        state["status"] = "awaiting_implementation"
+    else:
+        state["phase"] = "work_order_planning"
+        state["status"] = "work_order_planning_running"
+
+
+def work_order_packet(state):
+    if state.get("phase") not in ("work_order_planning", "work_order_audit"):
+        raise ValueError("Work-order planning is not active")
+    item = state["work_order_queue"][state["work_order_cursor"]]
+    system = next((row for row in state["systems"] if row["id"] == item["system"]), None)
+    if system is None:
+        raise ValueError("Work-order system is missing")
+    decisions = {row["id"]: row for row in state["decisions"]}
+    nodes = {row["id"]: row for row in state["dossier"]["nodes"]}
+    manifest = {row["id"]: row for row in state["manifest"]}
+    ids = system["decision_ids"][item["offset"]:item["offset"] + 4]
+    batch = []
+    prerequisite_ids = set()
+    for key in ids:
+        decision = decisions[key]
+        batch.append({"id": key, "node_id": decision["node_id"],
+                      "claim": decision["claim"][:500], "status": decision["status"],
+                      "quote": decision["quote"][:400], "source_ref": decision["source_ref"],
+                      "system_id": system["id"], "system_name": system["name"]})
+        prerequisite_ids.update(manifest[decision["node_id"]]["prerequisites"])
+    prerequisite_decisions = [
+        {"id": decision["id"], "node_id": decision["node_id"],
+         "claim": decision["claim"][:300], "status": decision["status"]}
+        for decision in state["decisions"] if decision["node_id"] in prerequisite_ids]
+    selected = state["dossier"]["selected"]
+    return {"item": item,
+            "system": {key: value for key, value in system.items() if key != "decision_ids"},
+            "decisions": batch,
+            "prerequisite_decisions": prerequisite_decisions,
+            "selected": {"title": selected["title"],
+                         "root_answer": selected["root_answer"][:500],
+                         "contract": {key: str(value)[:300]
+                                      for key, value in selected["contract"].items()}},
+            "studio_constraints": state["dossier"].get("context", {}).get("constraints", [])[:12],
+            "approved_lessons": [{"id": row["id"], "title": row["title"],
+                                  "excerpt": row["text"][:300]}
+                                 for row in state["dossier"].get("context", {}).get("approved_lessons", [])[:2]],
+            "design_version_sha256": state["design_version_sha256"]}
+
+
+def work_order_result(value, packet):
+    if not isinstance(value, dict) or set(value) != {"work_orders", "deferred", "issues"}:
+        raise ValueError("Work-order proposal has an invalid shape")
+    if not isinstance(value["issues"], list) or len(value["issues"]) > 1:
+        raise ValueError("A planning pass may return at most one design issue")
+    available = {row["id"]: row for row in packet["decisions"]}
+    all_decisions = {row["id"]: row for row in packet["decisions"] + packet["prerequisite_decisions"]}
+    checked_issues = []
+    for issue in value["issues"]:
+        if not isinstance(issue, dict) or set(issue) != {"node_id", "decision_ids", "question"}:
+            raise ValueError("A planning issue needs a cited node, decisions and question")
+        ids = issue["decision_ids"]
+        if not isinstance(ids, list) or not ids or len(ids) > 6 or len(ids) != len(set(ids)):
+            raise ValueError("A planning issue must cite bounded unique decisions")
+        if any(not isinstance(key, str) or key not in all_decisions for key in ids) or not isinstance(issue["node_id"], str) or issue["node_id"] not in (
+                all_decisions[key]["node_id"] for key in ids):
+            raise ValueError("A planning issue must refer to supplied decisions from its node")
+        if not isinstance(issue["question"], str) or not 15 <= len(issue["question"].strip()) <= 600:
+            raise ValueError("A planning issue needs a specific Lead Designer question")
+        checked_issues.append({**issue, "decision_ids": list(ids), "question": issue["question"].strip()})
+    tasks = value["work_orders"]
+    deferred = value["deferred"]
+    if not isinstance(tasks, list) or len(tasks) > 8 or not isinstance(deferred, list) or len(deferred) > 4:
+        raise ValueError("Work orders and deferrals must fit the bounded planning pass")
+    if checked_issues:
+        if tasks or deferred:
+            raise ValueError("Return a design issue before creating work for the affected batch")
+        return {"work_orders": [], "deferred": [], "issues": checked_issues}
+    assigned = []
+    experiments = set()
+    checked_tasks = []
+    valid_prerequisites = {row["id"] for row in packet["prerequisite_decisions"]}
+    for task in tasks:
+        fields = {"title", "kind", "decision_ids", "inputs", "outputs",
+                  "prerequisite_decision_ids", "responsible_role", "done_when", "check", "evidence"}
+        if not isinstance(task, dict) or set(task) != fields:
+            raise ValueError("A work order has an invalid shape")
+        if not isinstance(task["title"], str) or not 4 <= len(task["title"].strip()) <= 120:
+            raise ValueError("A work order needs a bounded title")
+        if not isinstance(task["kind"], str) or task["kind"] not in WORK_ORDER_KINDS:
+            raise ValueError("Unknown work-order kind")
+        refs = task["decision_ids"]
+        if (not isinstance(refs, list) or not refs or any(not isinstance(key, str) for key in refs) or
+                len(refs) != len(set(refs)) or any(key not in available for key in refs)):
+            raise ValueError("A work order must cite decisions from its supplied system batch")
+        prerequisites = task["prerequisite_decision_ids"]
+        if (not isinstance(prerequisites, list) or any(not isinstance(key, str) for key in prerequisites) or
+                len(prerequisites) != len(set(prerequisites)) or
+                any(key not in valid_prerequisites for key in prerequisites)):
+            raise ValueError("Prerequisites must cite decisions from supplied design prerequisites")
+        for field in ("inputs", "outputs", "evidence"):
+            values = task[field]
+            if (not isinstance(values, list) or not 1 <= len(values) <= 8 or
+                    any(not isinstance(text, str) or not 3 <= len(text.strip()) <= 300 for text in values)):
+                raise ValueError("Work-order inputs, outputs and evidence need bounded descriptions")
+        if not isinstance(task["responsible_role"], str) or not 3 <= len(task["responsible_role"].strip()) <= 80:
+            raise ValueError("A work order needs a responsible specialist role")
+        if not isinstance(task["done_when"], str) or not 20 <= len(task["done_when"].strip()) <= 500:
+            raise ValueError("A work order needs an observable completion condition")
+        check = task["check"]
+        if (not isinstance(check, dict) or set(check) != {"method", "procedure", "expected_result"} or
+                not isinstance(check["method"], str) or check["method"] not in WORK_ORDER_CHECKS or
+                any(not isinstance(check[key], str) or not 12 <= len(check[key].strip()) <= 600
+                    for key in ("procedure", "expected_result"))):
+            raise ValueError("A work order needs a planned, design-based acceptance check")
+        if check["method"] == "experiment":
+            experiments.update(key for key in refs if available[key]["status"] == "hypothesis")
+        if any(available[key]["status"] == "deferred" for key in refs):
+            raise ValueError("A deferred design decision cannot be scheduled for implementation")
+        if any(all_decisions[key]["status"] == "deferred" for key in prerequisites):
+            raise ValueError("A work order cannot depend on a deferred design decision")
+        assigned.extend(refs)
+        checked_tasks.append({"title": task["title"].strip(), "kind": task["kind"],
+            "system_id": packet["system"]["id"], "decision_ids": list(refs),
+            "inputs": [value.strip() for value in task["inputs"]],
+            "outputs": [value.strip() for value in task["outputs"]],
+            "prerequisite_decision_ids": list(prerequisites),
+            "responsible_role": task["responsible_role"].strip(),
+            "done_when": task["done_when"].strip(),
+            "check": {key: (value.strip() if isinstance(value, str) else value)
+                      for key, value in check.items()},
+            "evidence": [value.strip() for value in task["evidence"]],
+            "check_status": "planned"})
+    deferred_ids = []
+    for row in deferred:
+        if not isinstance(row, dict) or set(row) != {"decision_id", "reason"}:
+            raise ValueError("A deferral needs one decision ID and a reason")
+        key = row["decision_id"]
+        if not isinstance(key, str) or key not in available:
+            raise ValueError("A deferral must reference a supplied design decision")
+        if not isinstance(row["reason"], str) or not 15 <= len(row["reason"].strip()) <= 400:
+            raise ValueError("A deferral needs a clear reason")
+        deferred_ids.append(key)
+    batch_ids = set(available)
+    if set(assigned) & set(deferred_ids):
+        raise ValueError("A design decision cannot be both planned and deferred")
+    if set(assigned) | set(deferred_ids) != batch_ids:
+        raise ValueError("Every supplied decision must map to a work order or explicit deferral")
+    missing_experiments = {key for key in batch_ids if available[key]["status"] == "hypothesis"} - experiments
+    if missing_experiments:
+        raise ValueError("Every hypothesis needs a planned experiment")
+    return {"work_orders": checked_tasks,
+            "deferred": [{"decision_id": row["decision_id"], "reason": row["reason"].strip()}
+                         for row in deferred],
+            "issues": checked_issues}
+
+
+def commit_work_order_pass(state, result):
+    item = state["work_order_queue"][state["work_order_cursor"]]
+    if result["issues"]:
+        issue = result["issues"][0]
+        if sum(row.get("node_id") == issue["node_id"] for row in state["revision_history"]) >= 2:
+            state["phase"] = "blocked"
+            state["status"] = "blocked"
+            state["issues"].append({"kind": "work_order_unresolved", **issue})
+            return
+        state["pending"] = {"question": issue["question"],
+                            "reason": "Work-order planning found a missing or conflicting game rule.",
+                            "node_id": issue["node_id"], "decision_ids": issue["decision_ids"]}
+        state["issues"].append({"kind": "work_order_gap", "resolved": False, **issue})
+        state["phase"] = "work_order_lead_resolve"
+        return
+    next_id = len(state["work_orders"]) + 1
+    for task in result["work_orders"]:
+        task = dict(task)
+        task["id"] = "WO-" + str(next_id).zfill(4)
+        next_id += 1
+        task["status"] = "planned"
+        task["depends_on"] = []
+        state["work_orders"].append(task)
+    state["work_order_deferred"].extend(result["deferred"])
+    state["work_order_cursor"] += 1
+    state["pending"] = None
+    state["retry"] = 0
+    if state["work_order_cursor"] == len(state["work_order_queue"]):
+        gate = validate_work_orders(state)
+        state["work_order_gate"] = gate
+        if not gate["passed"]:
+            state["phase"] = "blocked"
+            state["status"] = "blocked"
+            raise ValueError("Work-order handoff gate failed: " + "; ".join(gate["errors"][:5]))
+        state["phase"] = "work_order_complete"
+        state["status"] = "awaiting_implementation"
+    else:
+        state["phase"] = "work_order_planning"
+
+
+def validate_work_orders(state):
+    """Derive task dependencies and enforce traceability and acyclic scheduling."""
+    errors = []
+    decisions = {row["id"]: row for row in state.get("decisions", [])}
+    orders = state.get("work_orders", [])
+    by_id = {row.get("id"): row for row in orders}
+    if len(by_id) != len(orders) or None in by_id:
+        errors.append("Work-order IDs are missing or repeated")
+    coverage = {}
+    valid_systems = {row.get("id") for row in state.get("systems", [])}
+    for order in orders:
+        if order.get("system_id") not in valid_systems:
+            errors.append("Work order " + str(order.get("id")) + " references an unknown system")
+        refs = order.get("decision_ids", [])
+        if (not isinstance(refs, list) or any(not isinstance(key, str) or key not in decisions for key in refs)):
+            errors.append("Work order " + str(order.get("id")) + " references an unknown design decision")
+            continue
+        for decision_id in order.get("decision_ids", []):
+            coverage.setdefault(decision_id, []).append(order["id"])
+    deferred = {}
+    for row in state.get("work_order_deferred", []):
+        decision_id = row.get("decision_id")
+        if decision_id not in decisions:
+            errors.append("A deferral references an unknown design decision")
+        else:
+            deferred.setdefault(decision_id, []).append(row)
+    for key, decision in decisions.items():
+        tasks = coverage.get(key, [])
+        defer_rows = deferred.get(key, [])
+        if decision.get("status") == "deferred":
+            if tasks or len(defer_rows) != 1:
+                errors.append("Deferred decision " + key + " needs one explicit deferral and no implementation task")
+        elif not tasks or defer_rows:
+            errors.append("Decision " + key + " must be covered by a work order")
+        if decision.get("status") == "hypothesis" and not any(
+                by_id[task_id].get("check", {}).get("method") == "experiment"
+                for task_id in tasks if task_id in by_id):
+            errors.append("Hypothesis " + key + " needs an experiment work order")
+    for order in orders:
+        dependencies = set()
+        for decision_id in order.get("prerequisite_decision_ids", []):
+            if decision_id not in decisions:
+                errors.append("Work order " + order["id"] + " references an unknown prerequisite decision")
+                continue
+            prerequisites = coverage.get(decision_id, [])
+            if not prerequisites:
+                errors.append("Work order " + order["id"] + " depends on an uncovered decision")
+            dependencies.update(key for key in prerequisites if key != order["id"])
+        order["depends_on"] = sorted(dependencies)
+    for key in by_id:
+        for dependency in by_id[key].get("depends_on", []):
+            if dependency not in by_id:
+                errors.append("Work order " + key + " has an unknown dependency")
+    visiting, visited = set(), set()
+    def visit(key):
+        if key in visiting:
+            return False
+        if key in visited:
+            return True
+        visiting.add(key)
+        for dependency in by_id[key].get("depends_on", []):
+            if dependency in by_id and not visit(dependency):
+                return False
+        visiting.remove(key)
+        visited.add(key)
+        return True
+    for key in by_id:
+        if key not in visited and not visit(key):
+            errors.append("Work-order dependency graph contains a cycle")
+            break
+    return {"passed": not errors, "errors": errors,
+            "decision_count": len(decisions), "work_order_count": len(orders),
+            "deferred_count": len(state.get("work_order_deferred", [])),
+            "dependency_count": sum(len(row.get("depends_on", [])) for row in orders),
+            "design_version_sha256": state.get("design_version_sha256")}
+
+
+def work_orders_page(state, offset=0, limit=100):
+    if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
+        raise ValueError("Invalid work-order page")
+    rows = state.get("work_orders", [])
+    return {"phase": state.get("phase"), "status": state.get("status"),
+            "total": len(rows), "offset": offset, "work_orders": rows[offset:offset + limit],
+            "next_offset": offset + limit if offset + limit < len(rows) else None,
+            "deferred": state.get("work_order_deferred", [])[offset:offset + limit],
+            "gate": state.get("work_order_gate")}
 

@@ -140,21 +140,11 @@ questions and the first page of classified decisions. The owner API supports
 `integration_node` and `integration_decisions`. Reports are paged; no prompt
 needs the entire game tree at once.
 
-After the inventory completes, choose **Start system mapping**. The host
-reconstructs a cited system index from the complete ledger: each top-level
-design branch is a system, root decisions remain in a global system, and
-cross-system links come only from explicit leaf prerequisites. The Systems
-Integrator reviews bounded decision batches and saved system pairs; the
-Design Auditor independently checks each saved proposal. A cited unresolved
-rule returns to the Lead Designer, whose audited answer creates a new design
-version. The old ledger and map are invalidated and inventory runs again
-before mapping can finish. The final host gate checks every decision ID is
-mapped exactly once and no unresolved question remains. The owner API adds
-`start_system_mapping` and paged `integration_systems` reads. The mapping
-does not produce work orders or claim to have run gameplay checks. Pair review
-uses summaries and cited samples rather than all decisions at once, so it
-cannot guarantee discovery of every implicit cross-system conflict.
+After the inventory completes, choose **Start system mapping**. The Systems Integrator assigns decisions to named gameplay systems in bounded batches. A system may span design branches, and one branch may contain several systems. The independent Design Auditor reviews each saved assignment. The host verifies exact coverage and derives cross-system links from explicit design prerequisites. If a missing or conflicting rule surfaces, it returns to the Lead Designer; an accepted answer versions the integration dossier and reruns inventory and system mapping.
 
-Work orders, acceptance checks, coverage of build-relevant decisions and the
-implementation task scheduler are still to be built. Actual local-model
+When system mapping completes, choose **Start work-order planning**. The Production Planner processes one bounded batch of decisions in one accepted system at a time. It creates code, content, asset, experiment or integration work orders with design references, inputs, outputs, prerequisite decisions, responsible specialist, observable done condition, planned acceptance check and saved evidence. Hypotheses require a planned experiment. A deferred rule or work blocked by a deferred prerequisite is recorded explicitly. Checks are marked planned and are not represented as passed.
+
+A separate Design Auditor reviews each work-planning batch. A missing or conflicting core rule returns to the Lead Designer, and any accepted design resolution invalidates the existing ledger, map and work orders before those stages run again. The deterministic handoff gate checks that every decision is covered by a work order or explicit deferral, all references exist, work orders do not depend on deferred decisions, and the derived task dependency graph is acyclic. The owner API adds `start_work_order_planning` and paged `integration_work_orders` reads. This stage creates a plan only; it does not execute checks or schedule implementation.
+
+The Institutions page exposes the system-mapping and work-order start controls after each preceding stage completes, and the integration report shows the saved plan and gate result. Implementation-agent scheduling, including dispatching only prerequisite-ready work, remains the next stage. Actual local-model
 planning quality and native Mac acceptance also remain unvalidated.

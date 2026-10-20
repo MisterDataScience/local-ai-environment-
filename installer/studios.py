@@ -62,6 +62,9 @@ INTEGRATION_AUDIT='''You are the Design Auditor in a separate saved turn. Check 
 INTEGRATION_SYSTEM_MAP='''You are the Systems Integrator. A grouping pass supplies up to four cited design decisions and a short candidate list of existing systems. Assign every supplied decision to exactly one real game system. A system can combine decisions from different design branches, and one design branch can contain several systems. Reuse a supplied system ID and its exact name when it fits. Otherwise propose a clear new system name that describes a coherent gameplay responsibility; use the same simple canonical name for the same responsibility on later passes. Do not group by tree location alone. Do not invent rules. For grouping passes return JSON only: {"systems":[{"id":"exact supplied ID or empty string for a new system","name":"canonical system name","decision_ids":["supplied decision IDs"],"summary":"what the rules assigned to this system establish"}],"issues":[{"node_id":"a cited node ID","decision_ids":["supplied decision IDs"],"question":"specific missing or conflicting game rule for the Lead Designer"}]}. Every supplied decision ID must occur exactly once. When the packet is a system pair review, compare the two summaries and explicit prerequisite links and return JSON only: {"summary":"interaction reviewed","issues":[...]}. Return at most one issue per pass. Cite a supplied decision when raising an issue. This is design planning; do not make work orders or claim tests have run.'''
 INTEGRATION_SYSTEM_AUDIT='''You are a separate Design Auditor reviewing one Systems Integrator pass. For a grouping pass, verify that every supplied decision appears exactly once, each assigned system reflects the rule and its game responsibility, candidate IDs and names are used correctly, and grouping follows gameplay responsibility rather than tree placement. For a pair pass, check only the supplied summaries, cited samples and prerequisite links. Reject invented rules, unsupported issues, omitted or repeated decisions, and unsupported dependencies. Do not claim unrelated decisions were checked. Return JSON only: {"verdict":"accept|revise","checks":{"contract_met":true|false,"specific":true|false,"traceable":true|false,"complete_for_stage":true|false,"checkable":true|false},"findings":["specific repair"],"reason":"..."}; accept only with all checks true.'''
 
+INTEGRATION_WORK_ORDER='''You are the Production Planner. Plan bounded implementation work only from the supplied accepted system and cited design decisions. Do not invent game rules. Split work into small code, content, asset, experiment or integration orders with explicit inputs, outputs, responsible specialist, observable done condition, planned check and evidence. A check is a plan, never a claim it has passed. Every supplied decision must be covered by at least one work order or an explicit deferral with a reason. A decision marked deferred in the approved design must not become an implementation order. A settled decision may be deferred only when one of its required prerequisite decisions is explicitly deferred; name that dependency in the reason. Hypotheses must have an experiment work order. Prerequisites must use only the supplied prerequisite decision IDs. If implementation requires choosing a missing or conflicting core rule, return one issue with its exact source node and cited decision IDs; do not hide the choice in a ticket. Return JSON only: {"work_orders":[{"title":"...","kind":"code|content|asset|experiment|integration","decision_ids":["IDs from this batch"],"inputs":["..."],"outputs":["..."],"prerequisite_decision_ids":["supplied prerequisite decision IDs"],"responsible_role":"...","done_when":"...","check":{"method":"automated_test|simulation|content_inspection|asset_inspection|playtest|experiment","procedure":"...","expected_result":"..."},"evidence":["... saved evidence"]}],"deferred":[{"decision_id":"decision ID from this batch","reason":"why implementation is deferred"}],"issues":[{"node_id":"cited node ID","decision_ids":["cited decision IDs"],"question":"specific Lead Designer question"}]}. The output is a plan, not game code.'''
+INTEGRATION_WORK_AUDIT='''You are an independent Design Auditor reviewing one bounded work-planning pass. Check every work order against only the supplied system, decisions, game contract and prerequisite decisions. Verify references are real, every supplied decision is covered by a work order or explicit approved deferral, and the task does not require a builder to invent a game rule. Check that inputs, outputs, prerequisites, role, done condition, planned test procedure, expected result and evidence are concrete and traceable. Hypotheses need an experiment. A planned check must not be described as passed. For a reported issue, verify it names a genuine missing or conflicting rule and cites the relevant node. Return JSON only: {"verdict":"accept|revise","checks":{"contract_met":true|false,"specific":true|false,"traceable":true|false,"complete_for_stage":true|false,"checkable":true|false},"findings":["specific repair"],"reason":"..."}; accept only with all checks true.'''
+
 PLAN_AUDIT='''You are the Design Auditor, reviewing a different bounded turn. This is a review pass, not proof of correctness. Check the result against its question, parent answer and explicit contract. Test whether it actually resolves this question; is specific enough for its stage; traces to the selected game promise; covers necessary decisions without padding or hidden choices; and, for a terminal design leaf, names one bounded Lead Designer deliverable, explicit inputs/outputs, real prerequisite IDs, a sufficiency check and retained evidence. Do not require a fixed depth or number of leaves. Split only when consequential decisions remain unresolved; otherwise accept a complete result. Return exactly JSON: {"verdict":"accept"|"revise","checks":{"contract_met":true|false,"specific":true|false,"traceable":true|false,"complete_for_stage":true|false,"checkable":true|false},"findings":["repairable issue"],"reason":"..."}. An accept requires every check true and no material gap. A revise requires at least one false check and a concrete finding. You cannot implement, approve sources, or change studio permissions.'''
 
 def plan_agent(role, task):
@@ -377,7 +380,7 @@ class Studios:
         if state['phase']=='frozen':
             state['phase']='inventory';state['status']='inventory_running'
             return progress,False
-        if state['phase'] in ('inventory_complete', 'system_map_complete'):
+        if state['phase'] in ('inventory_complete', 'system_map_complete', 'work_order_complete'):
             return progress,True
         if state['phase'] in ('system_mapping', 'system_map_audit'):
             packet=design_integration.mapping_packet(state)
@@ -404,20 +407,48 @@ class Studios:
             if state['phase']=='blocked':
                 raise ValueError('System mapping has an unresolved design issue')
             return progress,state['phase']=='system_map_complete'
-        if state['phase'] in ('mapping_lead_resolve', 'mapping_lead_audit'):
+        if state['phase'] in ('work_order_planning', 'work_order_audit'):
+            packet=design_integration.work_order_packet(state)
+            if state['phase']=='work_order_planning':
+                raw=self.integration_infer(row['id'],INTEGRATION_WORK_ORDER,packet)
+                result=design_integration.work_order_result(game_plan.parse(raw),packet)
+                state['pending']={'work_order_result':result}
+                state['phase']='work_order_audit'
+                return progress,False
+            raw=self.integration_infer(row['id'],INTEGRATION_WORK_AUDIT,
+                dict(packet,stage='work-order planning review',result=state['pending']['work_order_result']))
+            review=game_plan.audit(game_plan.parse(raw))
+            if review['verdict']=='revise':
+                state['retry']+=1
+                if state['retry']>1:
+                    state['issues'].append(dict(kind='work_order_review_failed',
+                        item=packet['item'],findings=review['findings']))
+                    state['phase']='blocked';state['status']='blocked'
+                    raise ValueError('Work-order planning review failed: '+str(review['findings'])[:600])
+                state['pending']=None;state['phase']='work_order_planning'
+                return progress,False
+            design_integration.commit_work_order_pass(state,state['pending']['work_order_result'])
+            if state['phase']=='blocked':
+                raise ValueError('Work-order planning has an unresolved design issue')
+            return progress,state['phase']=='work_order_complete'
+        if state['phase'] in ('mapping_lead_resolve', 'mapping_lead_audit',
+                              'work_order_lead_resolve', 'work_order_lead_audit'):
             pending=state['pending']
             packet=design_integration.context_for_node(state,pending['node_id'])
-            if state['phase']=='mapping_lead_resolve':
+            return_stage='work-order planning' if state['phase'].startswith('work_order_') else 'system mapping'
+            resolve_phase='work_order_lead_resolve' if return_stage=='work-order planning' else 'mapping_lead_resolve'
+            audit_phase='work_order_lead_audit' if return_stage=='work-order planning' else 'mapping_lead_audit'
+            if state['phase']==resolve_phase:
                 raw=self.integration_infer(row['id'],INTEGRATION_LEAD,
-                    dict(packet,stage='system mapping Lead Designer resolution',
+                    dict(packet,stage=return_stage+' Lead Designer resolution',
                          question=pending['question'],reason=pending['reason'],
                          cited_decision_ids=pending['decision_ids'],
                          repair=pending.get('repair','')))
                 pending['result']=design_integration.lead_result(game_plan.parse(raw))
-                state['phase']='mapping_lead_audit'
+                state['phase']=audit_phase
                 return progress,False
             raw=self.integration_infer(row['id'],INTEGRATION_AUDIT,
-                dict(packet,stage='system mapping Lead Designer resolution review',
+                dict(packet,stage=return_stage+' Lead Designer resolution review',
                      question=pending['question'],result=pending['result'],
                      cited_decision_ids=pending['decision_ids'],
                      contract='Resolve the cited conflict without losing other approved decisions.'))
@@ -430,7 +461,7 @@ class Studios:
                     state['phase']='blocked';state['status']='blocked'
                     raise ValueError('System mapping resolution review failed')
                 pending['repair']='; '.join(review['findings'])
-                state['phase']='mapping_lead_resolve'
+                state['phase']=resolve_phase
                 return progress,False
             if pending['result']['status']=='open':
                 state['issues'].append(dict(kind='mapping_unresolved',
@@ -440,7 +471,7 @@ class Studios:
             design_integration.accept_resolution(state,pending['question'],
                 pending['result'],review,node_id=pending['node_id'])
             for issue in state['issues']:
-                if issue.get('kind')=='system_gap' and issue.get('node_id')==pending['node_id'] and issue.get('resolved') is False:
+                if issue.get('kind') in ('system_gap', 'work_order_gap') and issue.get('node_id')==pending['node_id'] and issue.get('resolved') is False:
                     issue['resolved']=True
             design_integration.restart_inventory_after_mapping_resolution(state)
             return progress,False
@@ -871,6 +902,31 @@ class Studios:
                 cx.execute("UPDATE studio_jobs SET state='paused',progress=?,settings=?,remaining=?,reason=? WHERE id=?",
                            (encoded(progress),encoded(settings),minutes*60,'System mapping ready',row['id']))
             return self.resume(r['job'])
+        if op=='start_work_order_planning':
+            with self.store.db() as cx,cx:
+                row=cx.execute("SELECT * FROM studio_jobs WHERE id=? AND institution=? AND kind='integration'",
+                               (r['job'],iid)).fetchone()
+                if not row or row['state']!='complete':
+                    raise ValueError('Complete system mapping before work-order planning')
+                progress=json.loads(row['progress'])
+                state=progress['integration']
+                minutes=r.get('minutes',1440)
+                if type(minutes) is not int or not 1<=minutes<=10080:
+                    raise ValueError('Invalid work-order planning time allowance')
+                settings=json.loads(row['settings'])
+                settings['turn_limit']=min(65536,max(settings['turn_limit'],row['turns']+8192))
+                settings['token_budget']=max(settings['token_budget'],row['units']+96_000_000)
+                design_integration.begin_work_order_planning(state)
+                cx.execute("UPDATE studio_jobs SET state='paused',progress=?,settings=?,remaining=?,reason=? WHERE id=?",
+                           (encoded(progress),encoded(settings),minutes*60,'Work-order planning ready',row['id']))
+            return self.resume(r['job'])
+        if op=='integration_work_orders':
+            with self.store.db() as cx:
+                row=cx.execute("SELECT progress FROM studio_jobs WHERE id=? AND institution=? AND kind='integration'",
+                               (r['job'],iid)).fetchone()
+                if not row:raise ValueError('Integration dossier unavailable')
+                return design_integration.work_orders_page(json.loads(row['progress'])['integration'],
+                                                           r.get('offset',0),r.get('limit',100))
         if op=='integration_systems':
             with self.store.db() as cx:
                 row=cx.execute("SELECT progress FROM studio_jobs WHERE id=? AND institution=? AND kind='integration'",
