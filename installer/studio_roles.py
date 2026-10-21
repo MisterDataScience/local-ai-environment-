@@ -56,7 +56,7 @@ ACTION_SPECS = {
     'team_status': '{}',
     'workflow_start': '{title,goal}',
     'workflow_status': '{workflow}',
-    'workflow_read': '{workflow,phase?,offset?,limit:1..4,report_id?,section?}',
+    'workflow_read': '{workflow,phase?,offset?,limit:1..2,report_id?,section?}',
     'workflow_assign': '{workflow}',
     'workflow_step': '{workflow,title,body,evidence,review_id?}',
     'workflow_verify': '{workflow,verdict,build:{build_id,source_digest,build_status,runtime_status,errors,resources},implementation_claims:[{claim,status,result,evidence}],tests:[{test_id,description,seed,inputs,expected,actual,status,evidence,reproduction}],findings:[{id,category,severity,certainty,reproduction,seed,inputs,expected,actual,evidence,owner,confidence}],unverified_questions,explanation}',
