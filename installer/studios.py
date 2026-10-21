@@ -297,7 +297,7 @@ class Studios:
             tasks=[dict(r) for r in cx.execute('SELECT id,title,state,notes FROM studio_tasks WHERE project=? ORDER BY rowid DESC LIMIT 6',(pid,))]
             docs=[dict(r) for r in cx.execute("SELECT id,title FROM library_documents WHERE collection=? AND state='approved' LIMIT 12",(scope,))]
             sources=[dict(r) for r in cx.execute("SELECT id,project FROM studio_sources WHERE institution=? AND state='active'",(iid,))]
-        return dict(objective=settings['objective'],resident=actor,instructions=profile,memory_map=navigation,approved_documents=docs,members=members,project=pid,sources=sources,notes=progress['notes'][-4000:],last_result=progress['last_result'],tasks=tasks,evidence=self.workbench.recent_evidence(iid,pid),files=[] if settings.get('plan_only') else self.store.tree(pid)[:100],machines=[m for m in self.workbench.status()['instances'] if m['institution']==iid]
+        return dict(objective=settings['objective'],resident=actor,instructions=profile,memory_map=navigation,approved_documents=docs,members=members,project=pid,sources=sources,notes=progress['notes'][-4000:],last_result=progress['last_result'],tasks=tasks,evidence=self.workbench.recent_evidence(iid,pid),files=[] if settings.get('plan_only') else self.store.tree(pid)[:100],machines=[m for m in self.workbench.status()['instances'] if m['institution']==iid])
 
     def work_action(self,row,progress,value):
         if not isinstance(value,dict) or set(value)-{'action','args','note'}:raise ValueError('Invalid studio action')
