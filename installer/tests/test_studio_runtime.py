@@ -48,6 +48,8 @@ class RuntimeTests(unittest.TestCase):
   self.s.quota=full
   with self.assertRaisesRegex(ValueError,'storage budget exhausted'):
    self.w.machine(self.i,machine,'run',steps=1)
+  self.s.quota=lambda iid,extra=0,replace_path=None:None
+  self.assertEqual(self.w.machine(self.i,machine,'observe')['ticks'],0)
  def test_scope_withdrawal_and_pause(self):
   m=self.w.create(self.i,self.b['id'])['machine']
   with self.assertRaises(PermissionError):self.w.machine('wrong',m,'observe')
