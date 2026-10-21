@@ -96,7 +96,7 @@ class StudioTests(unittest.TestCase):
         self.assertEqual(child['id'],child_result['id']);self.assertEqual(child['mode'],'implementation')
         self.assertEqual(child['workflow'],ref);self.assertEqual(child['phase'],'implementation');self.assertEqual(child_result['parent'],build['id'])
         self.assertEqual(started[0]['assignment_id'],child_result['id'])
-        child_row=dict(id='implementation-child-job',kind='assignment',institution=self.i,project=project,settings=json.dumps(dict(actor=engine,actor_title='Engine specialist',objective='Implement the bounded change.',assignment_id=child_result['id'],assignment_mode='implementation',workflow=ref,workflow_phase='implementation')))
+        child_row=dict(id='implementation-child-job',kind='assignment',institution=self.i,project=project,settings=json.dumps(dict(actor=engine,actor_title='Systems designer',objective='Implement the bounded change.',assignment_id=child_result['id'],assignment_mode='implementation',workflow=ref,workflow_phase='implementation')))
         child_packet=self.c.work_packet(child_row,dict(notes='',last_result={}))
         self.assertTrue(any(step['title']=='Counter assertion' for step in child_packet['workflow']['steps']))
         self.assertEqual(child_packet['assignment']['parent'],build['id'])
@@ -147,7 +147,7 @@ class StudioTests(unittest.TestCase):
 
     def test_blocked_implementation_waits_for_child_and_preserves_its_report_for_retry(self):
         residents=self.staff();lead=residents['Studio Lead'];designer=residents['Lead Designer'];test_planner=residents['Systems designer']
-        developer=residents['Lead Developer'];engine=residents['Engine specialist']
+        developer=residents['Lead Developer'];engine=residents['Systems designer']
         project=self.p['project'];workflow=self.s.start_workflow(self.i,project,lead,'Adapt counter game','Implement one bounded experiment')['id']
         planning=self.s.delegate(self.i,project,lead,designer,'Planning','Build the reverse scaffold.',mode='design',workflow=workflow,phase='planning')
         self.s.finish_delegation(planning['id'],'complete','Scaffold saved.')
@@ -290,7 +290,7 @@ class StudioTests(unittest.TestCase):
         self.assertTrue(all(p['state']=='pending' for p in self.s.view(self.i)['proposals'] if p['kind']=='staff'))
 
     def test_delegated_assignments_follow_role_hierarchy_and_are_saved(self):
-        staff=self.staff();lead=staff['Studio Lead'];developer=staff['Lead Developer'];designer=staff['Lead Designer'];engine=staff['Engine specialist']
+        staff=self.staff();lead=staff['Studio Lead'];developer=staff['Lead Developer'];designer=staff['Lead Designer'];engine=staff['Systems designer']
         with self.assertRaises(PermissionError):self.s.delegate(self.i,self.p['project'],designer,engine,'Unscoped request')
         with self.assertRaises(PermissionError):self.s.delegate(self.i,self.p['project'],lead,designer,'Wrong assignment mode')
         design=self.s.delegate(self.i,self.p['project'],lead,designer,'Prepare the project design brief','Define goals and acceptance criteria.',mode='design')
@@ -357,7 +357,7 @@ class StudioTests(unittest.TestCase):
         self.assertEqual(self.s.message(explicitly_routed['id'])['project'],second['project'])
 
     def test_completed_resident_work_automatically_curates_pending_learning(self):
-        staff=self.staff();developer=staff['Lead Developer'];designer=staff['Lead Designer'];specialist=staff['Engine specialist']
+        staff=self.staff();developer=staff['Lead Developer'];designer=staff['Lead Designer'];specialist=staff['Systems designer']
         self.s.learn(self.i,self.p['project'],'studio-task:fixture',designer,'institution','A useful test lesson.','Observed in the independent test report.')
         assignment=self.s.delegate(self.i,self.p['project'],developer,specialist,'Read source and verify current test path','Summarize what needs testing.',mode='analysis')
         queued=self.c.start(dict(institution=self.i,project=self.p['project'],kind='assignment',assignment_id=assignment['id']))
