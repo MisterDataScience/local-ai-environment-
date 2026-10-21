@@ -14,7 +14,7 @@ import village
 import village_memory as memory
 from commons_transport import Turn
 from studio_store import Store,atomic,files,unpack,encoded,sha,ident,bounded,MAX_PROJECT
-from studio_roles import ACTION_SPECS,ROLE_ACTIONS,MAX_SPECIALIST_SUBTASKS
+from studio_roles import ACTION_SPECS,ROLE_ACTIONS,MAX_SPECIALIST_SUBTASKS,WORKFLOW_ROLES
 from studio_workbench import Workbench
 
 FOUNDING_SYSTEM='''You are preparing a private studio from reference C projects.
@@ -44,18 +44,9 @@ Finish work with learn or learning_none, then done.'''
 
 MANAGER_SYSTEM=WORK_SYSTEM+'''\nYou are the Studio Lead. Coordinate the studio through the department roles: Planning, Design Integration and Production Planning, Implementation, then independent Playtest. Use the staged workflow for substantial adaptations and prototypes; route each stage only after reviewing its durable result. Never implement or test a project yourself. The host enforces role and stage permissions. The structured Playtest verdict is the normal route. Use workflow_return only as a Studio Lead override of a verified report, with a concrete reason. Select an explicit project when the inbox lists several.'''
 
-LEAD_DESIGNER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Designer. In Planning, inspect only the workflow's immutable archive source and create a cited reverse scaffold with source contents, major control/data structures, reusable behaviour, dependencies, unknowns and one small portable-C experiment. Do not inspect or change the working copy, build or test. Outside a staged workflow, prepare the requested design brief.'''
+LEAD_DESIGNER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Designer. In Planning, inspect only the workflow's immutable archive source and create a cited reverse scaffold with source contents, major control/data structures, reusable behaviour, dependencies, unknowns and one small portable-C experiment. Page through additional checkpoints with workflow_read when needed. Do not inspect or change the working copy, build or test. Outside a staged workflow, prepare the requested design brief.'''LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+f'''\nYou are the Lead Developer and own technical delivery. Follow the accepted checkpoints and report changes, tests and uncertainty. Use workflow_read to page through checkpoints as needed. Delegate only for a concrete specialist need, up to {MAX_SPECIALIST_SUBTASKS} scoped subtasks per assignment, one at a time. Consolidate each report before finishing.'''ASSIGNMENT_SYSTEM=WORK_SYSTEM+'''\nYou are an assigned specialist. Follow the task and mode in this packet, work within that scope, and return evidence, results and uncertainty. Do not delegate or route a workflow.'''
 
-LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+f'''\nYou are the Lead Developer and own technical delivery. Follow the accepted checkpoints and report changes, tests and uncertainty. Delegate only for a concrete specialist need, up to {MAX_SPECIALIST_SUBTASKS} scoped subtasks per assignment, one at a time. Consolidate each report before finishing.'''
-
-ASSIGNMENT_SYSTEM=WORK_SYSTEM+'''\nYou are an assigned specialist. Follow the task and mode in this packet, work within that scope, and return evidence, results and uncertainty. Do not delegate or route a workflow.'''
-
-DESIGN_INTEGRATION_AND_PRODUCTION_PLANNING_SYSTEM=WORK_SYSTEM+'''
-You are the test planner for Design Integration and Production Planning. Turn the cited Planning scaffold into saved test checkpoints with stable IDs before implementation. For each test specify observable state, available actions, starting/reset state, seed, exact bounded inputs and input limit, success/failure conditions, supported expected results, metrics or hashes, resource/time limits, AI testability, visual evidence, human-only questions and verification blockers. Mark unsupported or subjective expectations Unverified. Do not edit or run code.'''
-
-TESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent, read-only Playtest Reviewer. Reproduce every supplied test and implementation claim against the build; also run bounded exploratory checks. Keep Observed, Inferred and Unverified distinct. Record only reproducible issues with build identity, seed, inputs and evidence. Subjective questions remain Unverified and route to human review. In staged Review, submit the complete structured result through workflow_verify; its schema is in available_actions and it is the sole Playtest report and finding record. Do not use generic finding. Use verified only for a successful loaded build, passing supplied tests and no implementation blocker.'''
-
-CURATION_SYSTEM='''You are the Studio Lead reviewing one submitted studio learning record.
+DESIGN_INTEGRATION_AND_PRODUCTION_PLANNING_SYSTEM=WORK_SYSTEM+'''\nYou are the test planner for Design Integration and Production Planning. Turn the cited Planning scaffold into saved test checkpoints with stable IDs before implementation. Use workflow_read to inspect omitted Planning checkpoints and any linked review report. For each test specify observable state, available actions, starting/reset state, seed, exact bounded inputs and input limit, success/failure conditions, supported expected results, metrics or hashes, resource/time limits, AI testability, visual evidence, human-only questions and verification blockers. Mark unsupported or subjective expectations Unverified. Do not edit or run code.'''TESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent, read-only Playtest Reviewer. Use workflow_read to page through every supplied test checkpoint and linked report section. Reproduce each test and implementation claim against the build; also run bounded exploratory checks. Keep Observed, Inferred and Unverified distinct. Record only reproducible issues with build identity, seed, inputs and evidence. Subjective questions remain Unverified and route to human review. In staged Review, submit the complete structured result through workflow_verify; its schema is in available_actions and it is the sole Playtest report and finding record. Do not use generic finding. Use verified only for a successful loaded build, passing supplied tests and no implementation blocker.'''CURATION_SYSTEM='''You are the Studio Lead reviewing one submitted studio learning record.
 Check whether its lesson follows from the submitted evidence, is useful to a later project
 and is stated with appropriate uncertainty. Do not invent corroboration. Return JSON only:
 {"decision":"accept|reject","title":"...","lesson":"..."}. Use a short reason in
@@ -484,7 +475,9 @@ class Studios:
                 workflow=self.store.workflow_view(iid,settings['workflow'])
                 phase=settings.get('workflow_phase','')
                 needed_phases={'planning'} if phase=='planning' else {'planning','middle'}
-                workflow_steps=[step for step in workflow['steps'] if step.get('phase') in needed_phases]
+                all_workflow_steps=[step for step in workflow['steps'] if step.get('phase') in needed_phases]
+                workflow_step_count=len(all_workflow_steps)
+                workflow_steps=all_workflow_steps[:4]
                 artifacts=workflow.get('artifacts',{})
                 compact_artifacts={}
                 for key in ('required_review_checkpoint','planning','middle','implementation','verification_reports'):
@@ -500,7 +493,7 @@ class Studios:
                             entries.append(item)
                         compact_artifacts[key]=entries
                 packet['workflow']={k:workflow[k] for k in ('id','title','goal','phase','state','source','source_sha256')}
-                packet['workflow'].update(artifacts=compact_artifacts,history=workflow.get('history',[])[-4:],steps=workflow_steps)
+                packet['workflow'].update(artifacts=compact_artifacts,history=workflow.get('history',[])[-4:],steps=workflow_steps,step_count=workflow_step_count)
                 if settings.get('workflow_phase')=='planning':
                     packet['files']=[]
                     packet['workflow']['planning_rule']='Use only the immutable source archive as evidence. Do not inspect or modify the working copy.'
@@ -646,12 +639,38 @@ class Studios:
             if settings.get('actor_title')!='Studio Lead':raise PermissionError('Only the Studio Lead starts staged workflows')
             result=self.store.start_workflow(iid,pid,actor,args['title'],args['goal'])
         elif action=='workflow_status':
-            result=self.store.workflow_view(iid,args['workflow'])
-            if pid and result['project']!=pid:raise PermissionError('Workflow belongs to another project')
+            view=self.store.workflow_view(iid,args['workflow'])
+            if pid and view['project']!=pid:raise PermissionError('Workflow belongs to another project')
+            result={k:view[k] for k in ('id','title','project','phase','state','phase_label','source','source_sha256')}
+            result['checkpoint_count']=len(view.get('steps',[]))
+            result['latest_event']=view.get('history',[])[-1] if view.get('history') else None
+        elif action=='workflow_read':
+            view=self.store.workflow_view(iid,args['workflow'])
+            if pid and view['project']!=pid:raise PermissionError('Workflow belongs to another project')
+            if settings.get('workflow') and settings['workflow']!=view['id']:raise PermissionError('Assigned residents may read only their workflow')
+            offset=args.get('offset',0);limit=args.get('limit',4)
+            if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=4:raise ValueError('Workflow reads are limited to four records from a nonnegative offset')
+            if args.get('report_id'):
+                report=next((r for r in view.get('artifacts',{}).get('verification_reports',[]) if r.get('id')==args['report_id']),None)
+                if not report:raise ValueError('Verification report unavailable in this workflow')
+                section=args.get('section','tests')
+                if section not in ('build','implementation_claims','tests','findings','unverified_questions','explanation'):raise ValueError('Unsupported verification report section')
+                value=report.get(section,[])
+                if isinstance(value,list):
+                    items=value[offset:offset+limit]
+                    if section in ('tests','findings'):
+                        items=[{k:v for k,v in item.items() if k!='inputs'}|{'input_count':len(item.get('inputs',[]))} for item in items]
+                    result=dict(report_id=report['id'],verdict=report['verdict'],section=section,offset=offset,total=len(value),items=items)
+                else:result=dict(report_id=report['id'],verdict=report['verdict'],section=section,item=value)
+            else:
+                phase=args.get('phase')
+                if phase not in ('planning','middle'):raise ValueError('Checkpoint phase must be planning or middle')
+                steps=[step for step in view.get('steps',[]) if step.get('phase')==phase]
+                result=dict(workflow=view['id'],phase=phase,offset=offset,total=len(steps),steps=steps[offset:offset+limit])
         elif action=='workflow_assign':
             if settings.get('actor_title')!='Studio Lead':raise PermissionError('Only the Studio Lead assigns workflow phases')
             workflow=self.store.workflow_view(iid,args['workflow']);phase=workflow['phase']
-            targets={'planning':('Lead Designer','design'),'middle':('Systems designer','test-plan'),'implementation':('Lead Developer','delivery'),'verification':('Playtest reviewer','test')}
+            targets=WORKFLOW_ROLES
             if phase not in targets or workflow['state']!='active':raise PermissionError('Workflow is not ready for a department handoff')
             role,mode=targets[phase]
             with self.store.db() as cx:target=cx.execute('SELECT resident FROM institution_members WHERE institution=? AND title=? ORDER BY resident LIMIT 1',(iid,role)).fetchone()
