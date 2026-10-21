@@ -217,6 +217,22 @@ class StudioTests(unittest.TestCase):
         row=self.wait(job);self.assertEqual(row['state'],'complete',row['reason'])
         self.assertIn('Keep this project note',json.loads(row['progress'])['notes'])
         calls=len(self.engine.calls);self.c.pause();time.sleep(.02);self.assertEqual(len(self.engine.calls),calls)
+    def test_studio_lead_override_links_the_verified_playtest_report(self):
+        staff=self.staff();lead=staff['Studio Lead'];reviewer=staff['Playtest reviewer']
+        ref=self.s.start_workflow(self.i,self.p['project'],lead,'Verified route override','Verify one deterministic result')['id']
+        with self.s.db() as cx,cx:cx.execute("UPDATE studio_workflows SET phase='verification',state='active' WHERE id=?",(ref,))
+        assignment=self.s.delegate(self.i,self.p['project'],lead,reviewer,'Verify','',mode='test',workflow=ref,phase='verification')
+        report=self.s.save_workflow_verification(self.i,ref,assignment['id'],reviewer,dict(
+            verdict='verified',
+            build=dict(build_id='build-override',source_digest='c'*64,build_status='success',runtime_status='loaded',errors=[],resources={}),
+            tests=[dict(test_id='loads',description='Cartridge loads.',seed=1,inputs=[],expected='loaded',actual='loaded',status='passed',evidence=['build-override'])],
+            findings=[],unverified_questions=[],explanation='The build loaded and the only supplied test passed.'))
+        self.s.finish_delegation(assignment['id'],'complete','Verification saved.')
+        self.s.return_workflow(self.i,ref,lead,'A later integration check requires one more implementation pass.')
+        view=self.s.workflow_view(self.i,ref)
+        self.assertEqual((view['phase'],view['state']),('implementation','active'))
+        self.assertEqual(view['history'][-1]['review_id'],report['id'])
+
     def test_playtest_return_to_middle_requires_checkpoints_linked_to_report(self):
         residents={}
         for proposal in self.s.prepare_staff(self.i):
