@@ -16,7 +16,7 @@ import threading
 import time
 import zipfile
 
-from studio_store import Store,atomic,checked,files,archive,sha,encoded,ident,MAX_PROJECT
+from studio_store import Store,atomic,checked,files,archive,sha,encoded,ident,bounded,MAX_PROJECT
 
 BUILD_MANIFEST_VERSION=1
 SDK_VERSION='1.0.0'
@@ -248,7 +248,11 @@ class Workbench:
             mid=ident('machine')
             result=self.rpc(dict(operation='create',machine=mid,wasm=cartridge['wasm'],assets=cartridge['assets'],seed=seed))
             self.machines[mid]=dict(institution=iid,build=bid,project=row['project'])
-            eid=self.new_evidence(mid,seed,task)
+            try:eid=self.new_evidence(mid,seed,task)
+            except Exception:
+                try:self.rpc(dict(operation='drop',machine=mid))
+                finally:self.machines.pop(mid,None)
+                raise
             return dict(machine=mid,evidence=eid,**result)
 
     def evidence_path(self,meta,eid):
@@ -267,6 +271,7 @@ class Workbench:
     def write_evidence(self,meta,record):
         target=self.evidence_path(meta,record['id']);data=encoded(record).encode()
         if len(data)>256*1024:raise ValueError('Experiment evidence record exceeds 256 KiB')
+        if not target.exists() and len(list(target.parent.glob('*.json')))>=500:raise ValueError('Build evidence record limit reached (500)')
         target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
         self.store.quota(meta['institution'],len(data),replace_path=target if target.exists() else None);atomic(target,data)
 
