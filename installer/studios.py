@@ -50,7 +50,7 @@ build {kind:"cartridge"}; tests {build}; create_machine {build,seed,task(optiona
 run_machine {machine,steps:1..600,buttons:0..255}; observe {machine};
 inspect {machine,question}; snapshot {machine}; reset {machine,seed}; drop {machine};
 restore {saved}; task {title,notes,state,task(optional)};
-help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test"}; workflow_start {title,goal}; workflow_status {workflow}; workflow_assign {workflow}; workflow_step {workflow,title,body,evidence:[evidence IDs]}; workflow_retry {workflow,reason}; workflow_close {workflow,summary}; workflow_return {workflow,reason}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
+help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test"}; workflow_start {title,goal}; workflow_status {workflow}; workflow_assign {workflow}; workflow_step {workflow,title,body,evidence:[{source,path,digest,quote}]}; workflow_retry {workflow,reason}; workflow_close {workflow,summary}; workflow_return {workflow,reason}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
 learn {scope:"project|institution",lesson,evidence}; learning_none {reason}; note {text}; done {summary}.
 Assignments are saved durable work orders dispatched as independent resident jobs.
 For substantial adaptation or prototype work, start a staged workflow and move it through Planning, Middle Department test planning, Implementation, then independent Review. Assign only the current phase, wait for its durable result, inspect workflow_status, then assign the next phase. Planning must create a reverse scaffold from the immutable archive source; Middle must write test cases and acceptance criteria before implementation. Never bypass the phase gate with an ordinary delivery assignment while a staged workflow is active. Use workflow_retry for a blocked phase, workflow_return after failed verification, and workflow_close only after successful verification. The Studio Lead assigns Lead Designers to Planning, Systems designers to Middle test planning, Lead Developers to Implementation, and Playtest reviewers to Review. Lead Developers may dispatch specialists only for non-workflow technical tasks. Every work session must close
@@ -638,7 +638,9 @@ class Studios:
         elif action=='workflow_start':
             if settings.get('actor_title')!='Studio Lead':raise PermissionError('Only the Studio Lead starts staged workflows')
             result=self.store.start_workflow(iid,pid,actor,args['title'],args['goal'])
-        elif action=='workflow_status':result=self.store.workflow_view(iid,args['workflow'])
+        elif action=='workflow_status':
+            result=self.store.workflow_view(iid,args['workflow'])
+            if pid and result['project']!=pid:raise PermissionError('Workflow belongs to another project')
         elif action=='workflow_assign':
             if settings.get('actor_title')!='Studio Lead':raise PermissionError('Only the Studio Lead assigns workflow phases')
             workflow=self.store.workflow_view(iid,args['workflow']);phase=workflow['phase']
@@ -651,9 +653,12 @@ class Studios:
             job=self.start(dict(institution=iid,project=pid,kind='assignment',assignment_id=assignment['id'],workflow=workflow['id'],workflow_phase=phase,minutes=60,turns=96,thread_id=settings.get('thread_id','')))
             result=dict(assignment,job=job['id'],state='queued',independent_worker=True)
         elif action=='workflow_step':result=self.store.save_workflow_step(iid,args['workflow'],pid,actor,args['title'],args['body'],args.get('evidence',[]))
-        elif action=='workflow_retry':result=self.store.retry_workflow(iid,args['workflow'],actor,args['reason'])
-        elif action=='workflow_close':result=self.store.close_workflow(iid,args['workflow'],actor,args['summary'])
-        elif action=='workflow_return':result=self.store.return_workflow(iid,args['workflow'],actor,args['reason'])
+        elif action in ('workflow_retry','workflow_close','workflow_return'):
+            workflow=self.store.workflow_view(iid,args['workflow'])
+            if workflow['project']!=pid:raise PermissionError('Workflow belongs to another project')
+            if action=='workflow_retry':result=self.store.retry_workflow(iid,args['workflow'],actor,args['reason'])
+            elif action=='workflow_close':result=self.store.close_workflow(iid,args['workflow'],actor,args['summary'])
+            else:result=self.store.return_workflow(iid,args['workflow'],actor,args['reason'])
         elif action=='help':
             target=args['resident']
             with self.store.db() as cx:
