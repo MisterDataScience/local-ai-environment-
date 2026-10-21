@@ -325,10 +325,10 @@ class Store:
         try:stored=json.loads(path.read_text())
         except (OSError,ValueError):return dict(ok=False,manifest_invalid=True,mismatches=['project-manifest.json'])
         expected=self._manifest_snapshot(pid,stored.get('external_exports',[]))
-        keys=('manifest_version','project','institution','source','working_copy','builds','checkpoints','evidence','approved_documents','external_exports')
-        mismatches=[key for key in keys if stored.get(key)!=expected.get(key)]
+        keys=('manifest_version','project','institution','source','working_copy','builds','workflows','workflow_steps','checkpoints','evidence','approved_documents','external_exports')
+        mismatches=[key for key in keys if stored.get(key,[] if key in ('workflows','workflow_steps') else None)!=expected.get(key)]
         return dict(ok=not mismatches,manifest_sha256=sha(path.read_bytes()),checked_at=int(time.time()),mismatches=mismatches,
-            counts=dict(builds=len(expected['builds']),checkpoints=len(expected['checkpoints']),evidence=len(expected['evidence']),exports=len(expected['external_exports'])))
+            counts=dict(builds=len(expected['builds']),workflows=len(expected['workflows']),workflow_steps=len(expected['workflow_steps']),checkpoints=len(expected['checkpoints']),evidence=len(expected['evidence']),exports=len(expected['external_exports'])))
 
     def ensure_project_manifests(self):
         with self.db() as cx:projects=[r[0] for r in cx.execute("SELECT id FROM studio_projects WHERE state='active'")]
@@ -676,6 +676,7 @@ class Store:
                 elif row['phase']=='implementation':next_phase='verification';workflow_state='active'
                 else:next_phase='verification';workflow_state='ready_to_close'
                 cx.execute('UPDATE studio_workflows SET phase=?,state=?,artifacts=?,history=?,updated=? WHERE id=?',(next_phase,workflow_state,encoded(artifacts),encoded(history),int(time.time()),row['workflow']))
+        if row['workflow']:self.refresh_project_manifest(row['project'])
 
     def learn(self,iid,pid,work_order,actor,scope,lesson,evidence,appointment_id=None):
         if scope not in ('project','institution'):raise ValueError('Learning scope must be project or institution')
