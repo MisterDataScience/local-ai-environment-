@@ -581,7 +581,9 @@ class Store:
             if not cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND assignee=? AND state='running'",(ref,wf['phase'],actor)).fetchone():raise PermissionError('Only the assigned department resident can checkpoint this workflow')
             count=cx.execute('SELECT count(*) FROM studio_workflow_steps WHERE workflow=?',(ref,)).fetchone()[0]
             if count>=64:raise ValueError('Workflow checkpoint limit reached')
-            evidence_rows=self.evidence(cx,iid,evidence);evidence_payload=encoded(evidence_rows)
+            evidence_rows=self.evidence(cx,iid,evidence)
+            for row,citation in zip(evidence_rows,evidence):row['path']=citation['path']
+            evidence_payload=encoded(evidence_rows)
             digest=sha(encoded(dict(workflow=ref,phase=wf['phase'],ordinal=count+1,title=title,body=body,evidence=evidence_payload)))
             step=ident('studio-workflow-step');now=int(time.time())
             cx.execute('INSERT INTO studio_workflow_steps VALUES(?,?,?,?,?,?,?,?,?,?,?)',(step,ref,iid,pid,wf['phase'],count+1,title,body,evidence_payload,digest,now))
