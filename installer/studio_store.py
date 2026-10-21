@@ -233,8 +233,8 @@ class Store:
             p=self.project(cx,pid);iid=p['institution']
             source=cx.execute('SELECT * FROM studio_sources WHERE id=?',(p['source'],)).fetchone()
             collection=cx.execute('SELECT collection FROM institutions WHERE id=?',(iid,)).fetchone()[0]
-            docs=[dict(r) for r in cx.execute("SELECT id,title,text,digest,evidence,approval FROM library_documents WHERE collection=? AND state='approved'",(collection,))]
-            artifacts=[dict(r) for r in cx.execute("SELECT id,title,body,evidence FROM studio_artifacts WHERE institution=? AND state='approved'",(iid,))]
+            docs=[dict(r) for r in cx.execute("SELECT id,title,text,digest,evidence,approval FROM library_documents WHERE collection=? AND state='approved' ORDER BY id",(collection,))]
+            artifacts=[dict(r) for r in cx.execute("SELECT id,title,body,evidence FROM studio_artifacts WHERE institution=? AND state='approved' ORDER BY id",(iid,))]
             builds=[dict(r) for r in cx.execute('SELECT * FROM studio_builds WHERE project=? ORDER BY created,id',(pid,))]
         instroot=self.directory/iid.split(':')[1];projectroot=instroot/'projects'/pid.split(':')[1]
         source_id=p['source'];archive_path=instroot/'archive'/(source_id.split(':')[1]+'.zip')
