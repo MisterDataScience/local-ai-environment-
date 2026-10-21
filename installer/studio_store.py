@@ -28,6 +28,10 @@ MAX_FILES = 20000
 MAX_FILE = 16 * 1024 * 1024
 MAX_PROJECT = 256 * 1024 * 1024
 MAX_STUDIO = 1024 * 1024 * 1024
+
+def bounded_list(value,maximum,label):
+    if not isinstance(value,list) or len(value)>maximum:raise ValueError(label+' must be a list of at most '+str(maximum)+' entries')
+    return value
 TEXT = {'.c','.h','.cpp','.s','.asm','.inc','.md','.txt','.json','.mk','.ld','.py','.sh','.toml','.yaml','.yml','.csv'}
 
 
@@ -129,7 +133,7 @@ def initialize(cx):
         CREATE TABLE IF NOT EXISTS studio_appointments(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,work_order TEXT NOT NULL,resident TEXT NOT NULL,role TEXT NOT NULL,title TEXT NOT NULL,sponsor TEXT NOT NULL,expires INTEGER NOT NULL,state TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_delegations(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,task TEXT NOT NULL,manager TEXT NOT NULL,assignee TEXT NOT NULL,state TEXT NOT NULL,result TEXT NOT NULL,created INTEGER NOT NULL,mode TEXT NOT NULL DEFAULT 'analysis',workflow TEXT NOT NULL DEFAULT '',phase TEXT NOT NULL DEFAULT '',parent TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS studio_workflows(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,title TEXT NOT NULL,goal TEXT NOT NULL,phase TEXT NOT NULL,state TEXT NOT NULL,source TEXT NOT NULL,source_sha256 TEXT NOT NULL,artifacts TEXT NOT NULL,history TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS studio_workflow_steps(id TEXT PRIMARY KEY,workflow TEXT NOT NULL,institution TEXT NOT NULL,project TEXT NOT NULL,phase TEXT NOT NULL,ordinal INTEGER NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,evidence TEXT NOT NULL,digest TEXT NOT NULL,created INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS studio_workflow_steps(id TEXT PRIMARY KEY,workflow TEXT NOT NULL,institution TEXT NOT NULL,project TEXT NOT NULL,phase TEXT NOT NULL,ordinal INTEGER NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,evidence TEXT NOT NULL,digest TEXT NOT NULL,created INTEGER NOT NULL,review_id TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS studio_messages(id TEXT PRIMARY KEY,thread TEXT NOT NULL,institution TEXT NOT NULL,project TEXT NOT NULL,sender TEXT NOT NULL,body TEXT NOT NULL,response TEXT NOT NULL,state TEXT NOT NULL,job TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS studio_messages_queue ON studio_messages(state,created);
         CREATE INDEX IF NOT EXISTS studio_messages_thread ON studio_messages(thread,created);
@@ -137,6 +141,8 @@ def initialize(cx):
         CREATE TABLE IF NOT EXISTS studio_builds(id TEXT PRIMARY KEY,project TEXT NOT NULL,digest TEXT NOT NULL,kind TEXT NOT NULL,state TEXT NOT NULL,report TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_artifacts(id TEXT PRIMARY KEY,institution TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,evidence TEXT NOT NULL,state TEXT NOT NULL,approval TEXT NOT NULL);
         ''')
+        workflow_step_columns={r[1] for r in cx.execute('PRAGMA table_info(studio_workflow_steps)')}
+        if 'review_id' not in workflow_step_columns:cx.execute("ALTER TABLE studio_workflow_steps ADD COLUMN review_id TEXT NOT NULL DEFAULT ''")
         delegation_columns={r[1] for r in cx.execute('PRAGMA table_info(studio_delegations)')}
         if 'mode' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN mode TEXT NOT NULL DEFAULT 'analysis'")
         if 'workflow' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN workflow TEXT NOT NULL DEFAULT ''")
@@ -524,7 +530,7 @@ class Store:
             assignment_workflow='';assignment_phase='';parent_assignment=''
             if manager_title=='Studio Lead':
                 if parent:raise PermissionError('Only a Lead Developer can create a child assignment')
-                if not workflow and cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked') LIMIT 1",(iid,pid)).fetchone():raise PermissionError('Use the active staged workflow for all project assignments')
+                if not workflow and cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked','human_review_required') LIMIT 1",(iid,pid)).fetchone():raise PermissionError('Use the active staged workflow for all project assignments')
                 if workflow:
                     wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=?",(workflow,iid,pid)).fetchone()
                     expected={'planning':('Lead Designer','design'),'middle':('Systems designer','test-plan'),'implementation':('Lead Developer','delivery'),'verification':('Playtest reviewer','test')}
@@ -539,7 +545,7 @@ class Store:
                 else:
                     if assignee_title!='Lead Developer' or mode!='delivery':raise PermissionError('Studio Lead assignments must go to a Lead Designer or Lead Developer')
                     assignment_mode='lead-developer'
-                    active=cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close') LIMIT 1",(iid,pid)).fetchone()
+                    active=cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked','human_review_required') LIMIT 1",(iid,pid)).fetchone()
                     if active:raise PermissionError('Use the active staged workflow to dispatch project work')
             elif manager_title=='Lead Developer':
                 if workflow or parent:
@@ -553,7 +559,7 @@ class Store:
                     else:
                         if workflow or phase:
                             raise PermissionError('A non-workflow Lead Developer assignment cannot attach to a workflow')
-                        if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked') LIMIT 1",(iid,pid)).fetchone():
+                        if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked','human_review_required') LIMIT 1",(iid,pid)).fetchone():
                             raise PermissionError('Use the active staged workflow for all project assignments')
                     if assignee_title in ('Studio Lead','Lead Developer','Lead Designer','Playtest reviewer') or mode not in ('implementation','analysis'):
                         raise PermissionError('Lead Developer subtasks must go to approved implementation or analysis specialists')
@@ -563,7 +569,7 @@ class Store:
                         raise ValueError('A Lead Developer assignment is limited to eight specialist subtasks')
                     assignment_mode=mode;assignment_workflow=root['workflow'];assignment_phase=root['phase'];parent_assignment=parent
                 else:
-                    if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked') LIMIT 1",(iid,pid)).fetchone():
+                    if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked','human_review_required') LIMIT 1",(iid,pid)).fetchone():
                         raise PermissionError('Use the active staged workflow for all project assignments')
                     if assignee_title=='Playtest reviewer':
                         if mode!='test':raise PermissionError('Playtest reviewer assignments require test mode')
@@ -593,7 +599,7 @@ class Store:
         with self.db() as cx,cx:
             if self.member(cx,iid,actor)!='Studio Lead':raise PermissionError('Only the Studio Lead starts a staged project workflow')
             project=self.project(cx,pid,iid)
-            if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close') LIMIT 1",(iid,pid)).fetchone():raise RuntimeError('This project already has an active staged workflow')
+            if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked','human_review_required') LIMIT 1",(iid,pid)).fetchone():raise RuntimeError('This project already has an active staged workflow')
             source=cx.execute("SELECT id,digest FROM studio_sources WHERE id=? AND institution=? AND state='active'",(project['source'],iid)).fetchone()
             if not source:raise PermissionError('The project reference source is unavailable')
             ref=ident('studio-workflow');now=int(time.time())
@@ -606,26 +612,70 @@ class Store:
             row=cx.execute('SELECT * FROM studio_workflows WHERE id=? AND institution=?',(ref,iid)).fetchone()
             if not row:raise PermissionError('Workflow unavailable')
             self.project(cx,row['project'],iid)
-            steps=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(ref,))]
+            steps=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created,review_id FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(ref,))]
             out=dict(row);out['artifacts']=json.loads(out['artifacts']);out['history']=json.loads(out['history']);out['steps']=steps
             out['phase_label']={'planning':'Planning Department','middle':'Design Integration and Production Planning Department','implementation':'Implementation Department','verification':'Independent Review'}.get(out['phase'],out['phase'])
             return out
 
-    def save_workflow_step(self,iid,ref,pid,actor,title,body,evidence):
-        title=bounded(title,120,'workflow step title',empty=False);body=bounded(body,1600,'workflow step',empty=False)
+    def save_workflow_verification(self,iid,ref,assignment,actor,payload):
+        verdicts={'verified','return_to_implementation','return_to_middle','return_to_planning','human_review_required','blocked'}
+        if not isinstance(payload,dict) or payload.get('verdict') not in verdicts:raise ValueError('Verification verdict is invalid')
+        build=payload.get('build')
+        if not isinstance(build,dict):raise ValueError('Verification report must include build identity and runtime results')
+        build_result=dict(build_id=bounded(build.get('build_id',''),160,'build ID'),source_digest=bounded(build.get('source_digest',''),128,'source digest'),build_status=bounded(build.get('build_status',''),40,'build status'),runtime_status=bounded(build.get('runtime_status',''),40,'runtime status'),errors=bounded_list(build.get('errors',[]),64,'build errors'),resources=payload.get('resources',build.get('resources',{})))
+        if not isinstance(build_result['resources'],dict):raise ValueError('Build resource measurements must be an object')
+        tests=bounded_list(payload.get('tests'),64,'test results');normalized_tests=[]
+        for item in tests:
+            if not isinstance(item,dict):raise ValueError('Each test result must be an object')
+            status=item.get('status')
+            if status not in ('passed','failed','blocked','not_testable'):raise ValueError('Test result status must be passed, failed, blocked, or not_testable')
+            normalized_tests.append(dict(test_id=bounded(item.get('test_id',''),120,'test ID'),description=bounded(item.get('description',''),500,'test description'),seed=item.get('seed'),inputs=item.get('inputs',[]),expected=bounded(item.get('expected',''),1600,'expected result'),actual=bounded(item.get('actual',''),1600,'actual result'),status=status,evidence=bounded_list(item.get('evidence',[]),32,'test evidence'),reproduction=bounded(item.get('reproduction',''),1000,'reproduction notes',empty=True)))
+        findings=bounded_list(payload.get('findings',[]),64,'exploratory findings');normalized_findings=[]
+        for item in findings:
+            if not isinstance(item,dict):raise ValueError('Each exploratory finding must be an object')
+            if item.get('certainty') not in ('Observed','Inferred','Unverified'):raise ValueError('Finding certainty must be Observed, Inferred, or Unverified')
+            normalized_findings.append(dict(id=bounded(item.get('id',''),120,'finding ID'),category=bounded(item.get('category',''),100,'finding category'),severity=bounded(item.get('severity',''),40,'finding severity'),certainty=item['certainty'],reproduction=bounded(item.get('reproduction',''),1600,'reproduction steps'),seed=item.get('seed'),inputs=item.get('inputs',[]),expected=bounded(item.get('expected',''),1600,'expected behaviour'),actual=bounded(item.get('actual',''),1600,'actual behaviour'),evidence=bounded_list(item.get('evidence',[]),32,'finding evidence'),owner=bounded(item.get('owner',''),100,'likely owner'),confidence=bounded(item.get('confidence',''),40,'confidence')))
+        claims=bounded_list(payload.get('implementation_claims',[]),64,'implementation claims');normalized_claims=[]
+        for item in claims:
+            if not isinstance(item,dict) or item.get('status') not in ('reproduced','not_reproduced','not_testable'):raise ValueError('Implementation claims need reproduced, not_reproduced, or not_testable status')
+            normalized_claims.append(dict(claim=bounded(item.get('claim',''),1000,'implementation claim'),status=item['status'],result=bounded(item.get('result',''),1200,'claim result'),evidence=bounded_list(item.get('evidence',[]),32,'claim evidence')))
+        unverified=[bounded(q,1000,'unverified question') for q in bounded_list(payload.get('unverified_questions',[]),64,'unverified questions')]
+        explanation=bounded(payload.get('explanation',''),2000,'verdict explanation',empty=False);verdict=payload['verdict']
+        if verdict=='verified' and (build_result['build_status']!='success' or build_result['runtime_status'] not in ('loaded','running') or not normalized_tests or any(x['status']!='passed' for x in normalized_tests) or any(x['certainty']!='Unverified' and x['severity'].lower() in ('blocker','critical','high') for x in normalized_findings)):
+            raise ValueError('verified requires a successful loaded build, passing results for every supplied test, and no unresolved high-severity finding')
+        report=dict(build=build_result,implementation_claims=normalized_claims,tests=normalized_tests,findings=normalized_findings,unverified_questions=unverified,verdict=verdict,explanation=explanation)
+        packed=encoded(report)
+        if len(packed.encode())>128*1024:raise ValueError('Verification report exceeds 128 KiB')
+        with self.db() as cx,cx:
+            delegation=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=(SELECT project FROM studio_workflows WHERE id=? AND institution=?) AND assignee=? AND workflow=? AND phase='verification' AND mode='test' AND state='running'",(assignment,iid,ref,iid,actor,ref)).fetchone()
+            wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=? AND phase='verification' AND state='running'",(ref,iid,delegation['project'] if delegation else '')).fetchone()
+            if not delegation or not wf:raise PermissionError('Only the assigned independent Playtest Reviewer can record the active verification report')
+            artifacts=json.loads(wf['artifacts']);history=json.loads(wf['history']);reports=artifacts.setdefault('verification_reports',[])
+            if len(reports)>=64:raise ValueError('Workflow verification report limit reached')
+            report_id=ident('studio-verification');report.update(id=report_id,assignment=assignment,reviewer=actor,created=int(time.time()),digest=sha(packed))
+            reports.append(report);history.append(dict(event='verification_report_recorded',report=report_id,verdict=verdict,assignment=assignment,at=int(time.time())))
+            cx.execute('UPDATE studio_workflows SET artifacts=?,history=?,updated=? WHERE id=?',(encoded(artifacts),encoded(history),int(time.time()),ref));pid=wf['project']
+        self.refresh_project_manifest(pid)
+        return dict(id=report_id,workflow=ref,verdict=verdict,digest=report['digest'],saved=True)
+
+    def save_workflow_step(self,iid,ref,pid,actor,title,body,evidence,review_id=''):
+        title=bounded(title,120,'workflow step title',empty=False);body=bounded(body,1600,'workflow step',empty=False);review_id=bounded(review_id,120,'review report ID',empty=True)
         with self.db() as cx,cx:
             self.member(cx,iid,actor)
             wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=? AND state='running' AND phase IN ('planning','middle')",(ref,iid,pid)).fetchone()
             if not wf:raise PermissionError('No active Planning Department or Design Integration and Production Planning Department workflow step')
             if not cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND assignee=? AND state='running'",(ref,wf['phase'],actor)).fetchone():raise PermissionError('Only the assigned department resident can checkpoint this workflow')
+            artifacts=json.loads(wf['artifacts']);required_review=artifacts.get('required_review_checkpoint','')
+            if wf['phase']=='middle' and required_review and review_id!=required_review:raise PermissionError('Revised Design Integration and Production Planning checkpoints must link the failed Playtest review')
+            if review_id and not any(r.get('id')==review_id and r.get('verdict') in ('return_to_middle','return_to_planning') for r in artifacts.get('verification_reports',[])):raise ValueError('Review link must name a retained return-to-planning or return-to-middle verification report')
             count=cx.execute('SELECT count(*) FROM studio_workflow_steps WHERE workflow=?',(ref,)).fetchone()[0]
             if count>=64:raise ValueError('Workflow checkpoint limit reached')
             evidence_rows=self.evidence(cx,iid,evidence)
             for row,citation in zip(evidence_rows,evidence):row['path']=citation['path']
             evidence_payload=encoded(evidence_rows)
-            digest=sha(encoded(dict(workflow=ref,phase=wf['phase'],ordinal=count+1,title=title,body=body,evidence=evidence_payload)))
+            digest=sha(encoded(dict(workflow=ref,phase=wf['phase'],ordinal=count+1,title=title,body=body,evidence=evidence_payload,review_id=review_id)))
             step=ident('studio-workflow-step');now=int(time.time())
-            cx.execute('INSERT INTO studio_workflow_steps VALUES(?,?,?,?,?,?,?,?,?,?,?)',(step,ref,iid,pid,wf['phase'],count+1,title,body,evidence_payload,digest,now))
+            cx.execute('INSERT INTO studio_workflow_steps(id,workflow,institution,project,phase,ordinal,title,body,evidence,digest,created,review_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(step,ref,iid,pid,wf['phase'],count+1,title,body,evidence_payload,digest,now,review_id))
             cx.execute('UPDATE studio_workflows SET updated=? WHERE id=?',(now,ref))
         self.refresh_project_manifest(pid)
         return dict(id=step,workflow=ref,phase=wf['phase'],ordinal=count+1,digest=digest)
@@ -741,9 +791,22 @@ class Store:
                 artifacts.setdefault(row['phase'],[]).append(entry);history.append(dict(event='phase_'+state,phase=row['phase'],assignment=delegation,at=int(time.time())))
                 if state!='complete':next_phase=row['phase'];workflow_state='blocked'
                 elif row['phase']=='planning':next_phase='middle';workflow_state='active'
-                elif row['phase']=='middle':next_phase='implementation';workflow_state='active'
+                elif row['phase']=='middle':
+                    required_review=artifacts.get('required_review_checkpoint','')
+                    if required_review and not cx.execute("SELECT 1 FROM studio_workflow_steps WHERE workflow=? AND phase='middle' AND review_id=? LIMIT 1",(row['workflow'],required_review)).fetchone():raise ValueError('Revised test plan must add a checkpoint linked to the failed Playtest report before implementation')
+                    artifacts.pop('required_review_checkpoint',None);next_phase='implementation';workflow_state='active'
                 elif row['phase']=='implementation':next_phase='verification';workflow_state='active'
-                else:next_phase='verification';workflow_state='ready_to_close'
+                else:
+                    report=next((r for r in reversed(artifacts.get('verification_reports',[])) if r.get('assignment')==delegation),None)
+                    if not report:
+                        state='blocked';text='Playtest assignment completed without a structured verification report; record the report before this phase can advance.'
+                        cx.execute("UPDATE studio_delegations SET state='blocked',result=? WHERE id=?",(text,delegation));cx.execute("UPDATE studio_tasks SET state='blocked',notes=? WHERE id=?",(text,row['task']))
+                        entry['state']='blocked';entry['result']=text;entry['digest']=sha(text);history[-1]['event']='phase_blocked_missing_verification_report'
+                        next_phase='verification';workflow_state='blocked'
+                    else:
+                        verdict=report['verdict'];routes={'verified':('verification','ready_to_close'),'return_to_implementation':('implementation','active'),'return_to_middle':('middle','active'),'return_to_planning':('planning','active'),'human_review_required':('verification','human_review_required'),'blocked':('verification','blocked')}
+                        next_phase,workflow_state=routes[verdict]
+                        if verdict=='return_to_middle':artifacts['required_review_checkpoint']=report['id']
                 cx.execute('UPDATE studio_workflows SET phase=?,state=?,artifacts=?,history=?,updated=? WHERE id=?',(next_phase,workflow_state,encoded(artifacts),encoded(history),int(time.time()),row['workflow']))
         if row['workflow']:self.refresh_project_manifest(row['project'])
 
@@ -842,7 +905,7 @@ class Store:
             out['workflows']=[dict(r) for r in cx.execute('SELECT * FROM studio_workflows WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
             for workflow in out['workflows']:
                 workflow['artifacts']=json.loads(workflow['artifacts']);workflow['history']=json.loads(workflow['history'])
-                workflow['steps']=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(workflow['id'],))]
+                workflow['steps']=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created,review_id FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(workflow['id'],))]
             out['learnings']=[dict(r) for r in cx.execute('SELECT * FROM studio_learnings WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
             out['studio_messages']=[dict(r) for r in cx.execute('SELECT id,thread,project,sender,body,response,state,job,created FROM studio_messages WHERE institution=? ORDER BY rowid DESC LIMIT 50',(iid,))]
             out['saved_machines']=[p.stem for p in (self.directory/iid.split(':')[1]/'machines').glob('*.json')]
