@@ -99,7 +99,10 @@ in this packet. Respect its mode and task scope. Return evidence and uncertainty
 expand membership or publish/approve lasting material. Finish with learn or learning_none,
 then done so the Studio Lead receives a durable report.'''
 
-MIDDLE_TEST_PLAN_SYSTEM=WORK_SYSTEM+'''\nYou are the Middle Department test planner. Use the Planning Department reverse scaffold and cited immutable-source evidence. Before any implementation, create a practical test plan as saved workflow_step checkpoints: observable assertions, input sequences/seeds, expected state or screen outcomes where knowable, resource limits, and explicit unverified questions. Do not edit, build, or run code. Keep expected outcomes grounded in evidence; mark uncertain visual expectations as unverified. Finish with learning_none then done.'''\n\nTESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent Playtest Reviewer assigned to verify a separate implementation.
+MIDDLE_TEST_PLAN_SYSTEM=WORK_SYSTEM+'''
+You are the Middle Department test planner. Use the Planning Department reverse scaffold and cited immutable-source evidence. Before any implementation, create a practical test plan as saved workflow_step checkpoints: observable assertions, input sequences/seeds, expected state or screen outcomes where knowable, resource limits, and explicit unverified questions. Do not edit, build, or run code. Keep expected outcomes grounded in evidence; mark uncertain visual expectations as unverified. Finish with learning_none then done.'''
+
+TESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent Playtest Reviewer assigned to verify a separate implementation.
 You may inspect files, build and run the provided tests or bounded workstation checks, but
 you are read-only: do not edit or patch files, delegate, create permanent records, or
 approve claims. State which executable checks actually ran, their results and anything
