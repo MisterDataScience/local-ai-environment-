@@ -24,6 +24,30 @@ class RuntimeTests(unittest.TestCase):
   from studio_player import export
   self.assertTrue(export(self.w.cartridge(self.b['id'])[0]).startswith(b'PK'))
   self.assertEqual(len(self.w.measurements['calibration']['samples']),10)
+ def test_versioned_build_and_save_identity(self):
+  cartridge,_=self.w.cartridge(self.b['id']);manifest=cartridge['build_manifest']
+  self.assertEqual(manifest['manifest_version'],1);self.assertEqual(manifest['sdk_version'],'1.0.0');self.assertEqual(manifest['sdk_abi_version'],1);self.assertEqual(manifest['save_format_version'],1)
+  machine=self.w.create(self.i,self.b['id'])['machine'];saved=self.w.machine(self.i,machine,'snapshot')['saved']
+  state=json.loads((self.s.directory/self.i.split(':')[1]/'machines'/(saved.split(':')[1]+'.json')).read_text())
+  self.assertEqual(state['envelope_version'],1);self.assertEqual(state['state']['save_format'],1)
+  self.assertEqual(state['build_manifest']['source_sha256'],manifest['source_sha256'])
+ def test_legacy_save_migration_keeps_original_and_verifies_copy(self):
+  machine=self.w.create(self.i,self.b['id'])['machine'];saved=self.w.machine(self.i,machine,'snapshot')['saved']
+  path=self.s.directory/self.i.split(':')[1]/'machines'/(saved.split(':')[1]+'.json')
+  record=json.loads(path.read_text());record.pop('envelope_version');record.pop('build_manifest')
+  record['state'].pop('save_format');record['state'].pop('sdk_abi_version')
+  original=json.dumps(record,separators=(',',':')).encode();path.write_bytes(original)
+  restored=self.w.restore(self.i,saved);self.assertTrue(restored['machine'])
+  kept=self.s.directory/self.i.split(':')[1]/'machines'/'originals'/(saved.split(':')[1]+'.json')
+  self.assertEqual(kept.read_bytes(),original)
+  migrated=json.loads(path.read_text());self.assertEqual(migrated['state']['save_format'],1)
+  self.assertEqual(migrated['state']['sdk_abi_version'],1);self.assertIn('build_manifest',migrated)
+ def test_auto_recovery_checkpoint_obeys_quota(self):
+  machine=self.w.create(self.i,self.b['id'])['machine']
+  def full(iid,extra=0,replace_path=None):raise ValueError('Institution storage budget exhausted')
+  self.s.quota=full
+  with self.assertRaisesRegex(ValueError,'storage budget exhausted'):
+   self.w.machine(self.i,machine,'run',steps=1)
  def test_scope_withdrawal_and_pause(self):
   m=self.w.create(self.i,self.b['id'])['machine']
   with self.assertRaises(PermissionError):self.w.machine('wrong',m,'observe')
