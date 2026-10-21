@@ -127,7 +127,9 @@ def initialize(cx):
         CREATE TABLE IF NOT EXISTS studio_events(id TEXT PRIMARY KEY,institution TEXT NOT NULL,job TEXT NOT NULL,actor TEXT NOT NULL,kind TEXT NOT NULL,body TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_tasks(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,owner TEXT NOT NULL,title TEXT NOT NULL,state TEXT NOT NULL,notes TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_appointments(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,work_order TEXT NOT NULL,resident TEXT NOT NULL,role TEXT NOT NULL,title TEXT NOT NULL,sponsor TEXT NOT NULL,expires INTEGER NOT NULL,state TEXT NOT NULL,created INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS studio_delegations(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,task TEXT NOT NULL,manager TEXT NOT NULL,assignee TEXT NOT NULL,state TEXT NOT NULL,result TEXT NOT NULL,created INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS studio_delegations(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,task TEXT NOT NULL,manager TEXT NOT NULL,assignee TEXT NOT NULL,state TEXT NOT NULL,result TEXT NOT NULL,created INTEGER NOT NULL,mode TEXT NOT NULL DEFAULT 'analysis',workflow TEXT NOT NULL DEFAULT '',phase TEXT NOT NULL DEFAULT '');
+        CREATE TABLE IF NOT EXISTS studio_workflows(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,title TEXT NOT NULL,goal TEXT NOT NULL,phase TEXT NOT NULL,state TEXT NOT NULL,source TEXT NOT NULL,source_sha256 TEXT NOT NULL,artifacts TEXT NOT NULL,history TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS studio_workflow_steps(id TEXT PRIMARY KEY,workflow TEXT NOT NULL,institution TEXT NOT NULL,project TEXT NOT NULL,phase TEXT NOT NULL,ordinal INTEGER NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,evidence TEXT NOT NULL,digest TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_messages(id TEXT PRIMARY KEY,thread TEXT NOT NULL,institution TEXT NOT NULL,project TEXT NOT NULL,sender TEXT NOT NULL,body TEXT NOT NULL,response TEXT NOT NULL,state TEXT NOT NULL,job TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS studio_messages_queue ON studio_messages(state,created);
         CREATE INDEX IF NOT EXISTS studio_messages_thread ON studio_messages(thread,created);
@@ -137,6 +139,8 @@ def initialize(cx):
         ''')
         delegation_columns={r[1] for r in cx.execute('PRAGMA table_info(studio_delegations)')}
         if 'mode' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN mode TEXT NOT NULL DEFAULT 'analysis'")
+        if 'workflow' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN workflow TEXT NOT NULL DEFAULT ''")
+        if 'phase' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN phase TEXT NOT NULL DEFAULT ''")
         if [r[0] for r in cx.execute('SELECT version FROM institution_schema')]!=[1]:raise RuntimeError('Unsupported institution schema')
 
 
@@ -508,26 +512,100 @@ class Store:
         self.appointment_task(cx,iid,pid,row['work_order'])
         return dict(row)
 
-    def delegate(self,iid,pid,manager,assignee,title,notes='',mode='delivery'):
+    def delegate(self,iid,pid,manager,assignee,title,notes='',mode='delivery',workflow='',phase=''):
         with self.db() as cx,cx:
             manager_title=self.member(cx,iid,manager);assignee_title=self.member(cx,iid,assignee);self.project(cx,pid,iid)
             if manager_title=='Studio Lead':
-                if assignee_title=='Lead Designer':
+                if workflow:
+                    wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=?",(workflow,iid,pid)).fetchone()
+                    expected={'planning':('Lead Designer','design'),'middle':('Systems designer','test-plan'),'implementation':('Lead Developer','delivery'),'verification':('Playtest reviewer','test')}
+                    if not wf or wf['phase']!=phase or wf['state']!='active':raise PermissionError('Workflow phase is not ready for assignment')
+                    if (assignee_title,mode)!=expected.get(phase):raise PermissionError('Workflow phase must be assigned to its designated department role')
+                    if cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND state='running'",(workflow,phase)).fetchone():raise RuntimeError('Workflow phase already has an active assignment')
+                    assignment_mode={'planning':'design','middle':'test-plan','implementation':'lead-developer','verification':'test'}[phase]
+                elif assignee_title=='Lead Designer':
                     allowed=mode=='design';assignment_mode='design'
                 else:
                     allowed=assignee_title=='Lead Developer' and mode=='delivery';assignment_mode='lead-developer'
+                    active=cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close') LIMIT 1",(iid,pid)).fetchone()
+                    if active:raise PermissionError('Use the active staged workflow to dispatch project work')
+                    if not allowed:raise PermissionError('Studio Lead assignments must go to a Lead Designer or Lead Developer')
             elif manager_title=='Lead Developer':
+                if workflow:raise PermissionError('Only the Studio Lead assigns workflow phases')
                 if assignee_title=='Playtest reviewer':
                     allowed=mode=='test';assignment_mode='test'
                 else:
                     allowed=assignee_title not in ('Studio Lead','Lead Developer','Lead Designer') and mode in ('implementation','analysis')
                     assignment_mode=mode
-            else:allowed=False;assignment_mode=''
-            if not allowed:raise PermissionError('Assignments must follow Studio Lead → Lead Designer or Lead Developer → specialist')
+                if not allowed:raise PermissionError('Assignments must follow Studio Lead → Lead Designer or Lead Developer → specialist')
+            else:raise PermissionError('Only studio leads can dispatch work')
             task=ident('studio-task');delegation=ident('studio-delegation')
             cx.execute('INSERT INTO studio_tasks VALUES(?,?,?,?,?,?,?)',(task,iid,pid,assignee,bounded(title,200,'assignment title'),'open',bounded(notes,4000,'assignment notes',empty=True)))
-            cx.execute('INSERT INTO studio_delegations(id,institution,project,task,manager,assignee,state,result,created,mode) VALUES(?,?,?,?,?,?,?,?,?,?)',(delegation,iid,pid,task,manager,assignee,'running','',int(time.time()),assignment_mode))
-            return dict(id=delegation,task=task,state='running',assignee=assignee,title=assignee_title,mode=assignment_mode)
+            cx.execute('INSERT INTO studio_delegations(id,institution,project,task,manager,assignee,state,result,created,mode,workflow,phase) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(delegation,iid,pid,task,manager,assignee,'running','',int(time.time()),assignment_mode,workflow,phase))
+            if workflow:cx.execute("UPDATE studio_workflows SET state='running',updated=? WHERE id=?",(int(time.time()),workflow))
+            return dict(id=delegation,task=task,state='running',assignee=assignee,title=assignee_title,mode=assignment_mode,workflow=workflow,phase=phase)
+
+    def start_workflow(self,iid,pid,actor,title,goal):
+        title=bounded(title,160,'workflow title',empty=False);goal=bounded(goal,2000,'workflow goal',empty=False)
+        with self.db() as cx,cx:
+            if self.member(cx,iid,actor)!='Studio Lead':raise PermissionError('Only the Studio Lead starts a staged project workflow')
+            project=self.project(cx,pid,iid)
+            if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close') LIMIT 1",(iid,pid)).fetchone():raise RuntimeError('This project already has an active staged workflow')
+            source=cx.execute("SELECT id,digest FROM studio_sources WHERE id=? AND institution=? AND state='active'",(project['source'],iid)).fetchone()
+            if not source:raise PermissionError('The project reference source is unavailable')
+            ref=ident('studio-workflow');now=int(time.time())
+            cx.execute('INSERT INTO studio_workflows VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',(ref,iid,pid,title,goal,'planning','active',source['id'],source['digest'],encoded({}),encoded([]),now,now))
+        self.refresh_project_manifest(pid)
+        return self.workflow_view(iid,ref)
+
+    def workflow_view(self,iid,ref):
+        with self.db() as cx:
+            row=cx.execute('SELECT * FROM studio_workflows WHERE id=? AND institution=?',(ref,iid)).fetchone()
+            if not row:raise PermissionError('Workflow unavailable')
+            self.project(cx,row['project'],iid)
+            steps=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(ref,))]
+            out=dict(row);out['artifacts']=json.loads(out['artifacts']);out['history']=json.loads(out['history']);out['steps']=steps
+            return out
+
+    def save_workflow_step(self,iid,ref,pid,actor,title,body,evidence):
+        title=bounded(title,120,'workflow step title',empty=False);body=bounded(body,1600,'workflow step',empty=False)
+        with self.db() as cx,cx:
+            self.member(cx,iid,actor)
+            wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=? AND state='running' AND phase IN ('planning','middle')",(ref,iid,pid)).fetchone()
+            if not wf:raise PermissionError('No active planning or middle-department workflow step')
+            if not cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND assignee=? AND state='running'",(ref,wf['phase'],actor)).fetchone():raise PermissionError('Only the assigned department resident can checkpoint this workflow')
+            count=cx.execute('SELECT count(*) FROM studio_workflow_steps WHERE workflow=?',(ref,)).fetchone()[0]
+            if count>=64:raise ValueError('Workflow checkpoint limit reached')
+            evidence_rows=self.evidence(cx,iid,evidence);evidence_payload=encoded(evidence_rows)
+            digest=sha(encoded(dict(workflow=ref,phase=wf['phase'],ordinal=count+1,title=title,body=body,evidence=evidence_payload)))
+            step=ident('studio-workflow-step');now=int(time.time())
+            cx.execute('INSERT INTO studio_workflow_steps VALUES(?,?,?,?,?,?,?,?,?,?,?)',(step,ref,iid,pid,wf['phase'],count+1,title,body,evidence_payload,digest,now))
+            cx.execute('UPDATE studio_workflows SET updated=? WHERE id=?',(now,ref))
+        self.refresh_project_manifest(pid)
+        return dict(id=step,workflow=ref,phase=wf['phase'],ordinal=count+1,digest=digest)
+
+    def close_workflow(self,iid,ref,actor,summary):
+        summary=bounded(summary,2000,'workflow closeout',empty=False)
+        with self.db() as cx,cx:
+            if self.member(cx,iid,actor)!='Studio Lead':raise PermissionError('Only the Studio Lead closes a workflow')
+            wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND state='ready_to_close' AND phase='verification'",(ref,iid)).fetchone()
+            if not wf:raise PermissionError('Workflow must finish the verification phase before closure')
+            artifacts=json.loads(wf['artifacts']);history=json.loads(wf['history']);history.append(dict(event='closed',summary=summary,at=int(time.time())))
+            artifacts['closeout']=dict(summary=summary,digest=sha(summary))
+            cx.execute("UPDATE studio_workflows SET state='complete',artifacts=?,history=?,updated=? WHERE id=?",(encoded(artifacts),encoded(history),int(time.time()),ref));pid=wf['project']
+        self.refresh_project_manifest(pid)
+        return dict(id=ref,state='complete',summary=summary)
+
+    def return_workflow(self,iid,ref,actor,reason):
+        reason=bounded(reason,1000,'workflow return reason',empty=False)
+        with self.db() as cx,cx:
+            if self.member(cx,iid,actor)!='Studio Lead':raise PermissionError('Only the Studio Lead routes a workflow back for changes')
+            wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND state='ready_to_close' AND phase='verification'",(ref,iid)).fetchone()
+            if not wf:raise PermissionError('A completed verification result is required before returning to implementation')
+            history=json.loads(wf['history']);history.append(dict(event='returned_to_implementation',reason=reason,at=int(time.time())))
+            cx.execute("UPDATE studio_workflows SET state='active',phase='implementation',history=?,updated=? WHERE id=?",(encoded(history),int(time.time()),ref));pid=wf['project']
+        self.refresh_project_manifest(pid)
+        return dict(id=ref,state='active',phase='implementation',reason=reason)
 
     def add_message(self,iid,sender,body,project='',thread=None):
         if sender not in ('owner','captain','studio-operations'):
@@ -572,6 +650,17 @@ class Store:
             text=bounded(result,6000,'delegated report',empty=True)
             cx.execute('UPDATE studio_delegations SET state=?,result=? WHERE id=?',(state,text,delegation))
             cx.execute('UPDATE studio_tasks SET state=?,notes=? WHERE id=?',( 'done' if state=='complete' else 'blocked', text,row['task']))
+            if row['workflow']:
+                wf=cx.execute('SELECT * FROM studio_workflows WHERE id=?',(row['workflow'],)).fetchone()
+                if not wf or wf['phase']!=row['phase'] or wf['state']!='running':raise RuntimeError('Workflow changed while its phase assignment was running')
+                artifacts=json.loads(wf['artifacts']);history=json.loads(wf['history']);entry=dict(assignment=delegation,task=row['task'],phase=row['phase'],state=state,result=text,digest=sha(text),at=int(time.time()))
+                artifacts.setdefault(row['phase'],[]).append(entry);history.append(dict(event='phase_'+state,phase=row['phase'],assignment=delegation,at=int(time.time())))
+                if state!='complete':next_phase=row['phase'];workflow_state='blocked'
+                elif row['phase']=='planning':next_phase='middle';workflow_state='active'
+                elif row['phase']=='middle':next_phase='implementation';workflow_state='active'
+                elif row['phase']=='implementation':next_phase='verification';workflow_state='active'
+                else:next_phase='verification';workflow_state='ready_to_close'
+                cx.execute('UPDATE studio_workflows SET phase=?,state=?,artifacts=?,history=?,updated=? WHERE id=?',(next_phase,workflow_state,encoded(artifacts),encoded(history),int(time.time()),row['workflow']))
 
     def learn(self,iid,pid,work_order,actor,scope,lesson,evidence,appointment_id=None):
         if scope not in ('project','institution'):raise ValueError('Learning scope must be project or institution')
