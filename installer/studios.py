@@ -74,6 +74,7 @@ class Studios:
         self.workbench=workbench or Workbench(self.store);self.lock=threading.RLock()
         self.pool=ThreadPoolExecutor(max_workers=4,thread_name_prefix='studio');self.jobs={};self.guards={};self.deadlines={}
         with self.store.db() as cx,cx:cx.execute("UPDATE studio_jobs SET state='paused',reason='Restarted; resume explicitly' WHERE state='running'")
+        self.store.ensure_project_manifests()
 
     @property
     def active(self):return bool(self.jobs)
@@ -126,6 +127,7 @@ class Studios:
         if raw is not None and not result.get('duplicate'):
             folder=self.store.directory/iid.split(':')[1]/'archive'
             atomic(folder/(result['source'].split(':')[1]+'.original.zip'),raw)
+            self.store.refresh_project_manifest(result['project'])
         if request.get('upload'):source.unlink()
         return result
 
@@ -461,6 +463,11 @@ class Studios:
             return self.workbench.install_tools()
         if op=='resume_workbench':self.workbench.resume();return self.workbench.status()
         if op=='example':return self.store.ingest(iid,'First workstation experiment',files(self.workbench.control/'studio_sdk'),dict(kind='bundled-example'))
+        if op=='project_manifest':return self.store.get_project_manifest(iid,r['project'])
+        if op=='recovery_check':
+            with self.store.db() as cx:jobs=[dict(x) for x in cx.execute('SELECT id,state,reason FROM studio_jobs WHERE institution=? AND project=? ORDER BY created DESC',(iid,r['project']))]
+            if self.active or any(x['state']=='running' for x in jobs):raise RuntimeError('Pause studio jobs and wait for them to stop before recovery verification')
+            check=self.store.recovery_check(iid,r['project']);check['jobs_paused']=True;check['jobs_checked']=len(jobs);return check
         if op=='tree':return self.store.tree(r['project'])
         if op=='read':return self.store.read(r['project'],r['path'],r.get('start',1),r.get('lines',120))
         if op=='search':return self.store.search(r['project'],r['query'])
@@ -475,5 +482,8 @@ class Studios:
         if op=='cartridge':return self.workbench.cartridge(r['build'],iid)[0]
         if op=='export':
             from studio_player import export
-            return dict(filename='studio-cartridge.zip',base64=base64.b64encode(export(self.workbench.cartridge(r['build'],iid)[0])).decode())
+            cartridge,build=self.workbench.cartridge(r['build'],iid);package=export(cartridge);export_id=ident('studio-export')
+            notice='External copy: this downloaded player and any saves it creates are outside studio backup and cannot be recalled by source withdrawal.'
+            self.store.record_external_export(build['project'],dict(id=export_id,build=r['build'],created=int(time.time()),cartridge_sha256=sha(package),external_copy=True,managed_backup=False,withdrawal_recall=False,notice=notice))
+            return dict(filename='studio-cartridge.zip',base64=base64.b64encode(package).decode(),export_id=export_id,external_copy=True,notice=notice)
         raise ValueError('Unknown studio owner operation')
