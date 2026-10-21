@@ -53,7 +53,7 @@ restore {saved}; task {title,notes,state,task(optional)};
 help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test|test-plan"}; team_status {}; workflow_start {title,goal}; workflow_status {workflow}; workflow_assign {workflow}; workflow_step {workflow,title,body,evidence:[{source,path,digest,quote}]}; workflow_retry {workflow,reason}; workflow_close {workflow,summary}; workflow_return {workflow,reason}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
 learn {scope:"project|institution",lesson,evidence}; learning_none {reason}; note {text}; done {summary}.
 Assignments are saved durable work orders dispatched as independent resident jobs.
-For substantial adaptation or prototype work, start a staged workflow and move it through Planning, Middle Department test planning, Implementation, then independent Review. Assign only the current phase, wait for its durable result, inspect workflow_status, then assign the next phase. Planning must create a reverse scaffold from the immutable archive source; Middle must write test cases and acceptance criteria before implementation. Never bypass the phase gate with an ordinary delivery assignment while a staged workflow is active. Use workflow_retry for a blocked phase, workflow_return after failed verification, and workflow_close only after successful verification. The Studio Lead assigns Lead Designers to Planning, Systems designers to Middle test planning, Lead Developers to Implementation, and Playtest reviewers to Review. During Implementation, the Lead Developer may delegate up to eight bounded implementation or analysis subtasks over the assignment, one at a time. Each subtask is durably linked to its Lead Developer parent and the same workflow phase, and receives the Middle Department checkpoints. Specialists cannot delegate. Wait for its report before assigning another, editing the shared project files, or building/testing. Use team_status to inspect each result; after all subtasks are complete or blocked, consolidate the findings before finishing the Lead Developer assignment. A blocked subtask does not automatically block the phase if the Lead Developer explains how it was handled. Outside a staged workflow, ordinary technical assignments follow the same Studio Lead to Lead Developer to specialist hierarchy. Every work session must close
+For substantial adaptation or prototype work, start a staged workflow and move it through Planning, Design Integration and Production Planning, Implementation, then independent Review. Assign only the current phase, wait for its durable result, inspect workflow_status, then assign the next phase. Planning must create a reverse scaffold from the immutable archive source; Design Integration and Production Planning must write test cases and acceptance criteria before implementation. Never bypass the phase gate with an ordinary delivery assignment while a staged workflow is active. Use workflow_retry for a blocked phase, workflow_return after failed verification, and workflow_close only after successful verification. The Studio Lead assigns Lead Designers to Planning, Systems designers to Design Integration and Production Planning test planning, Lead Developers to Implementation, and Playtest reviewers to Review. During Implementation, the Lead Developer may delegate up to eight bounded implementation or analysis subtasks over the assignment, one at a time. Each subtask is durably linked to its Lead Developer parent and the same workflow phase, and receives the Design Integration and Production Planning checkpoints. Specialists cannot delegate. Wait for its report before assigning another, editing the shared project files, or building/testing. Use team_status to inspect each result; after all subtasks are complete or blocked, consolidate the findings before finishing the Lead Developer assignment. A blocked subtask does not automatically block the phase if the Lead Developer explains how it was handled. Outside a staged workflow, ordinary technical assignments follow the same Studio Lead to Lead Developer to specialist hierarchy. Every work session must close
 out with learn or learning_none before done. Temporary
 appointments are limited to one approved project work order and expire or can be revoked.
 Builds and execution are sandboxed host services. You have no shell, network, external
@@ -87,7 +87,7 @@ You own the Planning Department stage in a staged workflow. For this assignment,
 route the design to technical delivery.'''
 
 LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Developer responsible for technical delivery. If this is a staged
-Implementation assignment, begin by reading the Planning and Middle Department workflow
+Implementation assignment, begin by reading the Planning Department and Design Integration and Production Planning Department workflow
 checkpoints. Convert them into a small build plan, implement the feature, and use up to eight bounded implementation or analysis subtasks over the assignment, one at a time.
 Wait for each durable report before assigning the next child or editing, building, or testing
 the shared project. Delegate only to approved
@@ -107,8 +107,8 @@ evidence, results, and uncertainty; never expand membership or publish/approve l
 material. Finish with learn or learning_none, then done so your manager receives a durable
 report.'''
 
-MIDDLE_TEST_PLAN_SYSTEM=WORK_SYSTEM+'''
-You are the Middle Department test planner. Use the Planning Department reverse scaffold and cited immutable-source evidence. Before any implementation, create a practical test plan as saved workflow_step checkpoints: observable assertions, input sequences/seeds, expected state or screen outcomes where knowable, resource limits, and explicit unverified questions. Do not edit, build, or run code. Keep expected outcomes grounded in evidence; mark uncertain visual expectations as unverified. Finish with learning_none then done.'''
+DESIGN_INTEGRATION_AND_PRODUCTION_PLANNING_SYSTEM=WORK_SYSTEM+'''
+You are the test planner for the Design Integration and Production Planning Department. Use the Planning Department reverse scaffold and cited immutable-source evidence. Before any implementation, create a practical test plan as saved workflow_step checkpoints: observable assertions, input sequences/seeds, expected state or screen outcomes where knowable, resource limits, and explicit unverified questions. Do not edit, build, or run code. Keep expected outcomes grounded in evidence; mark uncertain visual expectations as unverified. Finish with learning_none then done.'''
 
 TESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent Playtest Reviewer assigned to verify a separate implementation.
 You may inspect files, build and run the provided tests or bounded workstation checks, but
@@ -561,13 +561,13 @@ class Studios:
             if assignment_id and action in ('workflow_start','workflow_assign','workflow_retry','workflow_close','workflow_return'):
                 raise PermissionError('Only the Studio Lead controls workflow routing')
             if assignment_id and action=='workflow_step' and (args.get('workflow')!=workflow or workflow_phase not in ('planning','middle')):
-                raise PermissionError('Workflow checkpoints are limited to the assigned planning or middle phase')
+                raise PermissionError('Workflow checkpoints are limited to the assigned Planning or Design Integration and Production Planning phase')
             if assignment_id and workflow_phase=='planning' and action in ('tree','read','search'):
                 raise PermissionError('Planning Department reads the immutable archive through source_tree and source only')
             if assignment_id and action in ('source_tree','source') and workflow_phase=='planning' and args.get('source')!=self.store.workflow_view(iid,workflow)['source']:
                 raise PermissionError('Planning is limited to the workflow immutable archive source')
             if assignment_id and workflow_phase in ('planning','middle') and action in ('edit','patch','build','tests','create_machine','run_machine','restore'):
-                raise PermissionError('Planning and middle-department stages are read-only; implementation starts only after the test plan is complete')
+                raise PermissionError('Planning Department and Design Integration and Production Planning Department stages are read-only; implementation starts only after the test plan is complete')
         if row.get('kind')=='adaptation-plan':
             allowed={'source_tree','source','sdk','knowledge_search','done'}
             if action not in allowed:raise PermissionError('Adaptation planning is read-only; the owner must approve a plan before implementation')
@@ -673,7 +673,7 @@ class Studios:
             role,mode=targets[phase]
             with self.store.db() as cx:target=cx.execute('SELECT resident FROM institution_members WHERE institution=? AND title=? ORDER BY resident LIMIT 1',(iid,role)).fetchone()
             if not target:raise ValueError('No approved '+role+' is available for this workflow stage')
-            assignment=self.store.delegate(iid,pid,actor,target[0],bounded(args.get('title',phase.title()+' stage'),200,'assignment title'),bounded(args.get('notes',workflow['goal']),2000,'assignment notes',empty=True),mode,workflow['id'],phase)
+            assignment=self.store.delegate(iid,pid,actor,target[0],bounded(args.get('title',workflow['phase_label']+' assignment'),200,'assignment title'),bounded(args.get('notes',workflow['goal']),2000,'assignment notes',empty=True),mode,workflow['id'],phase)
             job=self.start(dict(institution=iid,project=pid,kind='assignment',assignment_id=assignment['id'],workflow=workflow['id'],workflow_phase=phase,minutes=60,turns=96,thread_id=settings.get('thread_id','')))
             result=dict(assignment,job=job['id'],state='queued',independent_worker=True)
         elif action=='workflow_step':result=self.store.save_workflow_step(iid,args['workflow'],pid,actor,args['title'],args['body'],args.get('evidence',[]))
@@ -779,7 +779,7 @@ class Studios:
                     system=(ADAPTATION_PLAN_SYSTEM if row['kind']=='adaptation-plan' else
                             MANAGER_SYSTEM if settings.get('actor_title')=='Studio Lead' else
                             LEAD_DESIGNER_SYSTEM if assignment_mode=='design' else
-                            MIDDLE_TEST_PLAN_SYSTEM if assignment_mode=='test-plan' else
+                            DESIGN_INTEGRATION_AND_PRODUCTION_PLANNING_SYSTEM if assignment_mode=='test-plan' else
                             LEAD_DEVELOPER_SYSTEM if assignment_mode=='lead-developer' else
                             TESTER_SYSTEM if assignment_mode=='test' else
                             ASSIGNMENT_SYSTEM if row['kind']=='assignment' else WORK_SYSTEM)
