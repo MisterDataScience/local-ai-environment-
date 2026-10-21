@@ -771,6 +771,10 @@ class Store:
             out['village_residents']=[dict(r) for r in cx.execute("SELECT id,role FROM specialists WHERE status='active'")]
             out['appointments']=[dict(r) for r in cx.execute('SELECT * FROM studio_appointments WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
             out['delegations']=[dict(r) for r in cx.execute('SELECT * FROM studio_delegations WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
+            out['workflows']=[dict(r) for r in cx.execute('SELECT * FROM studio_workflows WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
+            for workflow in out['workflows']:
+                workflow['artifacts']=json.loads(workflow['artifacts']);workflow['history']=json.loads(workflow['history'])
+                workflow['steps']=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(workflow['id'],))]
             out['learnings']=[dict(r) for r in cx.execute('SELECT * FROM studio_learnings WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
             out['studio_messages']=[dict(r) for r in cx.execute('SELECT id,thread,project,sender,body,response,state,job,created FROM studio_messages WHERE institution=? ORDER BY rowid DESC LIMIT 50',(iid,))]
             out['saved_machines']=[p.stem for p in (self.directory/iid.split(':')[1]/'machines').glob('*.json')]
