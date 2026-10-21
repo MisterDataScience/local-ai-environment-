@@ -13,6 +13,7 @@ import village
 import village_memory as memory
 from studio_store import Store,unpack,files,sha
 from studios import Studios
+from studio_roles import ACTION_SPECS,ROLE_ACTIONS,CORE_STAFF_ROLES,MAX_SPECIALIST_SUBTASKS
 
 
 class Engine:
@@ -48,6 +49,14 @@ class StudioTests(unittest.TestCase):
         deadline=time.monotonic()+5
         while self.c.active and time.monotonic()<deadline:time.sleep(.01)
         with self.s.db() as cx:return dict(cx.execute('SELECT * FROM studio_jobs WHERE id=?',(jid,)).fetchone())
+    def test_role_action_profiles_are_canonical_and_playtest_is_report_only(self):
+        self.assertTrue(all(action in ACTION_SPECS for profile in ROLE_ACTIONS.values() if isinstance(profile,(set,frozenset)) for action in profile))
+        self.assertNotIn('finding',ROLE_ACTIONS['test'])
+        self.assertIn('workflow_verify',ROLE_ACTIONS['test'])
+        self.assertIn('workflow_return',ROLE_ACTIONS['manager'])
+        self.assertEqual(MAX_SPECIALIST_SUBTASKS,3)
+        self.assertEqual(len(CORE_STAFF_ROLES),5)
+
     def test_staged_workflow_enforces_department_order_and_records_provenance(self):
         residents={}
         for proposal in self.s.prepare_staff(self.i):
@@ -55,7 +64,7 @@ class StudioTests(unittest.TestCase):
             residents[approved['title']]=approved['resident']
         lead=residents['Studio Lead'];designer=residents['Lead Designer'];test_planner=residents['Systems designer']
         developer=residents['Lead Developer'];reviewer=residents['Playtest reviewer']
-        engine=residents['Engine specialist']
+        engine=residents['Systems designer']
         workflow=self.s.start_workflow(self.i,self.p['project'],lead,'Adapt counter game','Extract one small portable-C experiment')
         ref=workflow['id'];project=self.p['project']
         with self.assertRaises(PermissionError):
@@ -113,10 +122,20 @@ class StudioTests(unittest.TestCase):
         self.assertEqual(child_states,{'complete','blocked'})
         self.assertTrue(any('bounded update-loop change' in child['result'] for child in implementation['children']))
         test=self.s.delegate(self.i,project,lead,reviewer,'Verify experiment','',mode='test',workflow=ref,phase='verification')
+        review_row=dict(id='playtest-job',kind='assignment',institution=self.i,project=project,settings=json.dumps(dict(actor=reviewer,actor_title='Playtest reviewer',objective='Verify the staged build.',assignment_id=test['id'],assignment_mode='test',workflow=ref,workflow_phase='verification')))
+        review_packet=self.c.work_packet(review_row,dict(notes='',last_result={}))
+        self.assertIn('workflow_verify',review_packet['available_actions'])
+        self.assertIn('workflow_read',review_packet['available_actions'])
+        self.assertNotIn('finding',review_packet['available_actions'])
+        with self.assertRaises(PermissionError):
+            self.c.work_action(review_row,dict(notes='',last_result={}),dict(action='finding',args=dict(category='Observed',text='Duplicate path.',evidence=['evidence:00000000000000000000000000000000'])))
         verification=dict(workflow=ref,verdict='verified',build=dict(build_id='build-001',source_digest='a'*64,build_status='success',runtime_status='loaded',errors=[],resources={'peak_memory_bytes':1024}),implementation_claims=[dict(claim='Update increments the counter.',status='reproduced',result='Replayed the update and observed one increment.',evidence=['build-001'])],tests=[dict(test_id='counter-once',description='One update increments counter once.',seed=1,inputs=['A'],expected='counter is 1',actual='counter is 1',status='passed',evidence=['build-001'])],findings=[],unverified_questions=[],explanation='The build loaded and the supplied deterministic assertion passed.')
         with self.assertRaises(ValueError):
             self.s.save_workflow_verification(self.i,ref,test['id'],reviewer,verification|dict(tests=[verification['tests'][0]|dict(status='failed')]))
         saved=self.s.save_workflow_verification(self.i,ref,test['id'],reviewer,verification)
+        page,_=self.c.work_action(review_row,dict(notes='',last_result={}),dict(action='workflow_read',args=dict(workflow=ref,report_id=saved['id'],section='tests',offset=0,limit=2)))
+        self.assertEqual(page['items'][0]['input_count'],1)
+        self.assertNotIn('inputs',page['items'][0])
         self.s.finish_delegation(test['id'],'complete','Independent checks passed.')
         workflow_view=self.s.workflow_view(self.i,ref)
         self.assertEqual(workflow_view['state'],'ready_to_close')
@@ -189,7 +208,7 @@ class StudioTests(unittest.TestCase):
         self.s.ingest(self.i,'Second game',[('second.c',b'int counter; void tick(void) { counter += 2; }')],dict(kind='fixture'))
         job=self.c.start(dict(institution=self.i,kind='founding',turns=10))['id'];row=self.wait(job)
         self.assertEqual(row['state'],'complete',row['reason'])
-        proposals=self.s.view(self.i)['proposals'];self.assertTrue(any(p['kind']=='library' for p in proposals));self.assertEqual(sum(p['kind']=='staff' for p in proposals),6)
+        proposals=self.s.view(self.i)['proposals'];self.assertTrue(any(p['kind']=='library' for p in proposals));self.assertEqual(sum(p['kind']=='staff' for p in proposals),5)
         with self.s.db() as cx:self.assertEqual(len(village.status(cx)),5)
         self.assertTrue(all(p['state']=='pending' for p in proposals))
     def test_project_ownership_notes_and_explicit_resume(self):
@@ -266,7 +285,7 @@ class StudioTests(unittest.TestCase):
     def test_staff_proposals_add_studio_lead_and_lead_developer(self):
         proposals=self.s.prepare_staff(self.i)
         titles={p['payload']['title'] for p in self.s.view(self.i)['proposals'] if p['kind']=='staff'}
-        self.assertEqual(len(proposals),6)
+        self.assertEqual(len(proposals),5)
         self.assertIn('Studio Lead',titles);self.assertIn('Lead Developer',titles)
         self.assertTrue(all(p['state']=='pending' for p in self.s.view(self.i)['proposals'] if p['kind']=='staff'))
 
