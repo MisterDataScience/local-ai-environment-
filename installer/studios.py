@@ -50,7 +50,7 @@ build {kind:"cartridge"}; tests {build}; create_machine {build,seed,task(optiona
 run_machine {machine,steps:1..600,buttons:0..255}; observe {machine};
 inspect {machine,question}; snapshot {machine}; reset {machine,seed}; drop {machine};
 restore {saved}; task {title,notes,state,task(optional)};
-help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test"}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
+help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test"}; workflow_start {title,goal}; workflow_status {workflow}; workflow_assign {workflow}; workflow_step {workflow,title,body,evidence:[evidence IDs]}; workflow_retry {workflow,reason}; workflow_close {workflow,summary}; workflow_return {workflow,reason}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
 learn {scope:"project|institution",lesson,evidence}; learning_none {reason}; note {text}; done {summary}.
 Assignments are saved durable work orders dispatched as independent resident jobs.
 The Studio Lead assigns Lead Designers for design briefs and Lead Developers for technical
@@ -261,7 +261,7 @@ class Studios:
             if kind=='assignment':
                 active_assignments=cx.execute("SELECT count(*) FROM studio_jobs WHERE institution=? AND project=? AND kind='assignment' AND state IN ('queued','running')",(iid,pid)).fetchone()[0]
                 if active_assignments>=4:raise RuntimeError('Four independent assignments are already queued for this project')
-            settings=dict(turn_limit=turns,token_budget=64_000_000,actor=actor,actor_title=actor_title,objective=bounded(request_objective,2000,'objective'),appointment=appointment_id,allow_reference_build=bool(request.get('allow_reference_build',False)),retain_evidence_screenshots=bool(request.get('retain_evidence_screenshots',False)),plan_only=kind=='adaptation-plan',adaptation=adaptation,conversation_id=conversation['id'] if conversation else '',thread_id=conversation['thread'] if conversation else request.get('thread_id',''),assignment_id=assignment['id'] if assignment else '',assignment_mode=assignment['mode'] if assignment else '',followup_assignment=request.get('followup_assignment',''))
+            settings=dict(turn_limit=turns,token_budget=64_000_000,actor=actor,actor_title=actor_title,objective=bounded(request_objective,2000,'objective'),appointment=appointment_id,allow_reference_build=bool(request.get('allow_reference_build',False)),retain_evidence_screenshots=bool(request.get('retain_evidence_screenshots',False)),plan_only=kind=='adaptation-plan',adaptation=adaptation,conversation_id=conversation['id'] if conversation else '',thread_id=conversation['thread'] if conversation else request.get('thread_id',''),assignment_id=assignment['id'] if assignment else '',assignment_mode=assignment['mode'] if assignment else '',followup_assignment=request.get('followup_assignment',''),workflow=assignment['workflow'] if assignment else request.get('workflow',''),workflow_phase=assignment['phase'] if assignment else request.get('workflow_phase',''))
             progress=dict(cursor=0,offset=0,notes='',last_result={},processed_bytes=0,elapsed=0,phase='study')
             if kind=='work':
                 previous=cx.execute("SELECT progress FROM studio_jobs WHERE project=? AND kind='work' ORDER BY created DESC,rowid DESC LIMIT 1",(pid,)).fetchone()
@@ -508,7 +508,14 @@ class Studios:
             packet['accepted_learning']=learnings
             if row['kind']=='assignment':
                 packet['assignment']=dict(id=settings.get('assignment_id'),mode=settings.get('assignment_mode'),task=tasks[0] if tasks else None)
-            if row['kind']=='manager':packet['inbox']={'message':current_message,'recent_thread':conversation,'delegations':delegations,'available_projects':available_projects}
+            if row['kind']=='manager':
+                packet['inbox']={'message':current_message,'recent_thread':conversation,'delegations':delegations,'available_projects':available_projects}
+            if settings.get('workflow'):
+                workflow=self.store.workflow_view(iid,settings['workflow'])
+                packet['workflow']={k:workflow[k] for k in ('id','title','goal','phase','state','source','source_sha256','artifacts','history','steps')}
+                if settings.get('workflow_phase')=='planning':
+                    packet['files']=[]
+                    packet['workflow']['planning_rule']='Use only the immutable source archive as evidence. Do not inspect or modify the working copy.'
         return packet
 
     def work_action(self,row,progress,value):
@@ -518,19 +525,33 @@ class Studios:
         appointment_id=settings.get('appointment')
         assignment_id=settings.get('assignment_id');assignment_mode=settings.get('assignment_mode','')
         if settings.get('actor_title')=='Studio Lead':
-            manager_tools={'select_project','tree','read','search','reference','knowledge_search','source','source_tree','sdk','task','delegate','help','propose','note','learning_none','done'}
+            manager_tools={'select_project','tree','read','search','reference','knowledge_search','source','source_tree','sdk','task','delegate','workflow_start','workflow_status','workflow_assign','workflow_retry','workflow_close','workflow_return','help','propose','note','learning_none','done'}
             if action not in manager_tools:raise PermissionError('The Studio Lead coordinates work; implementation and testing belong to independently dispatched residents')
             if not pid and action not in ('note','learning_none','done','help','select_project'):
                 raise PermissionError('Choose an active project before assigning project work')
         if assignment_id:
             allowed={
-                'design':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','finding','note','learning_none','done'},
+                'design':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','workflow_step','finding','note','learning_none','done'},
+                'test-plan':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','workflow_step','finding','note','learning_none','done'},
+
+                'test-plan':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','workflow_step','finding','note','learning_none','done'},
+
                 'lead-developer':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','edit','patch','build','tests','create_machine','run_machine','observe','snapshot','reset','drop','inspect','finding','task','delegate','note','propose','learn','learning_none','done'},
                 'implementation':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','edit','patch','build','tests','create_machine','run_machine','observe','snapshot','reset','drop','inspect','finding','note','learn','learning_none','done'},
                 'analysis':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','note','learning_none','done'},
                 'test':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','build','tests','create_machine','run_machine','observe','snapshot','reset','drop','inspect','finding','note','learning_none','done'},
             }
             if action not in allowed.get(assignment_mode,set()):raise PermissionError('Assignment mode does not permit this action')
+        workflow=settings.get('workflow','');workflow_phase=settings.get('workflow_phase','')
+        if workflow:
+            if assignment_id and action in ('workflow_start','workflow_assign','workflow_retry','workflow_close','workflow_return'):
+                raise PermissionError('Only the Studio Lead controls workflow routing')
+            if assignment_id and action=='workflow_step' and (args.get('workflow')!=workflow or workflow_phase not in ('planning','middle')):
+                raise PermissionError('Workflow checkpoints are limited to the assigned planning or middle phase')
+            if assignment_id and action in ('source_tree','source') and workflow_phase=='planning' and args.get('source')!=self.store.workflow_view(iid,workflow)['source']:
+                raise PermissionError('Planning is limited to the workflow immutable archive source')
+            if assignment_id and workflow_phase in ('planning','middle') and action in ('edit','patch','build','tests','create_machine','run_machine','restore'):
+                raise PermissionError('Planning and middle-department stages are read-only; implementation starts only after the test plan is complete')
         if row.get('kind')=='adaptation-plan':
             allowed={'source_tree','source','sdk','knowledge_search','done'}
             if action not in allowed:raise PermissionError('Adaptation planning is read-only; the owner must approve a plan before implementation')
@@ -618,6 +639,25 @@ class Studios:
             assignment=self.store.delegate(iid,pid,actor,target,title,notes,mode)
             job=self.start(dict(institution=iid,project=pid,kind='assignment',assignment_id=assignment['id'],minutes=60,turns=96,thread_id=settings.get('thread_id','')))
             result=dict(assignment,job=job['id'],state='queued',independent_worker=True,can_edit=assignment['mode'] not in ('analysis','test'),can_run_tests=assignment['mode'] not in ('analysis',))
+        elif action=='workflow_start':
+            if settings.get('actor_title')!='Studio Lead':raise PermissionError('Only the Studio Lead starts staged workflows')
+            result=self.store.start_workflow(iid,pid,actor,args['title'],args['goal'])
+        elif action=='workflow_status':result=self.store.workflow_view(iid,args['workflow'])
+        elif action=='workflow_assign':
+            if settings.get('actor_title')!='Studio Lead':raise PermissionError('Only the Studio Lead assigns workflow phases')
+            workflow=self.store.workflow_view(iid,args['workflow']);phase=workflow['phase']
+            targets={'planning':('Lead Designer','design'),'middle':('Systems designer','test-plan'),'implementation':('Lead Developer','delivery'),'verification':('Playtest reviewer','test')}
+            if phase not in targets or workflow['state']!='active':raise PermissionError('Workflow is not ready for a department handoff')
+            role,mode=targets[phase]
+            with self.store.db() as cx:target=cx.execute('SELECT resident FROM institution_members WHERE institution=? AND title=? ORDER BY resident LIMIT 1',(iid,role)).fetchone()
+            if not target:raise ValueError('No approved '+role+' is available for this workflow stage')
+            assignment=self.store.delegate(iid,pid,actor,target[0],bounded(args.get('title',phase.title()+' stage'),200,'assignment title'),bounded(args.get('notes',workflow['goal']),2000,'assignment notes',empty=True),mode,workflow['id'],phase)
+            job=self.start(dict(institution=iid,project=pid,kind='assignment',assignment_id=assignment['id'],workflow=workflow['id'],workflow_phase=phase,minutes=60,turns=96,thread_id=settings.get('thread_id','')))
+            result=dict(assignment,job=job['id'],state='queued',independent_worker=True)
+        elif action=='workflow_step':result=self.store.save_workflow_step(iid,args['workflow'],pid,actor,args['title'],args['body'],args.get('evidence',[]))
+        elif action=='workflow_retry':result=self.store.retry_workflow(iid,args['workflow'],actor,args['reason'])
+        elif action=='workflow_close':result=self.store.close_workflow(iid,args['workflow'],actor,args['summary'])
+        elif action=='workflow_return':result=self.store.return_workflow(iid,args['workflow'],actor,args['reason'])
         elif action=='help':
             target=args['resident']
             with self.store.db() as cx:
