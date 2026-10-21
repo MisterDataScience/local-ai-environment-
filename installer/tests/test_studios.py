@@ -48,6 +48,39 @@ class StudioTests(unittest.TestCase):
         deadline=time.monotonic()+5
         while self.c.active and time.monotonic()<deadline:time.sleep(.01)
         with self.s.db() as cx:return dict(cx.execute('SELECT * FROM studio_jobs WHERE id=?',(jid,)).fetchone())
+    def test_staged_workflow_enforces_department_order_and_records_provenance(self):
+        residents={}
+        for proposal in self.s.prepare_staff(self.i):
+            approved=self.approve(proposal['id'])
+            residents[approved['title']]=approved['resident']
+        lead=residents['Studio Lead'];designer=residents['Lead Designer'];middle=residents['Systems designer']
+        developer=residents['Lead Developer'];reviewer=residents['Playtest reviewer']
+        workflow=self.s.start_workflow(self.i,self.p['project'],lead,'Adapt counter game','Extract one small portable-C experiment')
+        ref=workflow['id'];project=self.p['project']
+        with self.assertRaises(PermissionError):
+            self.s.delegate(self.i,project,lead,developer,'Skip stages','',mode='delivery')
+        plan=self.s.delegate(self.i,project,lead,designer,'Reverse scaffold','Map source architecture',mode='design',workflow=ref,phase='planning')
+        evidence=[dict(source=self.p['source'],path='game.c',digest=sha(b'int counter; void update(void) { counter++; }\\n'),quote='counter++')]
+        step=self.s.save_workflow_step(self.i,ref,project,designer,'Main loop','Observed update increments counter.',evidence)
+        self.assertEqual(step['phase'],'planning')
+        self.s.finish_delegation(plan['id'],'complete','Reverse scaffold recorded.')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'middle')
+        with self.assertRaises(PermissionError):
+            self.s.delegate(self.i,project,lead,developer,'Skip test plan','',mode='delivery',workflow=ref,phase='implementation')
+        mid=self.s.delegate(self.i,project,lead,middle,'Test plan','Define deterministic assertions.',mode='test-plan',workflow=ref,phase='middle')
+        self.s.save_workflow_step(self.i,ref,project,middle,'Counter assertion','After one update, counter increases by one.',evidence)
+        self.s.finish_delegation(mid['id'],'complete','Test plan saved.')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'implementation')
+        build=self.s.delegate(self.i,project,lead,developer,'Implement experiment','',mode='delivery',workflow=ref,phase='implementation')
+        self.s.finish_delegation(build['id'],'complete','Implementation report.')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'verification')
+        test=self.s.delegate(self.i,project,lead,reviewer,'Verify experiment','',mode='test',workflow=ref,phase='verification')
+        self.s.finish_delegation(test['id'],'complete','Independent checks passed.')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['state'],'ready_to_close')
+        self.s.close_workflow(self.i,ref,lead,'Verified and ready.')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['state'],'complete')
+        self.assertTrue(self.s.recovery_check(self.i,project)['ok'])
+
     def test_intake_preserves_original_and_work_edits_do_not_change_it(self):
         original=self.s.directory/self.i.split(':')[1]/'archive'/(self.p['source'].split(':')[1]+'.zip')
         before=original.read_bytes();r=self.s.read(self.p['project'],'game.c')
