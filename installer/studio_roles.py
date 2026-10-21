@@ -74,10 +74,6 @@ _RUN = frozenset({
     'build', 'tests', 'create_machine', 'run_machine', 'observe',
     'snapshot', 'reset', 'drop', 'inspect',
 })
-WORKFLOW_STEPS = frozenset({
-    'workflow_start', 'workflow_status', 'workflow_assign', 'workflow_step',
-    'workflow_verify', 'workflow_retry', 'workflow_close', 'workflow_return',
-})
 ROLE_ACTIONS = {
     'manager': _READ | frozenset({
         'select_project', 'task', 'delegate', 'workflow_start',
