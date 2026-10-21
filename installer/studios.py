@@ -486,7 +486,8 @@ class Studios:
                 all_workflow_steps=[step for step in workflow['steps'] if step.get('phase') in needed_phases]
                 workflow_step_count=len(all_workflow_steps)
                 workflow_counts={name:sum(step.get('phase')==name for step in all_workflow_steps) for name in sorted(needed_phases)}
-                workflow_steps=[step for name in ('planning','middle') if name in needed_phases for step in all_workflow_steps if step.get('phase')==name][:4]
+                workflow_counts={name:sum(step.get('phase')==name for step in all_workflow_steps) for name in sorted(needed_phases)}
+                workflow_steps=[step for name in ('planning','middle') if name in needed_phases for step in [item for item in all_workflow_steps if item.get('phase')==name][:2]]
                 artifacts=workflow.get('artifacts',{})
                 compact_artifacts={}
                 for key in ('required_review_checkpoint','planning','middle','implementation','verification_reports'):
@@ -664,7 +665,7 @@ class Studios:
             if pid and view['project']!=pid:raise PermissionError('Workflow belongs to another project')
             if settings.get('workflow') and settings['workflow']!=view['id']:raise PermissionError('Assigned residents may read only their workflow')
             offset=args.get('offset',0);limit=args.get('limit',4)
-            if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=4:raise ValueError('Workflow reads are limited to four records from a nonnegative offset')
+            if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=2:raise ValueError('Workflow reads are limited to two records from a nonnegative offset')
             if args.get('report_id'):
                 report=next((r for r in view.get('artifacts',{}).get('verification_reports',[]) if r.get('id')==args['report_id']),None)
                 if not report:raise ValueError('Verification report unavailable in this workflow')
