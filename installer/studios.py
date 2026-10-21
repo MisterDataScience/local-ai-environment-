@@ -442,7 +442,7 @@ class Studios:
                 else:tasks=[dict(r) for r in cx.execute('SELECT id,title,state,notes FROM studio_tasks WHERE project=? ORDER BY rowid DESC LIMIT 6',(pid,))]
                 docs=[dict(r) for r in cx.execute("SELECT id,title FROM library_documents WHERE collection=? AND state='approved' LIMIT 12",(scope,))]
                 sources=[dict(r) for r in cx.execute("SELECT id,project FROM studio_sources WHERE institution=? AND state='active'",(iid,))]
-                learnings=[dict(r) for r in cx.execute("SELECT id,scope,lesson,evidence FROM studio_learnings WHERE institution=? AND state='accepted' AND (scope='institution' OR project=?) ORDER BY created DESC LIMIT 5",(iid,pid))]
+                learnings=[dict(r) for r in cx.execute("SELECT id,scope,lesson,evidence FROM studio_learnings WHERE institution=? AND state='accepted' AND (scope='institution' OR project=?) ORDER BY created DESC LIMIT 3",(iid,pid))]
                 delegations=[dict(r) for r in cx.execute("SELECT d.id,d.manager,d.assignee,d.state,d.result,t.title FROM studio_delegations d JOIN studio_tasks t ON t.id=d.task WHERE d.institution=? AND d.project=? ORDER BY d.created DESC LIMIT 12",(iid,pid))] if pid else []
                 current_message=None;conversation=[]
                 if row['kind']=='manager' and settings.get('conversation_id'):
@@ -456,11 +456,11 @@ class Studios:
                 item['input_count']=len(record.get('input_sequence',[]))
                 evidence.append(item)
         machine_mode=settings.get('assignment_mode','')
-        machines=[] if appointment_id or machine_mode not in ('lead-developer','implementation','test') else [m for m in self.workbench.status()['instances'] if m['institution']==iid][:4]
+        machines=[] if appointment_id or (row['kind'] not in ('work','manager') and machine_mode not in ('lead-developer','implementation','test')) else [m for m in self.workbench.status()['instances'] if m['institution']==iid][:4]
         packet=dict(objective=settings['objective'],resident=actor,instructions=profile,memory_map=navigation,approved_documents=docs[:4],members=members[:12],project=pid,sources=sources[:8],notes=progress['notes'][-1200:],last_result=progress['last_result'],tasks=tasks,evidence=evidence,files=[] if settings.get('plan_only') or not pid else self.store.tree(pid)[:24],machines=machines)
         if appointment_id:packet['temporary_appointment']=dict(title=appointment['title'],role=appointment['role'],work_order=appointment['work_order'],expires=appointment['expires'])
         else:
-            packet['accepted_learning']=learnings
+            packet['accepted_learning']=[dict(id=item['id'],scope=item['scope'],lesson=item['lesson'][:500]) for item in learnings]
             if row['kind']=='assignment':
                 assignment_row=None
                 if settings.get('assignment_id'):
@@ -470,14 +470,15 @@ class Studios:
                 if settings.get('assignment_mode')=='lead-developer' and assignment_row and not assignment_row['parent']:
                     packet['implementation_team']=self.store.team_status(iid,pid,actor,settings['assignment_id'])
             if row['kind']=='manager':
-                packet['inbox']={'message':current_message,'recent_thread':conversation,'delegations':delegations,'available_projects':available_projects}
+                packet['inbox']={'message':current_message,'recent_thread':[dict(sender=m['sender'],body=m['body'][-700:],response=m['response'][-700:],state=m['state']) for m in conversation],'delegations':[dict(id=x['id'],assignee=x['assignee'],state=x['state'],title=x['title'],result=x['result'][-600:]) for x in delegations[:6]],'available_projects':available_projects}
             if settings.get('workflow'):
                 workflow=self.store.workflow_view(iid,settings['workflow'])
                 phase=settings.get('workflow_phase','')
                 needed_phases={'planning'} if phase=='planning' else {'planning','middle'}
                 all_workflow_steps=[step for step in workflow['steps'] if step.get('phase') in needed_phases]
                 workflow_step_count=len(all_workflow_steps)
-                workflow_steps=all_workflow_steps[:4]
+                workflow_counts={name:sum(step.get('phase')==name for step in all_workflow_steps) for name in sorted(needed_phases)}
+                workflow_steps=[step for name in ('planning','middle') if name in needed_phases for step in all_workflow_steps if step.get('phase')==name][:4]
                 artifacts=workflow.get('artifacts',{})
                 compact_artifacts={}
                 for key in ('required_review_checkpoint','planning','middle','implementation','verification_reports'):
@@ -499,7 +500,7 @@ class Studios:
                             item.pop('children',None)
                             compact_artifacts[key]=[item]
                 packet['workflow']={k:workflow[k] for k in ('id','title','goal','phase','state','source','source_sha256')}
-                packet['workflow'].update(artifacts=compact_artifacts,history=workflow.get('history',[])[-4:],steps=workflow_steps,step_count=workflow_step_count)
+                packet['workflow'].update(artifacts=compact_artifacts,history=workflow.get('history',[])[-4:],steps=workflow_steps,step_count=workflow_step_count,checkpoint_counts=workflow_counts)
                 if settings.get('workflow_phase')=='planning':
                     packet['files']=[]
                     packet['workflow']['planning_rule']='Use only the immutable source archive as evidence. Do not inspect or modify the working copy.'
