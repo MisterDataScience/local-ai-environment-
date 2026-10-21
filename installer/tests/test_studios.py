@@ -113,8 +113,15 @@ class StudioTests(unittest.TestCase):
         self.assertEqual(child_states,{'complete','blocked'})
         self.assertTrue(any('bounded update-loop change' in child['result'] for child in implementation['children']))
         test=self.s.delegate(self.i,project,lead,reviewer,'Verify experiment','',mode='test',workflow=ref,phase='verification')
+        verification=dict(workflow=ref,verdict='verified',build=dict(build_id='build-001',source_digest='a'*64,build_status='success',runtime_status='loaded',errors=[],resources={'peak_memory_bytes':1024}),implementation_claims=[dict(claim='Update increments the counter.',status='reproduced',evidence=['build-001'])],tests=[dict(test_id='counter-once',description='One update increments counter once.',seed=1,inputs=['A'],expected='counter is 1',actual='counter is 1',status='passed',evidence=['build-001'])],findings=[],unverified_questions=[],explanation='The build loaded and the supplied deterministic assertion passed.')
+        with self.assertRaises(ValueError):
+            self.s.save_workflow_verification(self.i,ref,test['id'],reviewer,verification|dict(tests=[verification['tests'][0]|dict(status='failed')]))
+        saved=self.s.save_workflow_verification(self.i,ref,test['id'],reviewer,verification)
         self.s.finish_delegation(test['id'],'complete','Independent checks passed.')
-        self.assertEqual(self.s.workflow_view(self.i,ref)['state'],'ready_to_close')
+        workflow_view=self.s.workflow_view(self.i,ref)
+        self.assertEqual(workflow_view['state'],'ready_to_close')
+        self.assertEqual(workflow_view['artifacts']['verification_reports'][0]['id'],saved['id'])
+        self.assertEqual(workflow_view['artifacts']['verification_reports'][0]['tests'][0]['status'],'passed')
         self.s.close_workflow(self.i,ref,lead,'Verified and ready.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['state'],'complete')
         self.assertTrue(self.s.recovery_check(self.i,project)['ok'])
@@ -191,6 +198,32 @@ class StudioTests(unittest.TestCase):
         row=self.wait(job);self.assertEqual(row['state'],'complete',row['reason'])
         self.assertIn('Keep this project note',json.loads(row['progress'])['notes'])
         calls=len(self.engine.calls);self.c.pause();time.sleep(.02);self.assertEqual(len(self.engine.calls),calls)
+    def test_playtest_return_to_middle_requires_checkpoints_linked_to_report(self):
+        residents={}
+        for proposal in self.s.prepare_staff(self.i):
+            approved=self.approve(proposal['id'])
+            residents[approved['title']]=approved['resident']
+        lead=residents['Studio Lead'];reviewer=residents['Playtest reviewer'];planner=residents['Systems designer']
+        workflow=self.s.start_workflow(self.i,self.p['project'],lead,'Review a source assumption','Verify the adaptation checkpoints')
+        ref=workflow['id']
+        with self.s.db() as cx,cx:cx.execute("UPDATE studio_workflows SET phase='verification',state='active' WHERE id=?",(ref,))
+        assignment=self.s.delegate(self.i,self.p['project'],lead,reviewer,'Verify the experiment','',mode='test',workflow=ref,phase='verification')
+        report=self.s.save_workflow_verification(self.i,ref,assignment['id'],reviewer,dict(verdict='return_to_middle',build=dict(build_id='build-002',source_digest='b'*64,build_status='success',runtime_status='loaded',errors=[],resources={}),tests=[dict(test_id='screen-state',description='Check expected screen state.',seed=7,inputs=['RIGHT'],expected='player moves right',actual='player remains still',status='failed',evidence=['machine-7'])],findings=[dict(id='finding-1',category='movement',severity='major',certainty='Observed',reproduction='Reset seed 7, press RIGHT for one step.',seed=7,inputs=['RIGHT'],expected='player moves right',actual='player remains still',evidence=['machine-7'],owner='Design Integration and Production Planning',confidence='high')],unverified_questions=[],explanation='The supplied checkpoint does not establish whether this input should move the player; revise the expected outcome before implementation.'))
+        self.s.finish_delegation(assignment['id'],'complete','Returned for test-plan clarification.')
+        view=self.s.workflow_view(self.i,ref)
+        self.assertEqual((view['phase'],view['state']),('middle','active'))
+        self.assertEqual(view['artifacts']['required_review_checkpoint'],report['id'])
+        revised=self.s.delegate(self.i,self.p['project'],lead,planner,'Revise the movement checkpoint','',mode='test-plan',workflow=ref,phase='middle')
+        with self.assertRaises(PermissionError):
+            self.s.save_workflow_step(self.i,ref,self.p['project'],planner,'Clarified movement','RIGHT moves the player one cell.',[])
+        step=self.s.save_workflow_step(self.i,ref,self.p['project'],planner,'Clarified movement','RIGHT moves the player one cell.',[],review_id=report['id'])
+        self.assertEqual(self.s.workflow_view(self.i,ref)['steps'][-1]['review_id'],report['id'])
+        self.s.finish_delegation(revised['id'],'complete','Revised checkpoint linked to the failed review.')
+        view=self.s.workflow_view(self.i,ref)
+        self.assertEqual((view['phase'],view['state']),('implementation','active'))
+        self.assertNotIn('required_review_checkpoint',view['artifacts'])
+        self.assertTrue(self.s.recovery_check(self.i,self.p['project'])['ok'])
+
     def test_owner_review_requires_matching_preview(self):
         ref=self.s.prepare_staff(self.i)[0]['id']
         with self.assertRaises(ValueError):self.s.review(ref,'stale','approve')
