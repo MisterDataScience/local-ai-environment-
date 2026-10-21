@@ -268,6 +268,7 @@ class Workbench:
         with self.lock:
             if mid not in self.machines or self.machines[mid]['institution']!=iid:raise PermissionError('Machine belongs to another institution or is not running')
             with self.store.db() as cx:self.store.project(cx,self.machines[mid]['project'],iid)
+            checkpoint_before=self.rpc(dict(operation='snapshot',machine=mid)) if operation in ('run','reset','restore') else None
             if operation=='run':
                 steps=args.get('steps',1)
                 if type(steps) is not int or not 0<=steps<=600:raise ValueError('A batch is 0 to 600 steps')
@@ -284,7 +285,10 @@ class Workbench:
             if operation in ('run','reset','restore'):
                 state=self.rpc(dict(operation='snapshot',machine=mid))
                 target=self.store.directory/iid.split(':')[1]/'machines'/(mid.split(':')[1]+'.json')
-                self.write_checkpoint(iid,target,self.checkpoint_payload(mid,state),replace=True)
+                try:self.write_checkpoint(iid,target,self.checkpoint_payload(mid,state),replace=True)
+                except Exception:
+                    self.rpc(dict(operation='restore',machine=mid,state=checkpoint_before))
+                    raise
             return result
 
     def restore(self,iid,saved):
