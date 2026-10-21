@@ -580,8 +580,8 @@ class Store:
     def team_status(self,iid,pid,lead_developer,assignment):
         with self.db() as cx:
             if self.member(cx,iid,lead_developer)!='Lead Developer':raise PermissionError('Only a Lead Developer can inspect its assignment team')
-            root=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=? AND assignee=? AND mode='lead-developer' AND parent='' AND state='running'",(assignment,iid,pid,lead_developer)).fetchone()
-            if not root:raise PermissionError('Active Lead Developer assignment is unavailable')
+            root=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=? AND assignee=? AND mode='lead-developer' AND parent='' AND state IN ('running','blocked')",(assignment,iid,pid,lead_developer)).fetchone()
+            if not root:raise PermissionError('Lead Developer assignment is unavailable')
             rows=[dict(r) for r in cx.execute("SELECT d.id,d.task,d.assignee,d.state,d.result,d.mode,d.workflow,d.phase,t.title FROM studio_delegations d JOIN studio_tasks t ON t.id=d.task WHERE d.parent=? ORDER BY d.created,d.id",(assignment,))]
             for row in rows:row['result']=row['result'][:1600]
             return dict(assignment=assignment,workflow=root['workflow'],phase=root['phase'],total=len(rows),active=sum(r['state']=='running' for r in rows),children=rows)
@@ -707,10 +707,10 @@ class Store:
             children=[]
             if not row['parent'] and row['mode']=='lead-developer':
                 children=[dict(r) for r in cx.execute("SELECT d.id,d.task,d.assignee,d.state,d.result,t.title FROM studio_delegations d JOIN studio_tasks t ON t.id=d.task WHERE d.parent=? ORDER BY d.created,d.id",(delegation,))]
-                if any(child['state']=='running' for child in children):
+                if state=='complete' and any(child['state']=='running' for child in children):
                     raise ValueError('Specialist subtasks are still running; inspect team_status and consolidate their reports before finishing')
             if row['parent']:
-                parent=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=? AND assignee=? AND mode='lead-developer' AND parent='' AND state='running'",(row['parent'],row['institution'],row['project'],row['manager'])).fetchone()
+                parent=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=? AND assignee=? AND mode='lead-developer' AND parent='' AND state IN ('running','blocked')",(row['parent'],row['institution'],row['project'],row['manager'])).fetchone()
                 if not parent:raise PermissionError('The assigned Lead Developer parent is unavailable')
             cx.execute('UPDATE studio_delegations SET state=?,result=? WHERE id=?',(state,text,delegation))
             cx.execute('UPDATE studio_tasks SET state=?,notes=? WHERE id=?',( 'done' if state=='complete' else 'blocked', text,row['task']))
@@ -718,7 +718,18 @@ class Store:
                 wf=cx.execute('SELECT * FROM studio_workflows WHERE id=?',(row['workflow'],)).fetchone()
                 if not wf or wf['phase']!='implementation' or wf['state'] not in ('running','blocked'):raise RuntimeError('Workflow changed while a specialist assignment was running')
                 history=json.loads(wf['history']);history.append(dict(event='implementation_subtask_'+state,assignment=delegation,parent=row['parent'],at=int(time.time())))
-                cx.execute('UPDATE studio_workflows SET history=?,updated=? WHERE id=?',(encoded(history),int(time.time()),row['workflow']))
+                artifacts=json.loads(wf['artifacts'])
+                if parent['state']=='blocked':
+                    task=cx.execute('SELECT title FROM studio_tasks WHERE id=?',(row['task'],)).fetchone()
+                    report=dict(id=delegation,task=row['task'],title=task['title'],assignee=row['assignee'],state=state,result=text[:1600],digest=sha(text))
+                    for entry in artifacts.get('implementation',[]):
+                        if entry.get('assignment')==row['parent']:
+                            reports=entry.setdefault('children',[])
+                            existing=next((i for i,item in enumerate(reports) if item.get('id')==delegation),None)
+                            if existing is None:reports.append(report)
+                            else:reports[existing]=report
+                            break
+                cx.execute('UPDATE studio_workflows SET artifacts=?,history=?,updated=? WHERE id=?',(encoded(artifacts),encoded(history),int(time.time()),row['workflow']))
             elif row['workflow']:
                 wf=cx.execute('SELECT * FROM studio_workflows WHERE id=?',(row['workflow'],)).fetchone()
                 if not wf or wf['phase']!=row['phase'] or wf['state']!='running':raise RuntimeError('Workflow changed while its phase assignment was running')

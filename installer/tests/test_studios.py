@@ -111,6 +111,26 @@ class StudioTests(unittest.TestCase):
         self.assertEqual(self.s.workflow_view(self.i,ref)['state'],'complete')
         self.assertTrue(self.s.recovery_check(self.i,project)['ok'])
 
+    def test_blocked_implementation_waits_for_child_and_preserves_its_report_for_retry(self):
+        residents=self.staff();lead=residents['Studio Lead'];designer=residents['Lead Designer'];middle=residents['Systems designer']
+        developer=residents['Lead Developer'];engine=residents['Engine specialist']
+        project=self.p['project'];workflow=self.s.start_workflow(self.i,project,lead,'Adapt counter game','Implement one bounded experiment')['id']
+        planning=self.s.delegate(self.i,project,lead,designer,'Planning','Build the reverse scaffold.',mode='design',workflow=workflow,phase='planning')
+        self.s.finish_delegation(planning['id'],'complete','Scaffold saved.')
+        test_plan=self.s.delegate(self.i,project,lead,middle,'Middle test plan','Define observable acceptance checks.',mode='test-plan',workflow=workflow,phase='middle')
+        self.s.finish_delegation(test_plan['id'],'complete','Test plan saved.')
+        implementation=self.s.delegate(self.i,project,lead,developer,'Implementation','Implement the agreed experiment.',mode='delivery',workflow=workflow,phase='implementation')
+        child=self.s.delegate(self.i,project,developer,engine,'Bounded implementation task','Implement the counter update.',mode='implementation',workflow=workflow,phase='implementation',parent=implementation['id'])
+        self.s.finish_delegation(implementation['id'],'blocked','Lead Developer session ended before the child report arrived.')
+        self.assertEqual(self.s.workflow_view(self.i,workflow)['state'],'blocked')
+        with self.assertRaises(RuntimeError):self.s.retry_workflow(self.i,workflow,lead,'Retry implementation before the child finishes.')
+        self.assertEqual(self.s.team_status(self.i,project,developer,implementation['id'])['active'],1)
+        self.s.finish_delegation(child['id'],'complete','Counter update implemented and checked.')
+        report=self.s.workflow_view(self.i,workflow)['artifacts']['implementation'][0]['children'][0]
+        self.assertEqual(report['state'],'complete');self.assertIn('implemented and checked',report['result'])
+        self.s.retry_workflow(self.i,workflow,lead,'Resume after the child report arrived.')
+        self.assertEqual(self.s.workflow_view(self.i,workflow)['state'],'active')
+
     def test_intake_preserves_original_and_work_edits_do_not_change_it(self):
         original=self.s.directory/self.i.split(':')[1]/'archive'/(self.p['source'].split(':')[1]+'.zip')
         before=original.read_bytes();r=self.s.read(self.p['project'],'game.c')
