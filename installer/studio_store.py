@@ -232,6 +232,9 @@ class Store:
         with self.db() as cx:
             p=self.project(cx,pid);iid=p['institution']
             source=cx.execute('SELECT * FROM studio_sources WHERE id=?',(p['source'],)).fetchone()
+            collection=cx.execute('SELECT collection FROM institutions WHERE id=?',(iid,)).fetchone()[0]
+            docs=[dict(r) for r in cx.execute("SELECT id,title,text,digest,evidence,approval FROM library_documents WHERE collection=? AND state='approved'",(collection,))]
+            artifacts=[dict(r) for r in cx.execute("SELECT id,title,body,evidence FROM studio_artifacts WHERE institution=? AND state='approved'",(iid,))]
             builds=[dict(r) for r in cx.execute('SELECT * FROM studio_builds WHERE project=? ORDER BY created,id',(pid,))]
         instroot=self.directory/iid.split(':')[1];projectroot=instroot/'projects'/pid.split(':')[1]
         source_id=p['source'];archive_path=instroot/'archive'/(source_id.split(':')[1]+'.zip')
@@ -242,6 +245,17 @@ class Store:
             original_archive_sha256=sha(raw_path.read_bytes()) if raw_path.is_file() else None,provenance=provenance)
         entries=files(self.path(pid))
         working=dict(revision_sha256=sha(archive(entries)),files=[dict(path=n,size=len(b),sha256=sha(b)) for n,b in entries])
+        approved=[]
+        def cites_project(evidence):
+            try:refs=json.loads(evidence) if isinstance(evidence,str) else evidence
+            except (TypeError,ValueError):return False
+            return isinstance(refs,list) and any(isinstance(e,dict) and (e.get('origin')==source_id or e.get('source')==source_id or source_id in e.get('dependencies',[])) for e in refs)
+        for doc in docs:
+            if cites_project(doc['evidence']):
+                markdown=instroot/'library'/(doc['id'].split(':')[-1]+'.md')
+                approved.append(dict(id=doc['id'],kind='library',title=doc['title'],content_sha256=doc['digest'],evidence_sha256=sha(doc['evidence']),approval=doc['approval'],file_sha256=sha(markdown.read_bytes()) if markdown.is_file() else None))
+        for artifact in artifacts:
+            if cites_project(artifact['evidence']):approved.append(dict(id=artifact['id'],kind='archive',title=artifact['title'],content_sha256=sha(artifact['body']),evidence_sha256=sha(artifact['evidence'])))
         build_records=[]
         for row in builds:
             folder=instroot/'builds'/row['id'].split(':')[1]
@@ -267,7 +281,7 @@ class Store:
                 except (OSError,ValueError):continue
                 if record.get('project')==pid:evidence.append(dict(id=record.get('id'),path=str(f.relative_to(instroot)),sha256=sha(f.read_bytes()),build=record.get('build'),task=record.get('task')))
         return dict(manifest_version=1,project=pid,institution=iid,source=original,working_copy=working,
-            builds=build_records,checkpoints=checkpoints,evidence=evidence,external_exports=list(exports or []))
+            builds=build_records,checkpoints=checkpoints,evidence=evidence,approved_documents=approved,external_exports=list(exports or []))
 
     def refresh_project_manifest(self,pid,*,add_export=None):
         path=self.manifest_path(pid)
@@ -295,7 +309,7 @@ class Store:
         try:stored=json.loads(path.read_text())
         except (OSError,ValueError):return dict(ok=False,manifest_invalid=True,mismatches=['project-manifest.json'])
         expected=self._manifest_snapshot(pid,stored.get('external_exports',[]))
-        keys=('manifest_version','project','institution','source','working_copy','builds','checkpoints','evidence','external_exports')
+        keys=('manifest_version','project','institution','source','working_copy','builds','checkpoints','evidence','approved_documents','external_exports')
         mismatches=[key for key in keys if stored.get(key)!=expected.get(key)]
         return dict(ok=not mismatches,manifest_sha256=sha(path.read_bytes()),checked_at=int(time.time()),mismatches=mismatches,
             counts=dict(builds=len(expected['builds']),checkpoints=len(expected['checkpoints']),evidence=len(expected['evidence']),exports=len(expected['external_exports'])))
@@ -436,6 +450,10 @@ class Store:
             result=dict(result,state='approved' if decision=='approve' else 'rejected')
             with cx:cx.execute('UPDATE studio_proposals SET state=?,result=? WHERE id=?',(result['state'],encoded(result),ref))
         if decision=='approve' and kind in ('staff','library','memory'):self.prepare_maps(iid)
+        if decision=='approve' and kind in ('library','archive'):
+            source_ids={e.get('source') for e in preview['evidence'] if isinstance(e,dict) and e.get('source')}
+            with self.db() as cx:pids=[r[0] for r in cx.execute('SELECT id FROM studio_projects WHERE institution=? AND source IN ('+','.join('?' for _ in source_ids)+') AND state=\'active\'',(iid,*source_ids))] if source_ids else []
+            for project_id in pids:self.refresh_project_manifest(project_id)
         return result
 
     def prepare_staff(self,iid):
