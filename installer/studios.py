@@ -485,13 +485,19 @@ class Studios:
                     if key=='required_review_checkpoint' and value:
                         compact_artifacts[key]=value
                     elif isinstance(value,list) and value:
-                        entries=[]
-                        for entry in value[-1:]:
+                        entry=value[-1]
+                        if key=='verification_reports':
+                            item={k:entry.get(k) for k in ('id','verdict','assignment','reviewer','created','digest','build','explanation')}
+                            item['test_count']=len(entry.get('tests',[]))
+                            item['failed_test_ids']=[test.get('test_id') for test in entry.get('tests',[]) if test.get('status')!='passed'][:8]
+                            item['finding_count']=len(entry.get('findings',[]))
+                            item['unverified_count']=len(entry.get('unverified_questions',[]))
+                            compact_artifacts[key]=[item]
+                        else:
                             item=dict(entry)
                             if isinstance(item.get('result'),str):item['result']=item['result'][:1200]
                             item.pop('children',None)
-                            entries.append(item)
-                        compact_artifacts[key]=entries
+                            compact_artifacts[key]=[item]
                 packet['workflow']={k:workflow[k] for k in ('id','title','goal','phase','state','source','source_sha256')}
                 packet['workflow'].update(artifacts=compact_artifacts,history=workflow.get('history',[])[-4:],steps=workflow_steps,step_count=workflow_step_count)
                 if settings.get('workflow_phase')=='planning':
