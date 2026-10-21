@@ -14,7 +14,7 @@ import village
 import village_memory as memory
 from commons_transport import Turn
 from studio_store import Store,atomic,files,unpack,encoded,sha,ident,bounded,MAX_PROJECT
-from studio_roles import ACTION_SPECS,ROLE_ACTIONS
+from studio_roles import ACTION_SPECS,ROLE_ACTIONS,MAX_SPECIALIST_SUBTASKS
 from studio_workbench import Workbench
 
 FOUNDING_SYSTEM='''You are preparing a private studio from reference C projects.
@@ -46,7 +46,7 @@ MANAGER_SYSTEM=WORK_SYSTEM+'''\nYou are the Studio Lead. Coordinate the studio t
 
 LEAD_DESIGNER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Designer. In Planning, inspect only the workflow's immutable archive source and create a cited reverse scaffold with source contents, major control/data structures, reusable behaviour, dependencies, unknowns and one small portable-C experiment. Do not inspect or change the working copy, build or test. Outside a staged workflow, prepare the requested design brief.'''
 
-LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Developer and own technical delivery. Follow the accepted checkpoints and report changes, tests and uncertainty. Delegate only for a concrete specialist need, up to three scoped subtasks per assignment, one at a time. Consolidate each report before finishing.'''
+LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+f'''\nYou are the Lead Developer and own technical delivery. Follow the accepted checkpoints and report changes, tests and uncertainty. Delegate only for a concrete specialist need, up to {MAX_SPECIALIST_SUBTASKS} scoped subtasks per assignment, one at a time. Consolidate each report before finishing.'''
 
 ASSIGNMENT_SYSTEM=WORK_SYSTEM+'''\nYou are an assigned specialist. Follow the task and mode in this packet, work within that scope, and return evidence, results and uncertainty. Do not delegate or route a workflow.'''
 
@@ -467,7 +467,7 @@ class Studios:
         machine_mode=settings.get('assignment_mode','')
         machines=[] if appointment_id or machine_mode not in ('lead-developer','implementation','test') else [m for m in self.workbench.status()['instances'] if m['institution']==iid][:4]
         packet=dict(objective=settings['objective'],resident=actor,instructions=profile,memory_map=navigation,approved_documents=docs[:4],members=members[:12],project=pid,sources=sources[:8],notes=progress['notes'][-1200:],last_result=progress['last_result'],tasks=tasks,evidence=evidence,files=[] if settings.get('plan_only') or not pid else self.store.tree(pid)[:24],machines=machines)
-        if appointment_id:packet['temporary_appointment']=dict(title=appointment['title'],role=appointment['role'],work_order=appointment['work_order'],expires=appointment['expires'],tools=['tree','read','search','edit','patch','sdk','build','tests','learn','learning_none','note','done'])
+        if appointment_id:packet['temporary_appointment']=dict(title=appointment['title'],role=appointment['role'],work_order=appointment['work_order'],expires=appointment['expires'])
         else:
             packet['accepted_learning']=learnings
             if row['kind']=='assignment':
@@ -530,7 +530,6 @@ class Studios:
             if not pid and action not in ('note','learning_none','done','help','select_project'):
                 raise PermissionError('Choose an active project before assigning project work')
         if assignment_id:
-            allowed={k:v for k,v in ROLE_ACTIONS.items() if k in ('design','test-plan','lead-developer','implementation','analysis','test')}
             if action not in ROLE_ACTIONS.get(assignment_mode,set()):raise PermissionError('Assignment mode does not permit this action')
         if assignment_id and assignment_mode=='lead-developer':
             with self.store.db() as cx:
