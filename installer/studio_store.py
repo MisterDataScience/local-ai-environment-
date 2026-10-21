@@ -608,6 +608,7 @@ class Store:
             self.project(cx,row['project'],iid)
             steps=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(ref,))]
             out=dict(row);out['artifacts']=json.loads(out['artifacts']);out['history']=json.loads(out['history']);out['steps']=steps
+            out['phase_label']={'planning':'Planning Department','middle':'Design Integration and Production Planning Department','implementation':'Implementation Department','verification':'Independent Review'}.get(out['phase'],out['phase'])
             return out
 
     def save_workflow_step(self,iid,ref,pid,actor,title,body,evidence):
@@ -615,7 +616,7 @@ class Store:
         with self.db() as cx,cx:
             self.member(cx,iid,actor)
             wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=? AND state='running' AND phase IN ('planning','middle')",(ref,iid,pid)).fetchone()
-            if not wf:raise PermissionError('No active planning or middle-department workflow step')
+            if not wf:raise PermissionError('No active Planning Department or Design Integration and Production Planning Department workflow step')
             if not cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND assignee=? AND state='running'",(ref,wf['phase'],actor)).fetchone():raise PermissionError('Only the assigned department resident can checkpoint this workflow')
             count=cx.execute('SELECT count(*) FROM studio_workflow_steps WHERE workflow=?',(ref,)).fetchone()[0]
             if count>=64:raise ValueError('Workflow checkpoint limit reached')
