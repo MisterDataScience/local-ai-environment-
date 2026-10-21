@@ -149,11 +149,14 @@ class StudioTests(unittest.TestCase):
     def test_delegated_assignments_follow_role_hierarchy_and_are_saved(self):
         staff=self.staff();lead=staff['Studio Lead'];developer=staff['Lead Developer'];designer=staff['Lead Designer'];engine=staff['Engine specialist']
         with self.assertRaises(PermissionError):self.s.delegate(self.i,self.p['project'],designer,engine,'Unscoped request')
-        with self.assertRaises(PermissionError):self.s.delegate(self.i,self.p['project'],lead,designer,'Skip layer')
-        assignment=self.s.delegate(self.i,self.p['project'],lead,developer,'Review implementation plan','Focus on portability.')
+        with self.assertRaises(PermissionError):self.s.delegate(self.i,self.p['project'],lead,designer,'Wrong assignment mode')
+        design=self.s.delegate(self.i,self.p['project'],lead,designer,'Prepare the project design brief','Define goals and acceptance criteria.',mode='design')
+        delivery=self.s.delegate(self.i,self.p['project'],lead,developer,'Review implementation plan','Focus on portability.')
         with self.s.db() as cx:
-            saved=dict(cx.execute('SELECT * FROM studio_delegations WHERE id=?',(assignment['id'],)).fetchone())
-            task=dict(cx.execute('SELECT * FROM studio_tasks WHERE id=?',(assignment['task'],)).fetchone())
+            design_row=dict(cx.execute('SELECT * FROM studio_delegations WHERE id=?',(design['id'],)).fetchone())
+            saved=dict(cx.execute('SELECT * FROM studio_delegations WHERE id=?',(delivery['id'],)).fetchone())
+            task=dict(cx.execute('SELECT * FROM studio_tasks WHERE id=?',(delivery['task'],)).fetchone())
+        self.assertEqual(design_row['assignee'],designer);self.assertEqual(design_row['mode'],'design')
         self.assertEqual(saved['assignee'],developer);self.assertEqual(task['owner'],developer)
 
     def test_studio_lead_dispatches_a_real_independent_lead_developer_job(self):
