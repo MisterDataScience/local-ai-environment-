@@ -241,7 +241,11 @@ class Workbench:
         with self.lock:
             if sum(v['institution']==iid for v in self.machines.values())>=10:raise ValueError('Ten instances per institution maximum')
             if len(self.machines)>=40:raise ValueError('Forty instances per host maximum')
-            cartridge,row=self.cartridge(bid,iid);mid=ident('machine')
+            cartridge,row=self.cartridge(bid,iid)
+            if task is not None:
+                with self.store.db() as cx:
+                    if not cx.execute('SELECT 1 FROM studio_tasks WHERE id=? AND institution=? AND project=?',(task,iid,row['project'])).fetchone():raise ValueError('Evidence task must belong to this project')
+            mid=ident('machine')
             result=self.rpc(dict(operation='create',machine=mid,wasm=cartridge['wasm'],assets=cartridge['assets'],seed=seed))
             self.machines[mid]=dict(institution=iid,build=bid,project=row['project'])
             eid=self.new_evidence(mid,seed,task)
@@ -253,10 +257,6 @@ class Workbench:
     def new_evidence(self,mid,seed,task=None):
         meta=self.machines[mid];cartridge,_=self.cartridge(meta['build'],meta['institution'])
         manifest=cartridge.get('build_manifest') or {};eid=ident('evidence')
-        if task is not None:
-            with self.store.db() as cx:
-                row=cx.execute('SELECT id FROM studio_tasks WHERE id=? AND institution=? AND project=?',(task,meta['institution'],meta['project'])).fetchone()
-            if not row:raise ValueError('Evidence task must belong to this project')
         record=dict(record_version=1,id=eid,project=meta['project'],task=task,build=meta['build'],
             build_manifest_sha256=sha(encoded(manifest)),source_sha256=manifest.get('source_sha256'),
             seed=seed,created=int(time.time()),updated=int(time.time()),input_sequence=[],
