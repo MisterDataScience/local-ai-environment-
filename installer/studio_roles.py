@@ -13,6 +13,15 @@ CORE_STAFF_ROLES = (
      'Own technical delivery and coordinate scoped specialist work.'),
 )
 
+MAX_SPECIALIST_SUBTASKS = 3
+
+WORKFLOW_ROLES = {
+    'planning': ('Lead Designer', 'design'),
+    'middle': ('Systems designer', 'test-plan'),
+    'implementation': ('Lead Developer', 'delivery'),
+    'verification': ('Playtest reviewer', 'test'),
+}
+
 OPTIONAL_STAFF_ROLES = (
     ('engine', 'coder', 'Engine specialist',
      'Help with engine structure, portable C, build diagnostics and reproducible tests.'),
@@ -20,6 +29,7 @@ OPTIONAL_STAFF_ROLES = (
 
 ACTION_SPECS = {
     'select_project': '{project}',
+    'evidence_read': '{evidence_id,start?,limit?}',
     'tree': '{}',
     'read': '{path,start,lines}',
     'search': '{query}',
@@ -61,7 +71,7 @@ ACTION_SPECS = {
 }
 
 _READ = frozenset({
-    'tree', 'read', 'search', 'reference', 'knowledge_search',
+    'evidence_read', 'tree', 'read', 'search', 'reference', 'knowledge_search',
     'source', 'source_tree', 'sdk',
 })
 _RUN = frozenset({
