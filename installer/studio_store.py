@@ -19,7 +19,7 @@ import zipfile
 import village
 import village_memory as memory
 from village_infrastructure import encoded, bounded
-from studio_roles import CORE_STAFF_ROLES
+from studio_roles import CORE_STAFF_ROLES,WORKFLOW_ROLES,MAX_SPECIALIST_SUBTASKS
 
 
 def sha(value):
@@ -533,7 +533,7 @@ class Store:
                 if not workflow and cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked','human_review_required') LIMIT 1",(iid,pid)).fetchone():raise PermissionError('Use the active staged workflow for all project assignments')
                 if workflow:
                     wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=?",(workflow,iid,pid)).fetchone()
-                    expected={'planning':('Lead Designer','design'),'middle':('Systems designer','test-plan'),'implementation':('Lead Developer','delivery'),'verification':('Playtest reviewer','test')}
+                    expected=WORKFLOW_ROLES
                     if not wf or wf['phase']!=phase or wf['state']!='active':raise PermissionError('Workflow phase is not ready for assignment')
                     if (assignee_title,mode)!=expected.get(phase):raise PermissionError('Workflow phase must be assigned to its designated department role')
                     if cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND parent='' AND state='running'",(workflow,phase)).fetchone():raise RuntimeError('Workflow phase already has an active assignment')
@@ -565,8 +565,8 @@ class Store:
                         raise PermissionError('Lead Developer subtasks must go to approved implementation or analysis specialists')
                     if cx.execute("SELECT 1 FROM studio_delegations WHERE parent=? AND state='running' LIMIT 1",(parent,)).fetchone():
                         raise RuntimeError('Finish the current specialist subtask before assigning another')
-                    if cx.execute("SELECT count(*) FROM studio_delegations WHERE parent=?",(parent,)).fetchone()[0]>=3:
-                        raise ValueError('A Lead Developer assignment is limited to three specialist subtasks')
+                    if cx.execute("SELECT count(*) FROM studio_delegations WHERE parent=?",(parent,)).fetchone()[0]>=MAX_SPECIALIST_SUBTASKS:
+                        raise ValueError(f'A Lead Developer assignment is limited to {MAX_SPECIALIST_SUBTASKS} specialist subtasks')
                     assignment_mode=mode;assignment_workflow=root['workflow'];assignment_phase=root['phase'];parent_assignment=parent
                 else:
                     if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked','human_review_required') LIMIT 1",(iid,pid)).fetchone():
