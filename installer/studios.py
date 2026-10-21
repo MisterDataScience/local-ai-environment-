@@ -47,7 +47,7 @@ build {kind:"cartridge"}; tests {build}; create_machine {build,seed};
 run_machine {machine,steps:1..600,buttons:0..255}; observe {machine};
 inspect {machine,question}; snapshot {machine}; reset {machine,seed}; drop {machine};
 restore {saved}; task {title,notes,state,task(optional)};
-help {resident,question}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
+help {resident,question}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
 note {text}; done {summary}.
 Only supplied approved members can help. Helpers return advice, not tools/delegation.
 Builds and execution are sandboxed host services. You have no shell, network, external
@@ -153,7 +153,7 @@ class Studios:
                     if not source:raise PermissionError('The project reference source is unavailable')
                     adaptation=dict(source=project['source'],material=material,experiment=experiment)
             else:actor=''
-            settings=dict(turn_limit=turns,token_budget=64_000_000,actor=actor,objective=bounded(request.get('objective','Study the reference projects and prepare useful knowledge.'),2000,'objective'),allow_reference_build=bool(request.get('allow_reference_build',False)),plan_only=kind=='adaptation-plan',adaptation=adaptation)
+            settings=dict(turn_limit=turns,token_budget=64_000_000,actor=actor,objective=bounded(request.get('objective','Study the reference projects and prepare useful knowledge.'),2000,'objective'),allow_reference_build=bool(request.get('allow_reference_build',False)),retain_evidence_screenshots=bool(request.get('retain_evidence_screenshots',False)),plan_only=kind=='adaptation-plan',adaptation=adaptation)
             progress=dict(cursor=0,offset=0,notes='',last_result={},processed_bytes=0,elapsed=0,phase='study')
             if kind=='work':
                 previous=cx.execute("SELECT progress FROM studio_jobs WHERE project=? AND kind='work' ORDER BY created DESC,rowid DESC LIMIT 1",(pid,)).fetchone()
@@ -297,7 +297,7 @@ class Studios:
             tasks=[dict(r) for r in cx.execute('SELECT id,title,state,notes FROM studio_tasks WHERE project=? ORDER BY rowid DESC LIMIT 6',(pid,))]
             docs=[dict(r) for r in cx.execute("SELECT id,title FROM library_documents WHERE collection=? AND state='approved' LIMIT 12",(scope,))]
             sources=[dict(r) for r in cx.execute("SELECT id,project FROM studio_sources WHERE institution=? AND state='active'",(iid,))]
-        return dict(objective=settings['objective'],resident=actor,instructions=profile,memory_map=navigation,approved_documents=docs,members=members,project=pid,sources=sources,notes=progress['notes'][-4000:],last_result=progress['last_result'],tasks=tasks,files=[] if settings.get('plan_only') else self.store.tree(pid)[:100],machines=[m for m in self.workbench.status()['instances'] if m['institution']==iid])
+        return dict(objective=settings['objective'],resident=actor,instructions=profile,memory_map=navigation,approved_documents=docs,members=members,project=pid,sources=sources,notes=progress['notes'][-4000:],last_result=progress['last_result'],tasks=tasks,evidence=self.workbench.recent_evidence(iid,pid),files=[] if settings.get('plan_only') else self.store.tree(pid)[:100],machines=[m for m in self.workbench.status()['instances'] if m['institution']==iid]
 
     def work_action(self,row,progress,value):
         if not isinstance(value,dict) or set(value)-{'action','args','note'}:raise ValueError('Invalid studio action')
@@ -355,8 +355,10 @@ class Studios:
             result=self.workbench.build(pid)
         elif action=='tests':result=self.workbench.tests(iid,args['build'])
         elif action=='create_machine':result=self.workbench.create(iid,args['build'],args.get('seed',1))
+        elif action=='finding':result=self.workbench.add_finding(iid,pid,args.get('category'),args.get('text',''),args.get('evidence',[]))
         elif action in ('run_machine','observe','snapshot','reset','drop'):
             operation='run' if action=='run_machine' else action
+            args['retain_screenshot']=bool(settings.get('retain_evidence_screenshots',False))
             result=self.workbench.machine(iid,args.pop('machine'),operation,**args)
         elif action=='restore':result=self.workbench.restore(iid,args['saved'])
         elif action=='inspect':
