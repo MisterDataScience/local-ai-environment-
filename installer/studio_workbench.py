@@ -283,10 +283,12 @@ class Workbench:
             if len(seq)<2048:seq.append(dict(steps=args.get('steps',1),buttons=args.get('buttons',0)))
             else:record['input_sequence_truncated']=True
         record['updated']=int(time.time())
-        record['observation']={k:result[k] for k in ('tick','metrics','state_sha256','screen_sha256','memory_bytes') if k in result}
+        record['observation']={k:result[k] for k in ('tick','ticks','metrics','state_sha256','screen_sha256','memory_bytes') if k in result}
         if args.get('retain_screenshot') and isinstance(result.get('png'),str):
             raw=base64.b64decode(result['png'],validate=True)
-            if len(raw)<=256*1024:record['screenshot_png_base64']=result['png']
+            if len(raw)<=256*1024:
+                record['screenshot_png_base64']=result['png']
+                if len(encoded(record).encode())>256*1024:record.pop('screenshot_png_base64')
         self.write_evidence(meta,record);return eid
 
     def add_evidence_assertion(self,mid,assertion):
@@ -350,16 +352,17 @@ class Workbench:
         with self.lock:
             if mid not in self.machines or self.machines[mid]['institution']!=iid:raise PermissionError('Machine belongs to another institution or is not running')
             with self.store.db() as cx:self.store.project(cx,self.machines[mid]['project'],iid)
+            worker_args={k:v for k,v in args.items() if k!='retain_screenshot'}
             checkpoint_before=self.rpc(dict(operation='snapshot',machine=mid)) if operation in ('run','reset','restore') else None
             if operation=='run':
                 steps=args.get('steps',1)
                 if type(steps) is not int or not 0<=steps<=600:raise ValueError('A batch is 0 to 600 steps')
                 result=self.rpc(dict(operation='observe',machine=mid))
                 for offset in range(0,steps,4):
-                    result=self.rpc(dict(operation='run',machine=mid,**dict(args,steps=min(4,steps-offset))))
+                    result=self.rpc(dict(operation='run',machine=mid,**dict(worker_args,steps=min(4,steps-offset))))
                     stop=args.get('stop_metric')
                     if stop and result['metrics'].get(str(stop['key']))==stop['value']:break
-            else:result=self.rpc(dict(operation=operation,machine=mid,**args))
+            else:result=self.rpc(dict(operation=operation,machine=mid,**worker_args))
             if operation=='snapshot':
                 saved=ident('machine');target=self.store.directory/iid.split(':')[1]/'machines'/(saved.split(':')[1]+'.json')
                 self.write_checkpoint(iid,target,self.checkpoint_payload(mid,result));return dict(saved=saved)
