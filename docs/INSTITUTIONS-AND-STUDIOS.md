@@ -57,6 +57,12 @@ The old strict Game Boy CPU, RAM and cartridge limits were removed. Current host
 
 Automatic calibration reports measured CPU time, elapsed time, guest memory and peak worker RSS for the first real cartridge. Results persist across restarts. Up to ten loaded instances are sampled sequentially; this is not a claim that forty busy instances have been benchmarked, nor that every project runs 100 times faster. More complex cartridges can consume more time. Stop/pause remains available. When a quota is reached, work stops with an explanation rather than deleting original material automatically.
 
+## Build and save compatibility
+
+Every new build writes a versioned `build-manifest.json` beside its immutable source snapshot. The cartridge embeds the same manifest: manifest schema, SDK and ABI, cartridge and save-format versions, compiler and Wasm runtime versions, compiler flags, source-file hashes, asset hashes, and the overall source hash. The workbench and downloaded player report unsupported cartridge/ABI/save versions rather than trying to guess how to run them. Existing format-1 cartridges without a manifest remain readable as legacy version one.
+
+Checkpoints identify their envelope, build manifest, SDK ABI and save format. On restore, the workbench first migrates a copy, restores it in the runtime, and compares the resulting state with the candidate. Only after verification does it retain the original bytes under `machines/originals/` and write the migrated checkpoint. Unsupported formats, ABIs, or build identities stop with a clear error; the original file is left intact. Automatic recovery checkpoints are quota-checked, including replacements, so they count against the institution's storage budget without charging twice for the prior checkpoint.
+
 ## Recovery and withdrawal
 
 Studio records, originals, approved references, working files and saved machines live under the Village data root and are included in the existing encrypted workspace backup. Use the normal stop-and-backup flow; restored jobs are paused. Incomplete uploads are excluded. Downloaded players and save files are external copies and are not automatically backed up or recalled.
