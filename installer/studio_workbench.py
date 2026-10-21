@@ -4,6 +4,7 @@ import copy
 import io
 import json
 import os
+import re
 from pathlib import Path
 import resource
 import selectors
@@ -331,6 +332,22 @@ class Workbench:
                         rows.append({k:x.get(k) for k in ('id','task','build','source_sha256','seed','created','updated','input_sequence','assertions','findings','observation')})
                     except (OSError,ValueError):pass
         return sorted(rows,key=lambda x:x.get('updated') or 0,reverse=True)[:limit]
+
+    def evidence_detail(self,iid,pid,eid,start=0,limit=128):
+        if not isinstance(eid,str) or not re.fullmatch(r'evidence:[0-9a-f]{32}',eid):raise ValueError('Invalid evidence ID')
+        if type(start) is not int or start<0 or type(limit) is not int or not 1<=limit<=256:raise ValueError('Evidence page must request 1 to 256 inputs from a nonnegative offset')
+        with self.store.db() as cx:builds=[r[0] for r in cx.execute('SELECT id FROM studio_builds WHERE project=?',(pid,))]
+        filename=eid.split(':',1)[1]+'.json';root=self.store.directory/iid.split(':')[1]/'builds'
+        for bid in builds:
+            path=root/bid.split(':',1)[1]/'evidence'/filename
+            if not path.is_file():continue
+            record=json.loads(path.read_text())
+            if record.get('project')!=pid:raise PermissionError('Evidence record is unavailable for this project')
+            sequence=record.get('input_sequence',[])
+            result={k:v for k,v in record.items() if k not in ('input_sequence','screenshot_png_base64')}
+            result.update(input_sequence=sequence[start:start+limit],input_count=len(sequence),input_start=start,input_truncated=start+limit<len(sequence),screenshot_available=bool(record.get('screenshot_png_base64') or record.get('screenshot')))
+            return result
+        raise ValueError('Evidence record is unavailable for this project')
 
     def checkpoint_payload(self,mid,state):
         meta=self.machines[mid];cartridge,_=self.cartridge(meta['build'])
