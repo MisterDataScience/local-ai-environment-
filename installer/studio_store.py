@@ -520,6 +520,7 @@ class Store:
         with self.db() as cx,cx:
             manager_title=self.member(cx,iid,manager);assignee_title=self.member(cx,iid,assignee);self.project(cx,pid,iid)
             if manager_title=='Studio Lead':
+                if not workflow and cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked') LIMIT 1",(iid,pid)).fetchone():raise PermissionError('Use the active staged workflow for all project assignments')
                 if workflow:
                     wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=?",(workflow,iid,pid)).fetchone()
                     expected={'planning':('Lead Designer','design'),'middle':('Systems designer','test-plan'),'implementation':('Lead Developer','delivery'),'verification':('Playtest reviewer','test')}
