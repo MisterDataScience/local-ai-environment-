@@ -237,23 +237,27 @@ class Workbench:
             if not result['ok']:raise RuntimeError(result['error'])
             return result['result']
 
-    def create(self,iid,bid,seed=1):
+    def create(self,iid,bid,seed=1,task=None):
         with self.lock:
             if sum(v['institution']==iid for v in self.machines.values())>=10:raise ValueError('Ten instances per institution maximum')
             if len(self.machines)>=40:raise ValueError('Forty instances per host maximum')
             cartridge,row=self.cartridge(bid,iid);mid=ident('machine')
             result=self.rpc(dict(operation='create',machine=mid,wasm=cartridge['wasm'],assets=cartridge['assets'],seed=seed))
             self.machines[mid]=dict(institution=iid,build=bid,project=row['project'])
-            eid=self.new_evidence(mid,seed)
+            eid=self.new_evidence(mid,seed,task)
             return dict(machine=mid,evidence=eid,**result)
 
     def evidence_path(self,meta,eid):
         return self.store.directory/meta['institution'].split(':')[1]/'builds'/meta['build'].split(':')[1]/'evidence'/(eid.split(':')[1]+'.json')
 
-    def new_evidence(self,mid,seed):
+    def new_evidence(self,mid,seed,task=None):
         meta=self.machines[mid];cartridge,_=self.cartridge(meta['build'],meta['institution'])
         manifest=cartridge.get('build_manifest') or {};eid=ident('evidence')
-        record=dict(record_version=1,id=eid,project=meta['project'],task=None,build=meta['build'],
+        if task is not None:
+            with self.store.db() as cx:
+                row=cx.execute('SELECT id FROM studio_tasks WHERE id=? AND institution=? AND project=?',(task,meta['institution'],meta['project'])).fetchone()
+            if not row:raise ValueError('Evidence task must belong to this project')
+        record=dict(record_version=1,id=eid,project=meta['project'],task=task,build=meta['build'],
             build_manifest_sha256=sha(encoded(manifest)),source_sha256=manifest.get('source_sha256'),
             seed=seed,created=int(time.time()),updated=int(time.time()),input_sequence=[],
             assertions=[],findings=[],observation={},screenshot=None)
