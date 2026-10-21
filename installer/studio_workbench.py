@@ -244,7 +244,80 @@ class Workbench:
             cartridge,row=self.cartridge(bid,iid);mid=ident('machine')
             result=self.rpc(dict(operation='create',machine=mid,wasm=cartridge['wasm'],assets=cartridge['assets'],seed=seed))
             self.machines[mid]=dict(institution=iid,build=bid,project=row['project'])
-            return dict(machine=mid,**result)
+            eid=self.new_evidence(mid,seed)
+            return dict(machine=mid,evidence=eid,**result)
+
+    def evidence_path(self,meta,eid):
+        return self.store.directory/meta['institution'].split(':')[1]/'builds'/meta['build'].split(':')[1]/'evidence'/(eid.split(':')[1]+'.json')
+
+    def new_evidence(self,mid,seed):
+        meta=self.machines[mid];cartridge,_=self.cartridge(meta['build'],meta['institution'])
+        manifest=cartridge.get('build_manifest') or {};eid=ident('evidence')
+        record=dict(record_version=1,id=eid,project=meta['project'],task=None,build=meta['build'],
+            build_manifest_sha256=sha(encoded(manifest)),source_sha256=manifest.get('source_sha256'),
+            seed=seed,created=int(time.time()),updated=int(time.time()),input_sequence=[],
+            assertions=[],findings=[],observation={},screenshot=None)
+        self.write_evidence(meta,record);meta['evidence']=eid
+        return eid
+
+    def write_evidence(self,meta,record):
+        target=self.evidence_path(meta,record['id']);data=encoded(record).encode()
+        if len(data)>256*1024:raise ValueError('Experiment evidence record exceeds 256 KiB')
+        target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+        self.store.quota(meta['institution'],len(data),replace_path=target if target.exists() else None);atomic(target,data)
+
+    def record_observation(self,mid,result,operation,args):
+        meta=self.machines[mid];eid=meta.get('evidence') or self.new_evidence(mid,args.get('seed',1))
+        path=self.evidence_path(meta,eid);record=json.loads(path.read_text())
+        if operation=='run':
+            seq=record['input_sequence']
+            if len(seq)<2048:seq.append(dict(steps=args.get('steps',1),buttons=args.get('buttons',0)))
+            else:record['input_sequence_truncated']=True
+        record['updated']=int(time.time())
+        record['observation']={k:result[k] for k in ('tick','metrics','state_sha256','screen_sha256','memory_bytes') if k in result}
+        if args.get('retain_screenshot') and isinstance(result.get('png'),str):
+            raw=base64.b64decode(result['png'],validate=True)
+            if len(raw)<=256*1024:record['screenshot_png_base64']=result['png']
+        self.write_evidence(meta,record);return eid
+
+    def add_evidence_assertion(self,mid,assertion):
+        meta=self.machines[mid];eid=meta.get('evidence')
+        if eid:
+            path=self.evidence_path(meta,eid);record=json.loads(path.read_text())
+            record['assertions']=(record.get('assertions',[])+[assertion])[-64:]
+            record['updated']=int(time.time());self.write_evidence(meta,record)
+
+    def add_finding(self,iid,pid,category,text,evidence_ids):
+        if category not in ('Observed','Inferred','Unverified'):raise ValueError('Finding category must be Observed, Inferred, or Unverified')
+        if not isinstance(evidence_ids,list) or len(evidence_ids)>8:raise ValueError('Provide up to eight evidence record IDs')
+        if category in ('Observed','Inferred') and not evidence_ids:raise ValueError('Observed and Inferred findings need evidence record IDs')
+        rows=[]
+        for eid in evidence_ids:
+            if not isinstance(eid,str) or not eid.startswith('evidence:'):raise ValueError('Invalid evidence record ID')
+            found=None
+            for folder in (self.store.directory/iid.split(':')[1]/'builds').glob('*/evidence'):
+                path=folder/(eid.split(':')[1]+'.json')
+                if path.is_file():found=json.loads(path.read_text());break
+            if not found or found.get('project')!=pid:raise PermissionError('Evidence record is unavailable for this project')
+            rows.append(found)
+        finding=dict(category=category,text=bounded(text,1200,'finding'),created=int(time.time()))
+        for record in rows:
+            record['findings']=(record.get('findings',[])+[finding])[-64:];record['updated']=int(time.time())
+            self.write_evidence(dict(institution=iid,build=record['build']),record)
+        return dict(category=category,evidence=evidence_ids,saved=True)
+
+    def recent_evidence(self,iid,pid,limit=20):
+        rows=[];root=self.store.directory/iid.split(':')[1]/'builds'
+        with self.store.db() as cx:builds=[r[0] for r in cx.execute('SELECT id FROM studio_builds WHERE project=?',(pid,))]
+        for bid in builds:
+            folder=root/bid.split(':')[1]/'evidence'
+            if folder.is_dir():
+                for path in folder.glob('*.json'):
+                    try:
+                        x=json.loads(path.read_text())
+                        rows.append({k:x.get(k) for k in ('id','task','build','source_sha256','seed','created','updated','input_sequence','assertions','findings','observation')})
+                    except (OSError,ValueError):pass
+        return sorted(rows,key=lambda x:x.get('updated') or 0,reverse=True)[:limit]
 
     def checkpoint_payload(self,mid,state):
         meta=self.machines[mid];cartridge,_=self.cartridge(meta['build'])
@@ -289,6 +362,9 @@ class Workbench:
                 except Exception:
                     self.rpc(dict(operation='restore',machine=mid,state=checkpoint_before))
                     raise
+            if operation in ('run','observe','reset','restore'):
+                result['evidence']=self.record_observation(mid,result,operation,args)
+                if operation=='reset':result['evidence']=self.new_evidence(mid,args.get('seed',1))
             return result
 
     def restore(self,iid,saved):
@@ -327,7 +403,9 @@ class Workbench:
                 if len(inputs)>100:raise ValueError('Test input limit exceeded')
                 for action in inputs:observation=self.machine(iid,mid,'run',steps=action['steps'],buttons=action.get('buttons',0))
                 passed=all(observation['metrics'].get(str(k))==v for k,v in test.get('expect_metrics',{}).items())
-                results.append(dict(name=test.get('name','test'),passed=passed,metrics=observation['metrics'],state_sha256=observation['state_sha256']))
+                assertion=dict(name=test.get('name','test'),passed=passed,expected=test.get('expect_metrics',{}),metrics=observation['metrics'],state_sha256=observation.get('state_sha256'),screen_sha256=observation.get('screen_sha256'))
+                self.add_evidence_assertion(mid,assertion)
+                results.append(dict(**assertion,evidence=self.machines[mid].get('evidence')))
             finally:self.machine(iid,mid,'drop')
         return dict(tests=results,passed=bool(results) and all(r['passed'] for r in results),note='Behavioural assertions; visual quality is not established by these checks')
 
