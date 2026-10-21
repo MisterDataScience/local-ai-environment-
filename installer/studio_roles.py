@@ -22,11 +22,6 @@ WORKFLOW_ROLES = {
     'verification': ('Playtest reviewer', 'test'),
 }
 
-OPTIONAL_STAFF_ROLES = (
-    ('engine', 'coder', 'Engine specialist',
-     'Help with engine structure, portable C, build diagnostics and reproducible tests.'),
-)
-
 ACTION_SPECS = {
     'select_project': '{project}',
     'evidence_read': '{evidence_id,start?,limit?}',
