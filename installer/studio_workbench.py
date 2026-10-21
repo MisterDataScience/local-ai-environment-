@@ -171,6 +171,7 @@ class Workbench:
             atomic(directory/'report.json',encoded(result).encode())
             # Keep source.zip, cartridge and report; compiler caches are disposable.
             shutil.rmtree(work)
+            self.store.refresh_project_manifest(pid)
             if state=='passed' and kind=='cartridge' and not self.measurements.get('calibration'):
                 try:self.calibrate(bid)
                 except Exception as error:self.measurements['calibration_error']=str(error)[:1000]
@@ -274,6 +275,7 @@ class Workbench:
         if not target.exists() and len(list(target.parent.glob('*.json')))>=500:raise ValueError('Build evidence record limit reached (500)')
         target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
         self.store.quota(meta['institution'],len(data),replace_path=target if target.exists() else None);atomic(target,data)
+        self.store.refresh_project_manifest(meta['project'])
 
     def record_observation(self,mid,result,operation,args):
         meta=self.machines[mid];eid=meta.get('evidence') or self.new_evidence(mid,args.get('seed',1))
@@ -336,6 +338,7 @@ class Workbench:
 
     def write_checkpoint(self,iid,target,payload,replace=False):
         data=encoded(payload).encode();self.store.quota(iid,len(data),replace_path=target if replace else None);atomic(target,data)
+        if payload.get('meta',{}).get('project'):self.store.refresh_project_manifest(payload['meta']['project'])
 
     def migrate_checkpoint(self,content):
         if not isinstance(content,dict):raise ValueError('Invalid saved machine record')

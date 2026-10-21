@@ -51,6 +51,23 @@ class RuntimeTests(unittest.TestCase):
   state=json.loads((self.s.directory/self.i.split(':')[1]/'machines'/(saved.split(':')[1]+'.json')).read_text())
   self.assertEqual(state['envelope_version'],1);self.assertEqual(state['state']['save_format'],1)
   self.assertEqual(state['build_manifest']['source_sha256'],manifest['source_sha256'])
+ def test_project_provenance_manifest_and_recovery_check(self):
+  manifest_path=self.s.manifest_path(self.p['project'])
+  manifest=json.loads(manifest_path.read_text())
+  self.assertEqual(manifest['manifest_version'],1)
+  self.assertEqual(manifest['source']['sha256'],self.p['sha256'])
+  machine=self.w.create(self.i,self.b['id'])['machine']
+  saved=self.w.machine(self.i,machine,'snapshot')['saved']
+  self.assertTrue(any(x['id']==saved for x in self.s._manifest_snapshot(self.p['project'])['checkpoints']))
+  evidence=self.w.machine(self.i,machine,'run',steps=2)['evidence']
+  manifest=json.loads(manifest_path.read_text())
+  self.assertTrue(any(x['id']==evidence for x in manifest['evidence']))
+  self.s.record_external_export(self.p['project'],dict(id='studio-export:test',build=self.b['id'],cartridge_sha256='abc',external_copy=True,managed_backup=False,withdrawal_recall=False))
+  self.assertEqual(self.s.recovery_check(self.i,self.p['project'])['ok'],True)
+  work=self.s.path(self.p['project'])/'example.c';work.write_bytes(work.read_bytes()+b'/* changed outside manifest update */')
+  result=self.s.recovery_check(self.i,self.p['project'])
+  self.assertFalse(result['ok']);self.assertIn('working_copy',result['mismatches'])
+
  def test_legacy_save_migration_keeps_original_and_verifies_copy(self):
   machine=self.w.create(self.i,self.b['id'])['machine'];saved=self.w.machine(self.i,machine,'snapshot')['saved']
   path=self.s.directory/self.i.split(':')[1]/'machines'/(saved.split(':')[1]+'.json')
