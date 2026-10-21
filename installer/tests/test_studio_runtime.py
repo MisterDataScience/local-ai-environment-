@@ -24,6 +24,26 @@ class RuntimeTests(unittest.TestCase):
   from studio_player import export
   self.assertTrue(export(self.w.cartridge(self.b['id'])[0]).startswith(b'PK'))
   self.assertEqual(len(self.w.measurements['calibration']['samples']),10)
+ def test_portable_evidence_tracks_inputs_assertions_and_findings(self):
+  created=self.w.create(self.i,self.b['id'],seed=17);machine=created['machine'];eid=created['evidence']
+  run=self.w.machine(self.i,machine,'run',steps=7,buttons=8)
+  self.assertEqual(run['evidence'],eid)
+  path=self.w.evidence_path(self.w.machines[machine],eid)
+  record=json.loads(path.read_text())
+  self.assertEqual(record['seed'],17);self.assertEqual(record['source_sha256'],self.w.cartridge(self.b['id'])[0]['build_manifest']['source_sha256'])
+  self.assertEqual(record['input_sequence'],[{'steps':7,'buttons':8}])
+  self.assertEqual(record['observation']['state_sha256'],run['state_sha256'])
+  self.assertNotIn('screenshot_png_base64',record)
+  self.assertEqual(self.w.add_finding(self.i,self.p['project'],'Observed','The run produced a state hash.',[eid])['saved'],True)
+  self.assertEqual(json.loads(path.read_text())['findings'][-1]['category'],'Observed')
+  with self.assertRaises(ValueError):self.w.add_finding(self.i,self.p['project'],'Observed','No citation',[])
+  tests=self.w.tests(self.i,self.b['id'])
+  if tests['tests']:
+   evidence=tests['tests'][0]['evidence']
+   self.assertTrue(evidence.startswith('evidence:'))
+   test_path=self.w.evidence_path(dict(institution=self.i,build=self.b['id']),evidence)
+   self.assertTrue(json.loads(test_path.read_text())['assertions'])
+
  def test_versioned_build_and_save_identity(self):
   cartridge,_=self.w.cartridge(self.b['id']);manifest=cartridge['build_manifest']
   self.assertEqual(manifest['manifest_version'],1);self.assertEqual(manifest['sdk_version'],'1.0.0');self.assertEqual(manifest['sdk_abi_version'],1);self.assertEqual(manifest['save_format_version'],1)
