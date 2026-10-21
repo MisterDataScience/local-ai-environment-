@@ -56,9 +56,10 @@ ACTION_SPECS = {
     'team_status': '{}',
     'workflow_start': '{title,goal}',
     'workflow_status': '{workflow}',
+    'workflow_read': '{workflow,phase,offset?,limit:1..8,report_id?}',
     'workflow_assign': '{workflow}',
     'workflow_step': '{workflow,title,body,evidence,review_id?}',
-    'workflow_verify': '{workflow,verdict,build,tests,findings,unverified_questions,explanation}',
+    'workflow_verify': '{workflow,verdict,build:{build_id,source_digest,build_status,runtime_status,errors,resources},implementation_claims:[{claim,status,result,evidence}],tests:[{test_id,description,seed,inputs,expected,actual,status,evidence,reproduction}],findings:[{id,category,severity,certainty,reproduction,seed,inputs,expected,actual,evidence,owner,confidence}],unverified_questions,explanation}',
     'workflow_retry': '{workflow,reason}',
     'workflow_close': '{workflow,summary}',
     'workflow_return': '{workflow,reason}',
@@ -71,7 +72,7 @@ ACTION_SPECS = {
 }
 
 _READ = frozenset({
-    'evidence_read', 'tree', 'read', 'search', 'reference', 'knowledge_search',
+    'evidence_read', 'workflow_read', 'tree', 'read', 'search', 'reference', 'knowledge_search',
     'source', 'source_tree', 'sdk',
 })
 _RUN = frozenset({
