@@ -248,6 +248,8 @@ class Store:
             docs=[dict(r) for r in cx.execute("SELECT id,title,markdown AS text,digest,evidence,approval FROM library_documents WHERE collection=? AND state='approved' ORDER BY id",(collection,))]
             artifacts=[dict(r) for r in cx.execute("SELECT id,title,body,evidence FROM studio_artifacts WHERE institution=? AND state='approved' ORDER BY id",(iid,))]
             builds=[dict(r) for r in cx.execute('SELECT * FROM studio_builds WHERE project=? ORDER BY created,id',(pid,))]
+            workflows=[dict(r) for r in cx.execute('SELECT id,title,goal,phase,state,source,source_sha256,artifacts,history,created,updated FROM studio_workflows WHERE project=? ORDER BY created,id',(pid,))]
+            workflow_steps=[dict(r) for r in cx.execute('SELECT id,workflow,phase,ordinal,title,evidence,digest,created FROM studio_workflow_steps WHERE project=? ORDER BY created,id',(pid,))]
         instroot=self.directory/iid.split(':')[1];projectroot=instroot/'projects'/pid.split(':')[1]
         source_id=p['source'];archive_path=instroot/'archive'/(source_id.split(':')[1]+'.zip')
         raw_path=instroot/'archive'/(source_id.split(':')[1]+'.original.zip')
@@ -292,8 +294,10 @@ class Store:
                 try:record=json.loads(f.read_text())
                 except (OSError,ValueError):continue
                 if record.get('project')==pid:evidence.append(dict(id=record.get('id'),path=str(f.relative_to(instroot)),sha256=sha(f.read_bytes()),build=record.get('build'),task=record.get('task')))
+        workflow_records=[dict(id=w['id'],title=w['title'],goal_sha256=sha(w['goal']),phase=w['phase'],state=w['state'],source=w['source'],source_sha256=w['source_sha256'],artifacts_sha256=sha(w['artifacts']),history_sha256=sha(w['history']),created=w['created'],updated=w['updated']) for w in workflows]
+        workflow_step_records=[dict(id=x['id'],workflow=x['workflow'],phase=x['phase'],ordinal=x['ordinal'],title=x['title'],evidence_sha256=sha(x['evidence']),digest=x['digest'],created=x['created']) for x in workflow_steps]
         return dict(manifest_version=1,project=pid,institution=iid,source=original,working_copy=working,
-            builds=build_records,checkpoints=checkpoints,evidence=evidence,approved_documents=approved,external_exports=list(exports or []))
+            builds=build_records,workflows=workflow_records,workflow_steps=workflow_step_records,checkpoints=checkpoints,evidence=evidence,approved_documents=approved,external_exports=list(exports or []))
 
     def refresh_project_manifest(self,pid,*,add_export=None):
         path=self.manifest_path(pid)
@@ -595,6 +599,17 @@ class Store:
             cx.execute("UPDATE studio_workflows SET state='complete',artifacts=?,history=?,updated=? WHERE id=?",(encoded(artifacts),encoded(history),int(time.time()),ref));pid=wf['project']
         self.refresh_project_manifest(pid)
         return dict(id=ref,state='complete',summary=summary)
+
+    def retry_workflow(self,iid,ref,actor,reason):
+        reason=bounded(reason,1000,'workflow retry reason',empty=False)
+        with self.db() as cx,cx:
+            if self.member(cx,iid,actor)!='Studio Lead':raise PermissionError('Only the Studio Lead can restart a blocked workflow stage')
+            wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND state='blocked'",(ref,iid)).fetchone()
+            if not wf:raise PermissionError('Only a blocked workflow stage can be retried')
+            history=json.loads(wf['history']);history.append(dict(event='retry',phase=wf['phase'],reason=reason,at=int(time.time())))
+            cx.execute("UPDATE studio_workflows SET state='active',history=?,updated=? WHERE id=?",(encoded(history),int(time.time()),ref));pid=wf['project']
+        self.refresh_project_manifest(pid)
+        return dict(id=ref,state='active',phase=wf['phase'],reason=reason)
 
     def return_workflow(self,iid,ref,actor,reason):
         reason=bounded(reason,1000,'workflow return reason',empty=False)
