@@ -53,7 +53,7 @@ class StudioTests(unittest.TestCase):
         for proposal in self.s.prepare_staff(self.i):
             approved=self.approve(proposal['id'])
             residents[approved['title']]=approved['resident']
-        lead=residents['Studio Lead'];designer=residents['Lead Designer'];middle=residents['Systems designer']
+        lead=residents['Studio Lead'];designer=residents['Lead Designer'];test_planner=residents['Systems designer']
         developer=residents['Lead Developer'];reviewer=residents['Playtest reviewer']
         engine=residents['Engine specialist']
         workflow=self.s.start_workflow(self.i,self.p['project'],lead,'Adapt counter game','Extract one small portable-C experiment')
@@ -65,12 +65,14 @@ class StudioTests(unittest.TestCase):
         step=self.s.save_workflow_step(self.i,ref,project,designer,'Main loop','Observed update increments counter.',evidence)
         self.assertEqual(step['phase'],'planning')
         self.s.finish_delegation(plan['id'],'complete','Reverse scaffold recorded.')
-        self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'middle')
+        workflow_view=self.s.workflow_view(self.i,ref)
+        self.assertEqual(workflow_view['phase'],'middle')
+        self.assertEqual(workflow_view['phase_label'],'Design Integration and Production Planning')
         with self.assertRaises(PermissionError):
             self.s.delegate(self.i,project,lead,developer,'Skip test plan','',mode='delivery',workflow=ref,phase='implementation')
-        mid=self.s.delegate(self.i,project,lead,middle,'Test plan','Define deterministic assertions.',mode='test-plan',workflow=ref,phase='middle')
-        self.s.save_workflow_step(self.i,ref,project,middle,'Counter assertion','After one update, counter increases by one.',evidence)
-        self.s.finish_delegation(mid['id'],'complete','Test plan saved.')
+        test_plan_assignment=self.s.delegate(self.i,project,lead,test_planner,'Test plan','Define deterministic assertions.',mode='test-plan',workflow=ref,phase='middle')
+        self.s.save_workflow_step(self.i,ref,project,test_planner,'Counter assertion','After one update, counter increases by one.',evidence)
+        self.s.finish_delegation(test_plan_assignment['id'],'complete','Test plan saved.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'implementation')
         build=self.s.delegate(self.i,project,lead,developer,'Implement experiment','',mode='delivery',workflow=ref,phase='implementation')
         with self.assertRaises(PermissionError):
@@ -79,7 +81,7 @@ class StudioTests(unittest.TestCase):
         original_start=self.c.start;started=[]
         self.c.start=lambda request:(started.append(request) or dict(id='queued-child-job'))
         try:
-            child_result,_=self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='delegate',args=dict(resident=engine,title='Implement one bounded update-loop change',notes='Follow the Middle Department checkpoints.',mode='implementation')))
+            child_result,_=self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='delegate',args=dict(resident=engine,title='Implement one bounded update-loop change',notes='Follow the Design Integration and Production Planning checkpoints.',mode='implementation')))
         finally:self.c.start=original_start
         child=self.s.team_status(self.i,project,developer,build['id'])['children'][0]
         self.assertEqual(child['id'],child_result['id']);self.assertEqual(child['mode'],'implementation')
@@ -90,7 +92,7 @@ class StudioTests(unittest.TestCase):
         self.assertTrue(any(step['title']=='Counter assertion' for step in child_packet['workflow']['steps']))
         self.assertEqual(child_packet['assignment']['parent'],build['id'])
         with self.assertRaises(RuntimeError):
-            self.s.delegate(self.i,project,developer,middle,'Check an uncertain acceptance criterion','Return a focused analysis.',mode='analysis',workflow=ref,phase='implementation',parent=build['id'])
+            self.s.delegate(self.i,project,developer,test_planner,'Check an uncertain acceptance criterion','Return a focused analysis.',mode='analysis',workflow=ref,phase='implementation',parent=build['id'])
         with self.assertRaises(PermissionError):
             self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='edit',args={}))
         with self.assertRaises(ValueError):self.s.finish_delegation(build['id'],'complete','Implementation report.')
@@ -98,7 +100,7 @@ class StudioTests(unittest.TestCase):
         self.s.finish_delegation(child_result['id'],'complete','Implemented the bounded update-loop change.')
         team=self.s.team_status(self.i,project,developer,build['id'])
         self.assertEqual((team['total'],team['active']),(1,0))
-        blocked_child=self.s.delegate(self.i,project,developer,middle,'Check an uncertain acceptance criterion','Return a focused analysis and identify what remains unknown.',mode='analysis',workflow=ref,phase='implementation',parent=build['id'])
+        blocked_child=self.s.delegate(self.i,project,developer ,test_planner,'Check an uncertain acceptance criterion','Return a focused analysis and identify what remains unknown.',mode='analysis',workflow=ref,phase='implementation',parent=build['id'])
         team=self.s.team_status(self.i,project,developer,build['id'])
         self.assertEqual((team['total'],team['active']),(2,1))
         self.s.finish_delegation(blocked_child['id'],'blocked','The original source does not establish the expected screen result.')
@@ -118,12 +120,12 @@ class StudioTests(unittest.TestCase):
         self.assertTrue(self.s.recovery_check(self.i,project)['ok'])
 
     def test_blocked_implementation_waits_for_child_and_preserves_its_report_for_retry(self):
-        residents=self.staff();lead=residents['Studio Lead'];designer=residents['Lead Designer'];middle=residents['Systems designer']
+        residents=self.staff();lead=residents['Studio Lead'];designer=residents['Lead Designer'];test_planner=residents['Systems designer']
         developer=residents['Lead Developer'];engine=residents['Engine specialist']
         project=self.p['project'];workflow=self.s.start_workflow(self.i,project,lead,'Adapt counter game','Implement one bounded experiment')['id']
         planning=self.s.delegate(self.i,project,lead,designer,'Planning','Build the reverse scaffold.',mode='design',workflow=workflow,phase='planning')
         self.s.finish_delegation(planning['id'],'complete','Scaffold saved.')
-        test_plan=self.s.delegate(self.i,project,lead,middle,'Middle test plan','Define observable acceptance checks.',mode='test-plan',workflow=workflow,phase='middle')
+        test_plan=self.s.delegate(self.i,project,lead,test_planner,'Design Integration and Production Planning test plan','Define observable acceptance checks.',mode='test-plan',workflow=workflow,phase='middle')
         self.s.finish_delegation(test_plan['id'],'complete','Test plan saved.')
         implementation=self.s.delegate(self.i,project,lead,developer,'Implementation','Implement the agreed experiment.',mode='delivery',workflow=workflow,phase='implementation')
         child=self.s.delegate(self.i,project,developer,engine,'Bounded implementation task','Implement the counter update.',mode='implementation',workflow=workflow,phase='implementation',parent=implementation['id'])
