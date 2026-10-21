@@ -557,6 +557,8 @@ class Store:
                             raise PermissionError('Use the active staged workflow for all project assignments')
                     if assignee_title in ('Studio Lead','Lead Developer','Lead Designer','Playtest reviewer') or mode not in ('implementation','analysis'):
                         raise PermissionError('Lead Developer subtasks must go to approved implementation or analysis specialists')
+                    if cx.execute("SELECT 1 FROM studio_delegations WHERE parent=? AND state='running' LIMIT 1",(parent,)).fetchone():
+                        raise RuntimeError('Finish the current specialist subtask before assigning another')
                     if cx.execute("SELECT count(*) FROM studio_delegations WHERE parent=?",(parent,)).fetchone()[0]>=8:
                         raise ValueError('A Lead Developer assignment is limited to eight specialist subtasks')
                     assignment_mode=mode;assignment_workflow=root['workflow'];assignment_phase=root['phase'];parent_assignment=parent

@@ -53,7 +53,7 @@ restore {saved}; task {title,notes,state,task(optional)};
 help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test|test-plan"}; team_status {}; workflow_start {title,goal}; workflow_status {workflow}; workflow_assign {workflow}; workflow_step {workflow,title,body,evidence:[{source,path,digest,quote}]}; workflow_retry {workflow,reason}; workflow_close {workflow,summary}; workflow_return {workflow,reason}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
 learn {scope:"project|institution",lesson,evidence}; learning_none {reason}; note {text}; done {summary}.
 Assignments are saved durable work orders dispatched as independent resident jobs.
-For substantial adaptation or prototype work, start a staged workflow and move it through Planning, Middle Department test planning, Implementation, then independent Review. Assign only the current phase, wait for its durable result, inspect workflow_status, then assign the next phase. Planning must create a reverse scaffold from the immutable archive source; Middle must write test cases and acceptance criteria before implementation. Never bypass the phase gate with an ordinary delivery assignment while a staged workflow is active. Use workflow_retry for a blocked phase, workflow_return after failed verification, and workflow_close only after successful verification. The Studio Lead assigns Lead Designers to Planning, Systems designers to Middle test planning, Lead Developers to Implementation, and Playtest reviewers to Review. During Implementation, the Lead Developer may delegate up to eight bounded implementation or analysis subtasks to approved specialists. Each subtask is durably linked to its Lead Developer parent and the same workflow phase, and receives the Middle Department checkpoints. Specialists cannot delegate. Use team_status to inspect reports; wait until every subtask is complete or blocked, consolidate the findings, and only then finish the Lead Developer assignment. A blocked subtask does not automatically block the phase if the Lead Developer explains how it was handled. Outside a staged workflow, ordinary technical assignments follow the same Studio Lead to Lead Developer to specialist hierarchy. Every work session must close
+For substantial adaptation or prototype work, start a staged workflow and move it through Planning, Middle Department test planning, Implementation, then independent Review. Assign only the current phase, wait for its durable result, inspect workflow_status, then assign the next phase. Planning must create a reverse scaffold from the immutable archive source; Middle must write test cases and acceptance criteria before implementation. Never bypass the phase gate with an ordinary delivery assignment while a staged workflow is active. Use workflow_retry for a blocked phase, workflow_return after failed verification, and workflow_close only after successful verification. The Studio Lead assigns Lead Designers to Planning, Systems designers to Middle test planning, Lead Developers to Implementation, and Playtest reviewers to Review. During Implementation, the Lead Developer may delegate up to eight bounded implementation or analysis subtasks over the assignment, one at a time. Each subtask is durably linked to its Lead Developer parent and the same workflow phase, and receives the Middle Department checkpoints. Specialists cannot delegate. Wait for its report before assigning another, editing the shared project files, or building/testing. Use team_status to inspect each result; after all subtasks are complete or blocked, consolidate the findings before finishing the Lead Developer assignment. A blocked subtask does not automatically block the phase if the Lead Developer explains how it was handled. Outside a staged workflow, ordinary technical assignments follow the same Studio Lead to Lead Developer to specialist hierarchy. Every work session must close
 out with learn or learning_none before done. Temporary
 appointments are limited to one approved project work order and expire or can be revoked.
 Builds and execution are sandboxed host services. You have no shell, network, external
@@ -88,15 +88,16 @@ route the design to technical delivery.'''
 
 LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Developer responsible for technical delivery. If this is a staged
 Implementation assignment, begin by reading the Planning and Middle Department workflow
-checkpoints. Convert them into a small build plan, implement the feature, and use up to eight
-bounded implementation or analysis subtasks when useful. Delegate only to approved
+checkpoints. Convert them into a small build plan, implement the feature, and use up to eight bounded implementation or analysis subtasks over the assignment, one at a time.
+Wait for each durable report before assigning the next child or editing, building, or testing
+the shared project. Delegate only to approved
 specialists; each child assignment is linked to this Implementation assignment and receives
 the same checkpoint record. Use team_status to inspect durable reports. Do not finish while
 any child is running. Integrate completed work, explain blocked or unverified items, and
 report what you changed and tested. The Studio Lead will advance the workflow to independent
 Review after this assignment completes. Do not dispatch a Playtest Reviewer yourself during
 a staged workflow. For ordinary technical assignments outside a staged workflow, you own
-delivery and may dispatch bounded specialist work under the same hierarchy. Do not claim
+delivery and may dispatch bounded specialist work under the same one-at-a-time rule. Do not claim
 another resident's work as your own. Finish with learning_none or learn, then done.'''
 
 ASSIGNMENT_SYSTEM=WORK_SYSTEM+'''\nYou are an independently dispatched specialist working only on the assignment included
@@ -550,6 +551,11 @@ class Studios:
                 'test':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','build','tests','create_machine','run_machine','observe','snapshot','reset','drop','inspect','finding','note','learning_none','done'},
             }
             if action not in allowed.get(assignment_mode,set()):raise PermissionError('Assignment mode does not permit this action')
+        if assignment_id and assignment_mode=='lead-developer':
+            with self.store.db() as cx:
+                active_child=cx.execute("SELECT 1 FROM studio_delegations WHERE parent=? AND state='running' LIMIT 1",(assignment_id,)).fetchone()
+            if active_child and action in ('edit','patch','build','tests','create_machine','run_machine','reset','restore','drop','delegate'):
+                raise PermissionError('Wait for the current specialist report before editing, testing or assigning more work')
         workflow=settings.get('workflow','');workflow_phase=settings.get('workflow_phase','')
         if workflow:
             if assignment_id and action in ('workflow_start','workflow_assign','workflow_retry','workflow_close','workflow_return'):

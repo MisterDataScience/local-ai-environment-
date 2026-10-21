@@ -89,10 +89,16 @@ class StudioTests(unittest.TestCase):
         child_packet=self.c.work_packet(child_row,dict(notes='',last_result={}))
         self.assertTrue(any(step['title']=='Counter assertion' for step in child_packet['workflow']['steps']))
         self.assertEqual(child_packet['assignment']['parent'],build['id'])
-        blocked_child=self.s.delegate(self.i,project,developer,middle,'Check an uncertain acceptance criterion','Return a focused analysis and identify what remains unknown.',mode='analysis',workflow=ref,phase='implementation',parent=build['id'])
+        with self.assertRaises(RuntimeError):
+            self.s.delegate(self.i,project,developer,middle,'Check an uncertain acceptance criterion','Return a focused analysis.',mode='analysis',workflow=ref,phase='implementation',parent=build['id'])
+        with self.assertRaises(PermissionError):
+            self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='edit',args={}))
         with self.assertRaises(ValueError):self.s.finish_delegation(build['id'],'complete','Implementation report.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'implementation')
         self.s.finish_delegation(child_result['id'],'complete','Implemented the bounded update-loop change.')
+        team=self.s.team_status(self.i,project,developer,build['id'])
+        self.assertEqual((team['total'],team['active']),(1,0))
+        blocked_child=self.s.delegate(self.i,project,developer,middle,'Check an uncertain acceptance criterion','Return a focused analysis and identify what remains unknown.',mode='analysis',workflow=ref,phase='implementation',parent=build['id'])
         team=self.s.team_status(self.i,project,developer,build['id'])
         self.assertEqual((team['total'],team['active']),(2,1))
         self.s.finish_delegation(blocked_child['id'],'blocked','The original source does not establish the expected screen result.')
