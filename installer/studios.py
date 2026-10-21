@@ -43,7 +43,7 @@ Actions and fields:
 tree {}; read {path,start,lines}; search {query}; edit {path,text,expected};
 patch {path,old,new,expected}; patches require one exact old passage and the read SHA256.
 sdk {file(optional)}; reference {reference}; knowledge_search {query}; source_tree {source}; source {source,path,start,lines};
-build {kind:"cartridge"}; tests {build}; create_machine {build,seed};
+build {kind:"cartridge"}; tests {build}; create_machine {build,seed,task(optional)};
 run_machine {machine,steps:1..600,buttons:0..255}; observe {machine};
 inspect {machine,question}; snapshot {machine}; reset {machine,seed}; drop {machine};
 restore {saved}; task {title,notes,state,task(optional)};
@@ -354,7 +354,7 @@ class Studios:
             if args.get('kind','cartridge')!='cartridge':raise PermissionError('Residents can build only portable cartridges')
             result=self.workbench.build(pid)
         elif action=='tests':result=self.workbench.tests(iid,args['build'])
-        elif action=='create_machine':result=self.workbench.create(iid,args['build'],args.get('seed',1))
+        elif action=='create_machine':result=self.workbench.create(iid,args['build'],args.get('seed',1),args.get('task'))
         elif action=='finding':result=self.workbench.add_finding(iid,pid,args.get('category'),args.get('text',''),args.get('evidence',[]))
         elif action in ('run_machine','observe','snapshot','reset','drop'):
             operation='run' if action=='run_machine' else action
