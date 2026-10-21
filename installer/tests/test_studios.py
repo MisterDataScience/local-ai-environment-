@@ -289,6 +289,15 @@ class StudioTests(unittest.TestCase):
         self.assertIn('Studio Lead',titles);self.assertIn('Lead Developer',titles)
         self.assertTrue(all(p['state']=='pending' for p in self.s.view(self.i)['proposals'] if p['kind']=='staff'))
 
+    def test_lead_developer_subtask_limit_is_three(self):
+        staff=self.staff();lead=staff['Studio Lead'];developer=staff['Lead Developer'];specialist=staff['Systems designer']
+        parent=self.s.delegate(self.i,self.p['project'],lead,developer,'Implement bounded feature','',mode='delivery')
+        for index in range(3):
+            child=self.s.delegate(self.i,self.p['project'],developer,specialist,'Focused analysis '+str(index),'',mode='analysis',parent=parent['id'])
+            self.s.finish_delegation(child['id'],'complete','Focused report.')
+        with self.assertRaises(ValueError):
+            self.s.delegate(self.i,self.p['project'],developer,specialist,'Fourth task','',mode='analysis',parent=parent['id'])
+
     def test_delegated_assignments_follow_role_hierarchy_and_are_saved(self):
         staff=self.staff();lead=staff['Studio Lead'];developer=staff['Lead Developer'];designer=staff['Lead Designer'];engine=staff['Systems designer']
         with self.assertRaises(PermissionError):self.s.delegate(self.i,self.p['project'],designer,engine,'Unscoped request')
