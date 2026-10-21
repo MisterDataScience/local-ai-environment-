@@ -11,6 +11,7 @@ This checklist records the agreed scope. It is not a claim of completion.
 - Resumable finite founding analysis prepares knowledge, staff and short navigation maps.
 - Final owner approval for staff, access, Library/Archive publication and lasting memories/maps.
 - Reproducible build attempts, useful errors, isolated execution, source edits and versioned builds.
+- Guided legacy adaptation starts with a read-only plan over the immutable archived source; owner approval is required before edits/builds in a separate working-copy session.
 - C SDK, portable cartridges and standalone player at **320 × 180**, integer nearest-neighbour scaling.
 - Flexible code/working-memory sizes within host limits; obsolete strict retro limits are not reinstated.
 - Pausing, deterministic seeded updates, input replay, saved state, screenshots and diagnostic values.
