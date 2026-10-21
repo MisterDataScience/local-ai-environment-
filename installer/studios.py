@@ -659,7 +659,7 @@ class Studios:
                 if isinstance(value,list):
                     items=value[offset:offset+limit]
                     if section in ('tests','findings'):
-                        items=[{k:v for k,v in item.items() if k!='inputs'}|{'input_count':len(item.get('inputs',[]))} for item in items]
+                        items=[dict({k:v for k,v in item.items() if k!='inputs'},input_count=len(item.get('inputs',[]))) for item in items]
                     result=dict(report_id=report['id'],verdict=report['verdict'],section=section,offset=offset,total=len(value),items=items)
                 else:result=dict(report_id=report['id'],verdict=report['verdict'],section=section,item=value)
             else:
