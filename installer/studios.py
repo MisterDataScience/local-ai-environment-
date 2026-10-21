@@ -560,12 +560,12 @@ class Studios:
             if assignment_id and workflow_phase in ('planning','middle') and action in ('edit','patch','build','tests','create_machine','run_machine','restore'):
                 raise PermissionError('Planning Department and Design Integration and Production Planning Department stages are read-only; implementation starts only after the test plan is complete')
         if row.get('kind')=='adaptation-plan':
-            allowed={'source_tree','source','sdk','knowledge_search','done'}
+            allowed=ROLE_ACTIONS['adaptation-plan']
             if action not in allowed:raise PermissionError('Adaptation planning is read-only; the owner must approve a plan before implementation')
             adaptation=settings.get('adaptation') or {}
             if action in ('source_tree','source') and args.get('source')!=adaptation.get('source'):raise PermissionError('Planning is limited to the selected immutable archive source')
         if appointment_id:
-            allowed={'tree','read','search','edit','patch','sdk','build','tests','learn','learning_none','note','done'}
+            allowed=ROLE_ACTIONS['appointment']
             if action not in allowed:raise PermissionError('Temporary appointment is limited to its named project work order')
             if action=='learn' and args.get('scope','project')!='project':raise PermissionError('Temporary appointment learning is project-scoped only')
         if value.get('note'):progress['notes']=(progress['notes']+'\n'+bounded(value['note'],1200,'note'))[-6000:]
