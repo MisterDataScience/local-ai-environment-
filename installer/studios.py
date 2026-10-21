@@ -53,10 +53,7 @@ restore {saved}; task {title,notes,state,task(optional)};
 help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test"}; workflow_start {title,goal}; workflow_status {workflow}; workflow_assign {workflow}; workflow_step {workflow,title,body,evidence:[evidence IDs]}; workflow_retry {workflow,reason}; workflow_close {workflow,summary}; workflow_return {workflow,reason}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
 learn {scope:"project|institution",lesson,evidence}; learning_none {reason}; note {text}; done {summary}.
 Assignments are saved durable work orders dispatched as independent resident jobs.
-The Studio Lead assigns Lead Designers for design briefs and Lead Developers for technical
-delivery. Lead Developers may dispatch specialists or a separate read-only Playtest Reviewer
-with mode=test. Lead Designers report their design brief and acceptance criteria to the Studio
-Lead. Every work session must close
+For substantial adaptation or prototype work, start a staged workflow and move it through Planning, Middle Department test planning, Implementation, then independent Review. Assign only the current phase, wait for its durable result, inspect workflow_status, then assign the next phase. Planning must create a reverse scaffold from the immutable archive source; Middle must write test cases and acceptance criteria before implementation. Never bypass the phase gate with an ordinary delivery assignment while a staged workflow is active. Use workflow_retry for a blocked phase, workflow_return after failed verification, and workflow_close only after successful verification. The Studio Lead assigns Lead Designers to Planning, Systems designers to Middle test planning, Lead Developers to Implementation, and Playtest reviewers to Review. Lead Developers may dispatch specialists only for non-workflow technical tasks. Every work session must close
 out with learn or learning_none before done. Temporary
 appointments are limited to one approved project work order and expire or can be revoked.
 Builds and execution are sandboxed host services. You have no shell, network, external
@@ -86,10 +83,7 @@ before assigning work; never guess based on recency. If no project exists, expla
 project must be created before project work can be dispatched.'''
 
 LEAD_DESIGNER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Designer assigned directly by the Studio Lead.
-You own design direction for the assigned project. Inspect the supplied project and approved
-references, then return a concise design brief with goals, constraints, acceptance criteria and
-open questions. You may inspect and report evidence, but do not edit files, build, test, or
-assign other residents. Finish with learning_none and done so the Studio Lead can review and
+You own the Planning Department stage in a staged workflow. For this assignment, inspect only the workflow's selected immutable archive source. Build a reverse scaffold in saved workflow_step checkpoints: identify source contents, major loop/data structures, reusable gameplay or data, hardware/library dependencies, unknowns, and one small portable-C experiment. Cite exact source evidence in each checkpoint. Do not claim the archived game runs on the C console. Do not inspect or edit the mutable project copy, build, test, or assign residents. If this is not a workflow assignment, prepare the requested design brief. Finish with learning_none and done so the Studio Lead can review and
 route the design to technical delivery.'''
 
 LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Developer on an independently dispatched, durable work order from the
@@ -105,7 +99,7 @@ in this packet. Respect its mode and task scope. Return evidence and uncertainty
 expand membership or publish/approve lasting material. Finish with learn or learning_none,
 then done so the Studio Lead receives a durable report.'''
 
-TESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent Playtest Reviewer assigned to verify a separate implementation.
+MIDDLE_TEST_PLAN_SYSTEM=WORK_SYSTEM+'''\nYou are the Middle Department test planner. Use the Planning Department reverse scaffold and cited immutable-source evidence. Before any implementation, create a practical test plan as saved workflow_step checkpoints: observable assertions, input sequences/seeds, expected state or screen outcomes where knowable, resource limits, and explicit unverified questions. Do not edit, build, or run code. Keep expected outcomes grounded in evidence; mark uncertain visual expectations as unverified. Finish with learning_none then done.'''\n\nTESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent Playtest Reviewer assigned to verify a separate implementation.
 You may inspect files, build and run the provided tests or bounded workstation checks, but
 you are read-only: do not edit or patch files, delegate, create permanent records, or
 approve claims. State which executable checks actually ran, their results and anything
@@ -548,6 +542,8 @@ class Studios:
                 raise PermissionError('Only the Studio Lead controls workflow routing')
             if assignment_id and action=='workflow_step' and (args.get('workflow')!=workflow or workflow_phase not in ('planning','middle')):
                 raise PermissionError('Workflow checkpoints are limited to the assigned planning or middle phase')
+            if assignment_id and workflow_phase=='planning' and action in ('tree','read','search'):
+                raise PermissionError('Planning Department reads the immutable archive through source_tree and source only')
             if assignment_id and action in ('source_tree','source') and workflow_phase=='planning' and args.get('source')!=self.store.workflow_view(iid,workflow)['source']:
                 raise PermissionError('Planning is limited to the workflow immutable archive source')
             if assignment_id and workflow_phase in ('planning','middle') and action in ('edit','patch','build','tests','create_machine','run_machine','restore'):
@@ -754,6 +750,7 @@ class Studios:
                     system=(ADAPTATION_PLAN_SYSTEM if row['kind']=='adaptation-plan' else
                             MANAGER_SYSTEM if settings.get('actor_title')=='Studio Lead' else
                             LEAD_DESIGNER_SYSTEM if assignment_mode=='design' else
+                            MIDDLE_TEST_PLAN_SYSTEM if assignment_mode=='test-plan' else
                             LEAD_DEVELOPER_SYSTEM if assignment_mode=='lead-developer' else
                             TESTER_SYSTEM if assignment_mode=='test' else
                             ASSIGNMENT_SYSTEM if row['kind']=='assignment' else WORK_SYSTEM)
