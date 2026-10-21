@@ -1,5 +1,6 @@
 """Bounded build sandbox and shared Wasm worker; never a resident shell tool."""
 import base64
+import copy
 import io
 import json
 import os
@@ -16,6 +17,21 @@ import time
 import zipfile
 
 from studio_store import Store,atomic,checked,files,archive,sha,encoded,ident,MAX_PROJECT
+
+BUILD_MANIFEST_VERSION=1
+SDK_VERSION='1.0.0'
+SDK_ABI_VERSION=1
+CARTRIDGE_FORMAT_VERSION=1
+SAVE_FORMAT_VERSION=1
+COMPILER_VERSION='ziglang 0.14.1'
+RUNTIME_VERSION='wasmtime 38.0.0'
+
+def validate_build_manifest(manifest):
+    if manifest is None:return # Legacy format-1 cartridge.
+    if not isinstance(manifest,dict):raise ValueError('Unsupported cartridge build manifest')
+    supported={'manifest_version':BUILD_MANIFEST_VERSION,'sdk_version':SDK_VERSION,'sdk_abi_version':SDK_ABI_VERSION,'cartridge_format_version':CARTRIDGE_FORMAT_VERSION,'save_format_version':SAVE_FORMAT_VERSION}
+    for key,value in supported.items():
+        if manifest.get(key)!=value:raise ValueError('Unsupported cartridge '+key.replace('_',' ')+': '+str(manifest.get(key)))
 
 
 def sandbox(command,read_roots,write_root,*,test_trusted=False):
@@ -48,7 +64,7 @@ class Workbench:
         except (OSError,ValueError):pass
 
     def status(self):
-        return dict(installed=self.python.is_file(),versions=dict(compiler='ziglang 0.14.1',runtime='wasmtime 38.0.0'),instances=[dict(id=k,**v) for k,v in self.machines.items()],measurements=self.measurements,resolution=[320,180],host_cpu_ms_per_second=200,max_instances=40)
+        return dict(installed=self.python.is_file(),versions=dict(compiler=COMPILER_VERSION,runtime=RUNTIME_VERSION,sdk=SDK_VERSION,sdk_abi=SDK_ABI_VERSION,cartridge=CARTRIDGE_FORMAT_VERSION,save=SAVE_FORMAT_VERSION),instances=[dict(id=k,**v) for k,v in self.machines.items()],measurements=self.measurements,resolution=[320,180],host_cpu_ms_per_second=200,max_instances=40)
 
     def install_tools(self):
         with self.build_lock:
@@ -66,6 +82,12 @@ class Workbench:
         if not self.python.exists():raise RuntimeError('Install studio tools from the institution page first')
         out=subprocess.run([str(self.python),'-I','-c','import ziglang,pathlib;print(pathlib.Path(ziglang.__file__).parent/"zig")'],capture_output=True,text=True,check=True,timeout=10)
         return Path(out.stdout.strip())
+
+    def compiler_identity(self):
+        compiler=self.compiler();args=['version'] if compiler.name=='zig' else ['--version']
+        result=subprocess.run([str(compiler),*args],capture_output=True,text=True,check=True,timeout=10)
+        first=(result.stdout or result.stderr).strip().splitlines()[0][:160]
+        return dict(name='ziglang' if compiler.name=='zig' else compiler.name,version=first)
 
     def run_process(self,command,work,timeout=120):
         compiler=self.compiler()
@@ -105,6 +127,7 @@ class Workbench:
             work=directory/'work';work.mkdir(mode=0o700)
             for name,data in entries:atomic(checked(work,name),data)
             atomic(directory/'source.zip',archive(entries))
+            command=[];build_manifest=None;compiler_info=dict(name='ziglang',version='0.14.1')
             try:
                 if kind=='cartridge':
                     sdk=work/'.studio-sdk';shutil.copytree(self.control/'studio_sdk',sdk)
@@ -114,19 +137,22 @@ class Workbench:
                     for name in sources:
                         if not name.endswith('.c') or not checked(work,name).is_file():raise ValueError('Unknown C source')
                     out=work/'cartridge.wasm'
-                    compiler=self.compiler();prefix=[str(compiler),'cc'] if compiler.name=='zig' else [str(compiler)]
+                    compiler=self.compiler();compiler_info=self.compiler_identity();prefix=[str(compiler),'cc'] if compiler.name=='zig' else [str(compiler)]
                     target='wasm32-freestanding' if compiler.name=='zig' else 'wasm32-unknown-unknown'
-                    command=[*prefix,'-target',target,'-O2','-nostdlib','-fno-builtin','-I',str(sdk),'-I',str(work),*sources,'-Wl,--no-entry','-Wl,--export=vm_init','-Wl,--export=vm_update','-Wl,--export=vm_draw','-Wl,--export=__stack_pointer','-Wl,--export-memory','-Wl,--max-memory=16777216','-Wl,-z,stack-size=65536','-o',str(out)]
+                    compiler_flags=['-target',target,'-O2','-nostdlib','-fno-builtin','-Wl,--no-entry','-Wl,--export=vm_init','-Wl,--export=vm_update','-Wl,--export=vm_draw','-Wl,--export=__stack_pointer','-Wl,--export-memory','-Wl,--max-memory=16777216','-Wl,-z,stack-size=65536']
+                    command=[*prefix,*compiler_flags,'-I',str(sdk),'-I',str(work),*sources,'-o',str(out)]
                     result=self.run_process(command,work)
                     if result['exit_code']==0:
                         wasm=out.read_bytes()
                         if len(wasm)>16*1024*1024:raise ValueError('Compiled cartridge exceeds 16 MiB host budget')
-                        assets={}
+                        assets={};asset_hashes={}
                         for key,name in manifest.get('assets',{}).items():
                             if not str(key).isdigit():raise ValueError('Asset IDs must be integers')
-                            assets[str(key)]=base64.b64encode(checked(work,name).read_bytes()).decode()
+                            data=checked(work,name).read_bytes();assets[str(key)]=base64.b64encode(data).decode();asset_hashes[str(key)]=sha(data)
                         if len(wasm)+sum(len(base64.b64decode(v)) for v in assets.values())>16*1024*1024:raise ValueError('Cartridge assets exceed host budget')
-                        payload=dict(format=1,title=str(manifest.get('title',p['title']))[:120],width=320,height=180,wasm=base64.b64encode(wasm).decode(),assets=assets,source_sha256=source_digest,tests=manifest.get('tests',[])[:32])
+                        build_manifest=dict(manifest_version=BUILD_MANIFEST_VERSION,sdk_version=SDK_VERSION,sdk_abi_version=SDK_ABI_VERSION,cartridge_format_version=CARTRIDGE_FORMAT_VERSION,save_format_version=SAVE_FORMAT_VERSION,compiler=compiler_info,wasm_runtime=dict(name='wasmtime',version='38.0.0'),build_flags=compiler_flags,sources={name:sha(data) for name,data in entries},source_sha256=source_digest,assets=asset_hashes)
+                        atomic(directory/'build-manifest.json',encoded(build_manifest).encode())
+                        payload=dict(format=CARTRIDGE_FORMAT_VERSION,title=str(manifest.get('title',p['title']))[:120],width=320,height=180,wasm=base64.b64encode(wasm).decode(),assets=assets,source_sha256=source_digest,build_manifest=build_manifest,tests=manifest.get('tests',[])[:32])
                         atomic(directory/'cartridge.json',encoded(payload).encode())
                 elif kind=='reference':
                     # An explicit owner/session allowance authorises the sandboxed build.
@@ -136,6 +162,10 @@ class Workbench:
                     result=self.run_process(command,work)
                 else:raise ValueError('Unknown build kind')
             except Exception as error:result=dict(exit_code=-1,diagnostics=str(error)[:24000])
+            if build_manifest is None:
+                build_manifest=dict(manifest_version=BUILD_MANIFEST_VERSION,sdk_version=SDK_VERSION,sdk_abi_version=SDK_ABI_VERSION,cartridge_format_version=CARTRIDGE_FORMAT_VERSION,save_format_version=SAVE_FORMAT_VERSION,compiler=compiler_info,wasm_runtime=dict(name='wasmtime',version='38.0.0'),build_flags=command,source_sha256=source_digest,sources={name:sha(data) for name,data in entries},assets={})
+                atomic(directory/'build-manifest.json',encoded(build_manifest).encode())
+            result['build_manifest_sha256']=sha(encoded(build_manifest))
             state='passed' if result['exit_code']==0 else 'failed'
             with self.store.db() as cx,cx:cx.execute('INSERT INTO studio_builds VALUES(?,?,?,?,?,?,?)',(bid,pid,source_digest,kind,state,encoded(result),int(time.time())))
             atomic(directory/'report.json',encoded(result).encode())
@@ -169,7 +199,10 @@ class Workbench:
             row=cx.execute("SELECT b.*,p.institution FROM studio_builds b JOIN studio_projects p ON p.id=b.project WHERE b.id=? AND b.state='passed' AND b.kind='cartridge' AND p.state='active'",(bid,)).fetchone()
             if not row or iid and row['institution']!=iid:raise PermissionError('Cartridge unavailable')
         path=self.store.directory/row['institution'].split(':')[1]/'builds'/bid.split(':')[1]/'cartridge.json'
-        return json.loads(path.read_text()),dict(row)
+        payload=json.loads(path.read_text())
+        if payload.get('format')!=CARTRIDGE_FORMAT_VERSION:raise ValueError('Unsupported cartridge format '+str(payload.get('format')))
+        validate_build_manifest(payload.get('build_manifest'))
+        return payload,dict(row)
 
     def start_worker(self):
         if self.process and self.process.poll() is None:return
@@ -213,6 +246,24 @@ class Workbench:
             self.machines[mid]=dict(institution=iid,build=bid,project=row['project'])
             return dict(machine=mid,**result)
 
+    def checkpoint_payload(self,mid,state):
+        meta=self.machines[mid];cartridge,_=self.cartridge(meta['build'])
+        return dict(envelope_version=1,meta=meta,build_manifest=cartridge.get('build_manifest'),state=state)
+
+    def write_checkpoint(self,iid,target,payload,replace=False):
+        data=encoded(payload).encode();self.store.quota(iid,len(data),replace_path=target if replace else None);atomic(target,data)
+
+    def migrate_checkpoint(self,content):
+        if not isinstance(content,dict):raise ValueError('Invalid saved machine record')
+        if content.get('envelope_version',1)!=1:raise ValueError('Unsupported checkpoint format '+str(content.get('envelope_version')))
+        state=content.get('state')
+        if not isinstance(state,dict):raise ValueError('Invalid saved machine state')
+        if state.get('save_format',1)!=SAVE_FORMAT_VERSION:raise ValueError('Unsupported save format '+str(state.get('save_format')))
+        if state.get('sdk_abi_version',1)!=SDK_ABI_VERSION:raise ValueError('Unsupported SDK ABI '+str(state.get('sdk_abi_version')))
+        migrated=copy.deepcopy(content);migrated['envelope_version']=1
+        migrated['state']['save_format']=SAVE_FORMAT_VERSION;migrated['state']['sdk_abi_version']=SDK_ABI_VERSION
+        return migrated,migrated!=content
+
     def machine(self,iid,mid,operation,**args):
         with self.lock:
             if mid not in self.machines or self.machines[mid]['institution']!=iid:raise PermissionError('Machine belongs to another institution or is not running')
@@ -227,20 +278,41 @@ class Workbench:
                     if stop and result['metrics'].get(str(stop['key']))==stop['value']:break
             else:result=self.rpc(dict(operation=operation,machine=mid,**args))
             if operation=='snapshot':
-                self.store.quota(iid,len(encoded(result)))
                 saved=ident('machine');target=self.store.directory/iid.split(':')[1]/'machines'/(saved.split(':')[1]+'.json')
-                atomic(target,encoded(dict(meta=self.machines[mid],state=result)).encode());return dict(saved=saved)
+                self.write_checkpoint(iid,target,self.checkpoint_payload(mid,result));return dict(saved=saved)
             if operation=='drop':self.machines.pop(mid,None)
             if operation in ('run','reset','restore'):
                 state=self.rpc(dict(operation='snapshot',machine=mid))
-                atomic(self.store.directory/iid.split(':')[1]/'machines'/(mid.split(':')[1]+'.json'),encoded(dict(meta=self.machines[mid],state=state)).encode())
+                target=self.store.directory/iid.split(':')[1]/'machines'/(mid.split(':')[1]+'.json')
+                self.write_checkpoint(iid,target,self.checkpoint_payload(mid,state),replace=True)
             return result
 
     def restore(self,iid,saved):
         if not isinstance(saved,str) or not saved.startswith('machine:') or len(saved)!=40:raise ValueError('Invalid saved machine')
-        path=self.store.directory/iid.split(':')[1]/'machines'/(saved.split(':')[1]+'.json')
-        content=json.loads(path.read_text());result=self.create(iid,content['meta']['build'],content['state']['seed'])
-        restored=self.machine(iid,result['machine'],'restore',state=content['state']);return dict(machine=result['machine'],**restored)
+        root=self.store.directory/iid.split(':')[1]/'machines';path=root/(saved.split(':')[1]+'.json')
+        raw=path.read_bytes();content=json.loads(raw);candidate,changed=self.migrate_checkpoint(content);meta=candidate.get('meta')
+        if not isinstance(meta,dict) or not meta.get('build'):raise ValueError('Saved machine has no build identity')
+        cartridge,_=self.cartridge(meta['build'],iid);manifest=cartridge.get('build_manifest')
+        if candidate.get('build_manifest') is not None:
+            validate_build_manifest(candidate['build_manifest'])
+            if candidate['build_manifest']!=manifest:raise ValueError('Checkpoint build manifest does not match its cartridge')
+        candidate['build_manifest']=manifest
+        if candidate['state'].get('code')!=sha(base64.b64decode(cartridge['wasm'],validate=True)):raise ValueError('Save state belongs to another cartridge build')
+        result=self.create(iid,meta['build'],candidate['state']['seed']);mid=result['machine']
+        try:
+            restored=self.rpc(dict(operation='restore',machine=mid,state=candidate['state']))
+            verified=self.rpc(dict(operation='snapshot',machine=mid))
+            keys=('version','code','seed','ticks','memory','globals','save','history','metrics')
+            if any(verified.get(k)!=candidate['state'].get(k) for k in keys):raise ValueError('Migrated save verification failed; original save was kept')
+            if changed or content.get('build_manifest')!=manifest:
+                originals=root/'originals';originals.mkdir(mode=0o700,parents=True,exist_ok=True);original=originals/(saved.split(':')[1]+'.json')
+                self.store.quota(iid,len(raw));atomic(original,raw)
+                candidate['state']=verified;self.write_checkpoint(iid,path,dict(envelope_version=1,meta=meta,build_manifest=manifest,state=verified),replace=True)
+            return dict(machine=mid,**restored)
+        except Exception:
+            try:self.rpc(dict(operation='drop',machine=mid))
+            except Exception:pass
+            self.machines.pop(mid,None);raise
 
     def tests(self,iid,bid):
         cartridge,_=self.cartridge(bid,iid);results=[]
