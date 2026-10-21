@@ -465,7 +465,9 @@ class Studios:
         if op=='example':return self.store.ingest(iid,'First workstation experiment',files(self.workbench.control/'studio_sdk'),dict(kind='bundled-example'))
         if op=='project_manifest':return self.store.get_project_manifest(iid,r['project'])
         if op=='recovery_check':
-            with self.store.db() as cx:jobs=[dict(x) for x in cx.execute('SELECT id,state,reason FROM studio_jobs WHERE institution=? AND project=? ORDER BY created DESC',(iid,r['project']))]
+            with self.store.db() as cx:
+                self.store.project(cx,r['project'],iid)
+                jobs=[dict(x) for x in cx.execute('SELECT id,state,reason FROM studio_jobs WHERE institution=? AND project=? ORDER BY created DESC',(iid,r['project']))]
             if self.active or any(x['state']=='running' for x in jobs):raise RuntimeError('Pause studio jobs and wait for them to stop before recovery verification')
             check=self.store.recovery_check(iid,r['project']);check['jobs_paused']=True;check['jobs_checked']=len(jobs);return check
         if op=='tree':return self.store.tree(r['project'])
