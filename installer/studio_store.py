@@ -165,10 +165,13 @@ class Store:
         with self.db() as cx:p=self.project(cx,pid)
         return self.directory/p['institution'].split(':')[1]/'projects'/pid.split(':')[1]/'work'
 
-    def quota(self,iid,extra=0):
-        folder=self.directory/iid.split(':')[1]
-        used=sum(p.stat().st_size for p in folder.rglob('*') if p.is_file())
-        if used+extra>MAX_STUDIO:raise ValueError('Institution storage budget exhausted; preserve/export work before removing old builds')
+    def quota(self,iid,extra=0,replace_path=None):
+        folder=(self.directory/iid.split(':')[1]).resolve();used=sum(p.stat().st_size for p in folder.rglob('*') if p.is_file());replaced=0
+        if replace_path is not None:
+            target=Path(replace_path).resolve()
+            if target!=folder and folder not in target.parents:raise PermissionError('Quota replacement path is outside this institution')
+            if target.is_file():replaced=target.stat().st_size
+        if used-replaced+extra>MAX_STUDIO:raise ValueError('Institution storage budget exhausted; preserve/export work before removing old builds')
 
     def create(self,name,purpose,kind='studio'):
         name=bounded(name,100,'institution name');purpose=bounded(purpose,2000,'purpose')

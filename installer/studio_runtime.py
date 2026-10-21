@@ -166,9 +166,11 @@ class Machine:
         return dict(ticks=self.ticks,metrics=self.metrics,sounds=self.sounds,png=base64.b64encode(png(self.frame)).decode(),memory_bytes=len(self.state_bytes()),state_sha256=hashlib.sha256(self.state_bytes()).hexdigest(),screen_sha256=hashlib.sha256(self.frame).hexdigest())
 
     def snapshot(self):
-        return dict(version=1,code=self.code_hash,seed=self.seed,ticks=self.ticks,memory=base64.b64encode(zlib.compress(self.state_bytes())).decode(),globals=self.globals(),save=base64.b64encode(self.save).decode(),history=self.history,metrics=self.metrics)
+        return dict(version=1,save_format=1,sdk_abi_version=1,code=self.code_hash,seed=self.seed,ticks=self.ticks,memory=base64.b64encode(zlib.compress(self.state_bytes())).decode(),globals=self.globals(),save=base64.b64encode(self.save).decode(),history=self.history,metrics=self.metrics)
 
     def restore(self,state):
+        if state.get('save_format',1)!=1:raise ValueError('Unsupported save format '+str(state.get('save_format')))
+        if state.get('sdk_abi_version',1)!=1:raise ValueError('Unsupported SDK ABI '+str(state.get('sdk_abi_version')))
         if state.get('version')!=1 or state.get('code')!=self.code_hash:raise ValueError('Save state belongs to another cartridge')
         decompressor=zlib.decompressobj();raw=decompressor.decompress(base64.b64decode(state['memory'],validate=True),MAX_MEMORY+1)
         if len(raw)>MAX_MEMORY or not decompressor.eof or decompressor.unused_data:raise ValueError('Invalid bounded save state')

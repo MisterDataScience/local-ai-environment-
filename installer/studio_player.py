@@ -11,7 +11,7 @@ PLAYER=r'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="view
 <label>Restore save <input id="load" type="file" accept="application/json"></label><p>Arrow keys: directions. Z: A. X: B. Enter: Start. Shift: Select. Sound begins after Start.</p><pre id="status">Ready</pre>
 <script id="cartridge" type="application/json">__CARTRIDGE__</script>
 <script>
-const cartridge=JSON.parse(document.getElementById('cartridge').textContent);document.getElementById('title').textContent=cartridge.title;
+const cartridge=JSON.parse(document.getElementById('cartridge').textContent);const manifest=cartridge.build_manifest||{};const compatible=cartridge.format===1&&typeof manifest==='object'&&!Array.isArray(manifest)&&(manifest.manifest_version===undefined||manifest.manifest_version===1)&&(manifest.sdk_version===undefined||manifest.sdk_version==='1.0.0')&&(manifest.sdk_abi_version===undefined||manifest.sdk_abi_version===1)&&(manifest.cartridge_format_version===undefined||manifest.cartridge_format_version===1)&&(manifest.save_format_version===undefined||manifest.save_format_version===1);if(!compatible){document.getElementById('status').textContent='Unsupported cartridge or SDK version. Open it in a compatible player.';for(const b of document.querySelectorAll('button,input'))b.disabled=true;throw Error('Unsupported cartridge version');}document.getElementById('title').textContent=cartridge.title;
 const canvas=document.getElementById('screen'),ctx=canvas.getContext('2d');let worker,playing=false,pending=false,timer,buttons=0,audio;
 function resize(){const scale=Math.max(1,Math.floor(Math.min((innerWidth-48)/320,(innerHeight-280)/180)));canvas.style.width=320*scale+'px';canvas.style.height=180*scale+'px';}addEventListener('resize',resize);resize();
 function workerMain(){let instance,mem,frame=new Uint8ClampedArray(320*180*4),saved=new Uint8Array(),assets={},sounds=[],ticks=0,code;
@@ -22,8 +22,8 @@ const imports={vm:{clear(c){const a=colour(c);for(let p=0;p<frame.length;p+=4)fr
 function globals(){return Object.fromEntries(Object.entries(instance.exports).filter(([k,v])=>v instanceof WebAssembly.Global).map(([k,v])=>[k,v.value]));}
 onmessage=async({data:d})=>{try{if(d.op==='init'){code=d.cartridge;assets=Object.fromEntries(Object.entries(code.assets).map(([k,v])=>[k,bytes(v)]));const result=await WebAssembly.instantiate(bytes(code.wasm),imports);instance=result.instance;mem=instance.exports.memory;instance.exports.vm_init(1);ticks=0;}
 if(d.op==='run'){sounds=[];instance.exports.vm_update(d.buttons);ticks++;}
-if(d.op==='restore'){if(d.state.source!==code.source_sha256)throw Error('Save belongs to another cartridge');const a=bytes(d.state.memory);if(a.length>16777216||a.length<mem.buffer.byteLength||a.length%65536)throw Error('Save size');if(a.length>mem.buffer.byteLength)mem.grow((a.length-mem.buffer.byteLength)/65536);region(0,a.length).set(a);for(const[k,v]of Object.entries(d.state.globals)){try{instance.exports[k].value=v;}catch{}}saved=bytes(d.state.saved);if(saved.length>1048576||!Number.isSafeInteger(d.state.ticks)||d.state.ticks<0)throw Error('Invalid save');ticks=d.state.ticks;}
-if(d.op==='save'){const b64=a=>{let s='';for(let p=0;p<a.length;p+=8192)s+=String.fromCharCode(...a.subarray(p,p+8192));return btoa(s);};postMessage({save:{source:code.source_sha256,memory:b64(new Uint8Array(mem.buffer)),globals:globals(),saved:b64(saved),ticks}});return;}
+if(d.op==='restore'){if((d.state.format??1)!==1||(d.state.sdk_abi_version??1)!==1)throw Error('Unsupported save format or SDK ABI');if(d.state.source!==code.source_sha256)throw Error('Save belongs to another cartridge');const a=bytes(d.state.memory);if(a.length>16777216||a.length<mem.buffer.byteLength||a.length%65536)throw Error('Save size');if(a.length>mem.buffer.byteLength)mem.grow((a.length-mem.buffer.byteLength)/65536);region(0,a.length).set(a);for(const[k,v]of Object.entries(d.state.globals)){try{instance.exports[k].value=v;}catch{}}saved=bytes(d.state.saved);if(saved.length>1048576||!Number.isSafeInteger(d.state.ticks)||d.state.ticks<0)throw Error('Invalid save');ticks=d.state.ticks;}
+if(d.op==='save'){const b64=a=>{let s='';for(let p=0;p<a.length;p+=8192)s+=String.fromCharCode(...a.subarray(p,p+8192));return btoa(s);};postMessage({save:{format:1,sdk_abi_version:1,source:code.source_sha256,memory:b64(new Uint8Array(mem.buffer)),globals:globals(),saved:b64(saved),ticks}});return;}
 const before=new Uint8Array(mem.buffer).slice(),beforeGlobals=globals(),beforeSaved=saved;instance.exports.vm_draw();if(mem.buffer.byteLength!==before.length)throw Error('Drawing cannot grow memory');if(saved!==beforeSaved)throw Error('Drawing cannot modify saved data');new Uint8Array(mem.buffer).set(before);for(const[k,v]of Object.entries(beforeGlobals)){try{instance.exports[k].value=v;}catch{}}postMessage({frame:frame.slice(),sounds,ticks});
 }catch(e){postMessage({error:String(e)});}};}
 function status(s){document.getElementById('status').textContent=s;}
@@ -36,6 +36,12 @@ const keys={ArrowUp:1,ArrowDown:2,ArrowLeft:4,ArrowRight:8,z:16,x:32,Enter:64,Sh
 
 
 def export(cartridge):
+    if not isinstance(cartridge,dict) or cartridge.get('format')!=1:raise ValueError('Unsupported cartridge format '+str(cartridge.get('format') if isinstance(cartridge,dict) else None))
+    manifest=cartridge.get('build_manifest') or {}
+    if not isinstance(manifest,dict):raise ValueError('Unsupported cartridge build manifest')
+    versions={'manifest_version':1,'sdk_version':'1.0.0','sdk_abi_version':1,'cartridge_format_version':1,'save_format_version':1}
+    for key,value in versions.items():
+        if key in manifest and manifest[key]!=value:raise ValueError('Unsupported cartridge '+key.replace('_',' ')+': '+str(manifest[key]))
     encoded=json.dumps(cartridge,separators=(',',':')).replace('<','\\u003c')
     output=io.BytesIO()
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as z:
