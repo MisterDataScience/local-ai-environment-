@@ -103,6 +103,41 @@ test('duplicate work, invalid profiles, excess workers and overlapping writers f
   assert.throws(() => validateTasks(Array.from({length: 6}, (_, i) => task('t' + i))), /submit 1/);
 });
 
+test('Captain can contact the autonomous Studio Lead and workers cannot impersonate the Captain', async t => {
+  const previousKey = process.env.LOCAL_AI_GATEWAY_KEY;
+  process.env.LOCAL_AI_GATEWAY_KEY = 'test-studio-key';
+  t.after(() => {if (previousKey === undefined) delete process.env.LOCAL_AI_GATEWAY_KEY; else process.env.LOCAL_AI_GATEWAY_KEY = previousKey;});
+  const f = await fixture(t), requests = [];
+  globalThis.fetch = async (url, init = {}) => {
+    if (url.endsWith('/control/mode')) return {ok: true, json: async () => ({instance_id: 'gateway', epoch: 0, mode: 'max'})};
+    requests.push({url, init});
+    const payload = JSON.parse(init.body);
+    return {ok: true, json: async () => payload.operation === 'studios_directory' ? [{id: 'studio:1', name: 'Game studio'}] :
+      payload.operation === 'captain_studio_message' ? {id: 'message:1', thread: 'thread:1', state: 'queued'} : [{sender: 'captain', body: 'Hello'}, {sender: 'studio-operations', response: 'Ready'}]};
+  };
+  const config = {tools: {}, agent: {plan: {permission: {}}, build: {permission: {}}}};
+  await f.hooks.config(config);
+  assert.equal(config.agent.plan.permission.studio_contact, 'allow');
+  assert.equal(config.agent.build.permission.studio_contact, 'allow');
+  const directory = JSON.parse(await f.hooks.tool.studio_contact.execute({}, f.context('studio-directory', 'plan')));
+  assert.equal(directory[0].name, 'Game studio');
+  const sent = JSON.parse(await f.hooks.tool.studio_contact.execute({institution: 'Game studio', message: 'Please review our backlog.'}, f.context('studio-send', 'build')));
+  assert.equal(sent.thread, 'thread:1');
+  const payload = JSON.parse(requests.at(-1).init.body);
+  assert.equal(requests.at(-1).url, 'http://127.0.0.1:8001/control/studios');
+  assert.equal(requests.at(-1).init.headers.Authorization, 'Bearer test-studio-key');
+  assert.equal(payload.operation, 'captain_studio_message');
+  assert.equal(payload.institution, 'Game studio');
+  const thread = JSON.parse(await f.hooks.tool.studio_contact.execute({institution: 'studio:1', thread: 'thread:1'}, f.context('studio-thread', 'plan')));
+  assert.equal(thread[1].response, 'Ready');
+
+  let worker;
+  worker = await fixture(t, {run: async ({path, hooks}) => {
+    await assert.rejects(hooks.tool.studio_contact.execute({message: 'Spoofed'}, worker.workerContext(path.id, 'studio_contact')), /only the Village Captain/);
+  }});
+  await worker.hooks.tool.team_run.execute({tasks: [task('cannot-contact', 'analyst')]}, worker.context('worker-attempt'));
+});
+
 test('Village selects an active R daughter, falls back for C, and freezes the identity packet', async t => {
   const f = await fixture(t, {
     village: async root => {
@@ -350,3 +385,4 @@ test('Commons-style worker cannot access Captain lifecycle management', async t 
   const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('no-lifecycle')]}, f.context('worker-lifecycle')));
   assert.equal(result.tasks[0].status, 'completed');
 });
+

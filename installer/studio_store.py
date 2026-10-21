@@ -128,10 +128,15 @@ def initialize(cx):
         CREATE TABLE IF NOT EXISTS studio_tasks(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,owner TEXT NOT NULL,title TEXT NOT NULL,state TEXT NOT NULL,notes TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_appointments(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,work_order TEXT NOT NULL,resident TEXT NOT NULL,role TEXT NOT NULL,title TEXT NOT NULL,sponsor TEXT NOT NULL,expires INTEGER NOT NULL,state TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_delegations(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,task TEXT NOT NULL,manager TEXT NOT NULL,assignee TEXT NOT NULL,state TEXT NOT NULL,result TEXT NOT NULL,created INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS studio_messages(id TEXT PRIMARY KEY,thread TEXT NOT NULL,institution TEXT NOT NULL,project TEXT NOT NULL,sender TEXT NOT NULL,body TEXT NOT NULL,response TEXT NOT NULL,state TEXT NOT NULL,job TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
+        CREATE INDEX IF NOT EXISTS studio_messages_queue ON studio_messages(state,created);
+        CREATE INDEX IF NOT EXISTS studio_messages_thread ON studio_messages(thread,created);
         CREATE TABLE IF NOT EXISTS studio_learnings(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,work_order TEXT NOT NULL,actor TEXT NOT NULL,scope TEXT NOT NULL,lesson TEXT NOT NULL,evidence TEXT NOT NULL,state TEXT NOT NULL,curator TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_builds(id TEXT PRIMARY KEY,project TEXT NOT NULL,digest TEXT NOT NULL,kind TEXT NOT NULL,state TEXT NOT NULL,report TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_artifacts(id TEXT PRIMARY KEY,institution TEXT NOT NULL,kind TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,evidence TEXT NOT NULL,state TEXT NOT NULL,approval TEXT NOT NULL);
         ''')
+        delegation_columns={r[1] for r in cx.execute('PRAGMA table_info(studio_delegations)')}
+        if 'mode' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN mode TEXT NOT NULL DEFAULT 'analysis'")
         if [r[0] for r in cx.execute('SELECT version FROM institution_schema')]!=[1]:raise RuntimeError('Unsupported institution schema')
 
 
@@ -503,17 +508,59 @@ class Store:
         self.appointment_task(cx,iid,pid,row['work_order'])
         return dict(row)
 
-    def delegate(self,iid,pid,manager,assignee,title,notes=''):
+    def delegate(self,iid,pid,manager,assignee,title,notes='',mode='delivery'):
         with self.db() as cx,cx:
             manager_title=self.member(cx,iid,manager);assignee_title=self.member(cx,iid,assignee);self.project(cx,pid,iid)
-            if manager_title=='Studio Lead':allowed=assignee_title=='Lead Developer'
-            elif manager_title=='Lead Developer':allowed=assignee_title not in ('Studio Lead','Lead Developer')
-            else:allowed=False
+            if manager_title=='Studio Lead':
+                allowed=assignee_title=='Lead Developer' and mode=='delivery'
+                assignment_mode='lead-developer'
+            elif manager_title=='Lead Developer':
+                if assignee_title=='Playtest reviewer':
+                    allowed=mode=='test';assignment_mode='test'
+                else:
+                    allowed=assignee_title not in ('Studio Lead','Lead Developer') and mode in ('implementation','analysis')
+                    assignment_mode=mode
+            else:allowed=False;assignment_mode=''
             if not allowed:raise PermissionError('Assignments must follow Studio Lead → Lead Developer → specialist')
             task=ident('studio-task');delegation=ident('studio-delegation')
             cx.execute('INSERT INTO studio_tasks VALUES(?,?,?,?,?,?,?)',(task,iid,pid,assignee,bounded(title,200,'assignment title'),'open',bounded(notes,4000,'assignment notes',empty=True)))
-            cx.execute('INSERT INTO studio_delegations VALUES(?,?,?,?,?,?,?,?,?)',(delegation,iid,pid,task,manager,assignee,'running','',int(time.time())))
-            return dict(id=delegation,task=task,state='running',assignee=assignee,title=assignee_title)
+            cx.execute('INSERT INTO studio_delegations(id,institution,project,task,manager,assignee,state,result,created,mode) VALUES(?,?,?,?,?,?,?,?,?,?)',(delegation,iid,pid,task,manager,assignee,'running','',int(time.time()),assignment_mode))
+            return dict(id=delegation,task=task,state='running',assignee=assignee,title=assignee_title,mode=assignment_mode)
+
+    def add_message(self,iid,sender,body,project='',thread=None):
+        if sender not in ('owner','captain','studio-operations'):
+            raise ValueError('Invalid Studio Lead message source')
+        body=bounded(body,4000,'message',empty=False)
+        with self.db() as cx,cx:
+            self.institution(cx,iid)
+            if project:self.project(cx,project,iid)
+            if thread:
+                parent=cx.execute('SELECT institution FROM studio_messages WHERE id=? OR thread=? ORDER BY created LIMIT 1',(thread,thread)).fetchone()
+                if not parent or parent['institution']!=iid:raise PermissionError('Studio conversation unavailable')
+            else:thread=ident('studio-thread')
+            mid=ident('studio-message');now=int(time.time())
+            cx.execute('INSERT INTO studio_messages VALUES(?,?,?,?,?,?,?,?,?,?,?)',(mid,thread,iid,project,sender,body,'','queued','',now,now))
+            return dict(id=mid,thread=thread,state='queued')
+
+    def update_message(self,mid,*,state=None,response=None,job=None):
+        fields=[];values=[]
+        for field,value in (('state',state),('response',response),('job',job)):
+            if value is not None:fields.append(field+'=?');values.append(value)
+        if not fields:return
+        fields.append('updated=?');values.append(int(time.time()));values.append(mid)
+        with self.db() as cx,cx:cx.execute('UPDATE studio_messages SET '+','.join(fields)+' WHERE id=?',values)
+
+    def message(self,mid):
+        with self.db() as cx:
+            row=cx.execute('SELECT * FROM studio_messages WHERE id=?',(mid,)).fetchone()
+            if not row:raise ValueError('Studio conversation message unavailable')
+            return dict(row)
+
+    def conversation(self,thread,iid=None):
+        with self.db() as cx:
+            rows=[dict(r) for r in cx.execute('SELECT * FROM studio_messages WHERE thread=? ORDER BY rowid LIMIT 100',(thread,))]
+            if not rows or iid and rows[0]['institution']!=iid:raise PermissionError('Studio conversation unavailable')
+            return rows
 
     def finish_delegation(self,delegation,state,result):
         if state not in ('complete','blocked'):raise ValueError('Invalid delegated assignment state')
@@ -617,6 +664,7 @@ class Store:
             out['appointments']=[dict(r) for r in cx.execute('SELECT * FROM studio_appointments WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
             out['delegations']=[dict(r) for r in cx.execute('SELECT * FROM studio_delegations WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
             out['learnings']=[dict(r) for r in cx.execute('SELECT * FROM studio_learnings WHERE institution=? ORDER BY created DESC LIMIT 100',(iid,))]
+            out['studio_messages']=[dict(r) for r in cx.execute('SELECT id,thread,project,sender,body,response,state,job,created FROM studio_messages WHERE institution=? ORDER BY rowid DESC LIMIT 50',(iid,))]
             out['saved_machines']=[p.stem for p in (self.directory/iid.split(':')[1]/'machines').glob('*.json')]
             return out
 

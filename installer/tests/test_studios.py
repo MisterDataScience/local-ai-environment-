@@ -26,7 +26,9 @@ class Engine:
         elif 'sources' in packet and 'objective' not in packet:
             source=packet['sources'][0];e=dict(source=source['source'],path=source['path'],digest=source['digest'],quote=source.get('text',source.get('quote',''))[:50])
             f.set_result(json.dumps(dict(items=[dict(title='Update loop',text='The reference increments a counter. Runtime behaviour remains unverified.',evidence=[e])])) )
-        elif 'assignment' in packet:f.set_result(json.dumps(dict(report='The assignment is bounded and needs a cartridge check before acceptance.')))
+        elif 'assignment' in packet:
+            if packet.get('last_result',{}).get('saved'):f.set_result(json.dumps(dict(action='done',args=dict(summary='Independent worker completed with bounded evidence.'),note='Return the saved work order.')))
+            else:f.set_result(json.dumps(dict(action='learning_none',args=dict(reason='No additional reusable learning.'),note='Close the independent assignment.')))
         elif 'learning_id' in packet:f.set_result(json.dumps(dict(decision='accept',title='Evidence-backed lesson',lesson=packet['lesson'])))
         elif packet.get('last_result',{}).get('saved'):f.set_result(json.dumps(dict(action='done',args=dict(summary='No unverified claims.'),note='Keep this project note.')))
         else:f.set_result(json.dumps(dict(action='learning_none',args=dict(reason='No reusable learning in this fixture turn.'),note='Keep this project note.')))
@@ -154,7 +156,7 @@ class StudioTests(unittest.TestCase):
             task=dict(cx.execute('SELECT * FROM studio_tasks WHERE id=?',(assignment['task'],)).fetchone())
         self.assertEqual(saved['assignee'],developer);self.assertEqual(task['owner'],developer)
 
-    def test_lead_developer_assignment_runs_one_analysis_turn_not_an_independent_worker(self):
+    def test_studio_lead_dispatches_a_real_independent_lead_developer_job(self):
         staff=self.staff();lead=staff['Studio Lead'];developer=staff['Lead Developer']
         self.engine.responses=[json.dumps(dict(action='delegate',args=dict(resident=developer,title='Review the proposed update loop',notes='Check whether the design claim is supported.'),note='Assign focused analysis.'))]
         job=self.c.start(dict(institution=self.i,kind='work',project=self.p['project'],resident=lead,objective='Coordinate one technical question.',turns=8))['id']
@@ -162,11 +164,60 @@ class StudioTests(unittest.TestCase):
         with self.s.db() as cx:
             assignment=dict(cx.execute('SELECT * FROM studio_delegations').fetchone())
             task=dict(cx.execute('SELECT * FROM studio_tasks WHERE id=?',(assignment['task'],)).fetchone())
+            assignment_job=dict(cx.execute("SELECT * FROM studio_jobs WHERE kind='assignment'").fetchone())
         delegate_event=next(e for e in self.s.view(self.i)['events'] if e['kind']=='delegate')
         delegate_result=delegate_event['body']['result']
-        self.assertEqual(assignment['state'],'complete',assignment);self.assertIn('bounded',assignment['result'])
-        self.assertEqual(task['state'],'done');self.assertEqual(len([c for c in self.engine.calls if json.loads(c['messages'][-1]['content']).get('assignment')]),1)
-        self.assertFalse(delegate_result['independent_worker']);self.assertFalse(delegate_result['can_edit']);self.assertFalse(delegate_result['can_run_tests'])
+        self.assertEqual(assignment['state'],'complete',assignment);self.assertEqual(assignment['mode'],'lead-developer');self.assertIn('Independent worker',assignment['result'])
+        self.assertEqual(task['state'],'done');self.assertGreaterEqual(len([c for c in self.engine.calls if json.loads(c['messages'][-1]['content']).get('assignment')]),2)
+        self.assertEqual(assignment_job['state'],'complete',assignment_job);self.assertTrue(delegate_result['independent_worker']);self.assertTrue(delegate_result['can_edit']);self.assertTrue(delegate_result['can_run_tests'])
+
+    def test_playtest_reviewer_is_dispatched_independently_and_cannot_edit(self):
+        staff=self.staff();developer=staff['Lead Developer'];reviewer=staff['Playtest reviewer']
+        task=self.s.delegate(self.i,self.p['project'],developer,reviewer,'Independently run cartridge tests','Run the current suite and report exact results.',mode='test')
+        row=self.c.start(dict(institution=self.i,project=self.p['project'],kind='assignment',assignment_id=task['id']))
+        self.assertEqual(row['state'],'queued')
+        job=self.wait(row['id']);self.assertEqual(job['state'],'complete',job['reason'])
+        assigned=dict(id='test-work',kind='assignment',institution=self.i,project=self.p['project'],settings=json.dumps(dict(actor=reviewer,assignment_id=task['id'],assignment_mode='test')))
+        progress=dict(notes='',last_result={})
+        with self.assertRaises(PermissionError):self.c.work_action(assigned,progress,dict(action='edit',args=dict(path='tamper.c',text='bad',expected='')))
+        self.c.workbench.tests=lambda iid,build:dict(ok=True,tests=3)
+        result,_=self.c.work_action(assigned,progress,dict(action='tests',args=dict(build='fixture-build')))
+        self.assertTrue(result['ok']);self.assertEqual(result['tests'],3)
+
+    def test_owner_or_captain_can_message_the_autonomous_studio_lead(self):
+        lead=self.staff()['Studio Lead']
+        owner=self.c.execute(dict(operation='studio_message',institution=self.i,message='Please review the project backlog.'))
+        captain=self.c.execute(dict(operation='captain_studio_message',institution=self.i,message='Please report the project state.'))
+        owner_job=self.wait(owner['job']);captain_job=self.wait(captain['job'])
+        self.assertEqual(owner_job['state'],'complete',owner_job['reason']);self.assertEqual(captain_job['state'],'complete',captain_job['reason'])
+        thread=self.c.execute(dict(operation='studio_conversation',institution=self.i,thread=captain['thread']))
+        self.assertEqual(thread[0]['sender'],'captain');self.assertEqual(thread[0]['state'],'complete');self.assertTrue(thread[0]['response'])
+        self.assertIn('inbox',json.loads(self.engine.calls[-1]['messages'][-1]['content']))
+
+    def test_studio_lead_chooses_project_instead_of_guessing_when_inbox_is_ambiguous(self):
+        self.staff();second=self.s.ingest(self.i,'Second game',[('second.c',b'int score;')],dict(kind='fixture'))
+        self.c.pause()
+        message=self.c.contact(self.i,'captain','Review project priorities.')
+        with self.s.db() as cx:
+            row=dict(cx.execute('SELECT * FROM studio_jobs WHERE id=?',(message['job'],)).fetchone())
+        self.assertEqual(row['project'],'')
+        packet=self.c.work_packet(row,json.loads(row['progress']))
+        choices=packet['inbox']['available_projects']
+        self.assertEqual({p['id'] for p in choices},{self.p['project'],second['project']})
+        selected,_=self.c.work_action(row,json.loads(row['progress']),dict(action='select_project',args=dict(project=second['project'])))
+        self.assertTrue(selected['selected']);self.assertEqual(row['project'],second['project'])
+        with self.s.db() as cx:self.assertEqual(cx.execute('SELECT project FROM studio_jobs WHERE id=?',(message['job'],)).fetchone()[0],second['project'])
+        explicitly_routed=self.c.contact(self.i,'owner','Inspect the second game.','Second game')
+        self.assertEqual(self.s.message(explicitly_routed['id'])['project'],second['project'])
+
+    def test_completed_resident_work_automatically_curates_pending_learning(self):
+        staff=self.staff();developer=staff['Lead Developer'];designer=staff['Lead Designer'];specialist=staff['Engine specialist']
+        self.s.learn(self.i,self.p['project'],'studio-task:fixture',designer,'institution','A useful test lesson.','Observed in the independent test report.')
+        assignment=self.s.delegate(self.i,self.p['project'],developer,specialist,'Read source and verify current test path','Summarize what needs testing.',mode='analysis')
+        queued=self.c.start(dict(institution=self.i,project=self.p['project'],kind='assignment',assignment_id=assignment['id']))
+        self.assertEqual(queued['state'],'queued');job=self.wait(queued['id']);self.assertEqual(job['state'],'complete',job['reason'])
+        with self.s.db() as cx:state=cx.execute('SELECT state FROM studio_learnings').fetchone()[0]
+        self.assertEqual(state,'accepted')
 
     def test_temporary_appointment_is_owner_approved_and_exactly_scoped(self):
         staff=self.staff();lead=staff['Studio Lead'];developer=staff['Lead Developer'];recruit='coder.general'
