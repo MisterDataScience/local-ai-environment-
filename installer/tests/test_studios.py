@@ -55,12 +55,13 @@ class StudioTests(unittest.TestCase):
             residents[approved['title']]=approved['resident']
         lead=residents['Studio Lead'];designer=residents['Lead Designer'];middle=residents['Systems designer']
         developer=residents['Lead Developer'];reviewer=residents['Playtest reviewer']
+        engine=residents['Engine specialist']
         workflow=self.s.start_workflow(self.i,self.p['project'],lead,'Adapt counter game','Extract one small portable-C experiment')
         ref=workflow['id'];project=self.p['project']
         with self.assertRaises(PermissionError):
             self.s.delegate(self.i,project,lead,developer,'Skip stages','',mode='delivery')
         plan=self.s.delegate(self.i,project,lead,designer,'Reverse scaffold','Map source architecture',mode='design',workflow=ref,phase='planning')
-        evidence=[dict(source=self.p['source'],path='game.c',digest=sha(b'int counter; void update(void) { counter++; }\\n'),quote='counter++')]
+        evidence=[dict(source=self.p['source'],path='game.c',digest=sha(b'int counter; void update(void) { counter++; }\n'),quote='counter++')]
         step=self.s.save_workflow_step(self.i,ref,project,designer,'Main loop','Observed update increments counter.',evidence)
         self.assertEqual(step['phase'],'planning')
         self.s.finish_delegation(plan['id'],'complete','Reverse scaffold recorded.')
@@ -72,8 +73,37 @@ class StudioTests(unittest.TestCase):
         self.s.finish_delegation(mid['id'],'complete','Test plan saved.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'implementation')
         build=self.s.delegate(self.i,project,lead,developer,'Implement experiment','',mode='delivery',workflow=ref,phase='implementation')
+        with self.assertRaises(PermissionError):
+            self.s.delegate(self.i,project,developer,engine,'Unlinked implementation task','',mode='implementation')
+        worker_row=dict(id='lead-developer-work',kind='assignment',institution=self.i,project=project,settings=json.dumps(dict(actor=developer,actor_title='Lead Developer',objective='Implement the agreed experiment.',assignment_id=build['id'],assignment_mode='lead-developer',workflow=ref,workflow_phase='implementation')))
+        original_start=self.c.start;started=[]
+        self.c.start=lambda request:(started.append(request) or dict(id='queued-child-job'))
+        try:
+            child_result,_=self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='delegate',args=dict(resident=engine,title='Implement one bounded update-loop change',notes='Follow the Middle Department checkpoints.',mode='implementation')))
+        finally:self.c.start=original_start
+        child=self.s.team_status(self.i,project,developer,build['id'])['children'][0]
+        self.assertEqual(child['id'],child_result['id']);self.assertEqual(child['mode'],'implementation')
+        self.assertEqual(child['workflow'],ref);self.assertEqual(child['phase'],'implementation');self.assertEqual(child_result['parent'],build['id'])
+        self.assertEqual(started[0]['assignment_id'],child_result['id'])
+        child_row=dict(id='implementation-child-job',kind='assignment',institution=self.i,project=project,settings=json.dumps(dict(actor=engine,actor_title='Engine specialist',objective='Implement the bounded change.',assignment_id=child_result['id'],assignment_mode='implementation',workflow=ref,workflow_phase='implementation')))
+        child_packet=self.c.work_packet(child_row,dict(notes='',last_result={}))
+        self.assertTrue(any(step['title']=='Counter assertion' for step in child_packet['workflow']['steps']))
+        self.assertEqual(child_packet['assignment']['parent'],build['id'])
+        blocked_child=self.s.delegate(self.i,project,developer,middle,'Check an uncertain acceptance criterion','Return a focused analysis and identify what remains unknown.',mode='analysis',workflow=ref,phase='implementation',parent=build['id'])
+        with self.assertRaises(ValueError):self.s.finish_delegation(build['id'],'complete','Implementation report.')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'implementation')
+        self.s.finish_delegation(child_result['id'],'complete','Implemented the bounded update-loop change.')
+        team=self.s.team_status(self.i,project,developer,build['id'])
+        self.assertEqual((team['total'],team['active']),(2,1))
+        self.s.finish_delegation(blocked_child['id'],'blocked','The original source does not establish the expected screen result.')
+        team=self.s.team_status(self.i,project,developer,build['id'])
+        self.assertEqual((team['total'],team['active']),(2,0))
         self.s.finish_delegation(build['id'],'complete','Implementation report.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'verification')
+        implementation=self.s.workflow_view(self.i,ref)['artifacts']['implementation'][0]
+        child_states={child['state'] for child in implementation['children']}
+        self.assertEqual(child_states,{'complete','blocked'})
+        self.assertTrue(any('bounded update-loop change' in child['result'] for child in implementation['children']))
         test=self.s.delegate(self.i,project,lead,reviewer,'Verify experiment','',mode='test',workflow=ref,phase='verification')
         self.s.finish_delegation(test['id'],'complete','Independent checks passed.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['state'],'ready_to_close')

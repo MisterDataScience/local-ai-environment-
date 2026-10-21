@@ -50,10 +50,10 @@ build {kind:"cartridge"}; tests {build}; create_machine {build,seed,task(optiona
 run_machine {machine,steps:1..600,buttons:0..255}; observe {machine};
 inspect {machine,question}; snapshot {machine}; reset {machine,seed}; drop {machine};
 restore {saved}; task {title,notes,state,task(optional)};
-help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test|test-plan"}; workflow_start {title,goal}; workflow_status {workflow}; workflow_assign {workflow}; workflow_step {workflow,title,body,evidence:[{source,path,digest,quote}]}; workflow_retry {workflow,reason}; workflow_close {workflow,summary}; workflow_return {workflow,reason}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
+help {resident,question}; delegate {resident,title,notes,mode:"design|delivery|implementation|analysis|test|test-plan"}; team_status {}; workflow_start {title,goal}; workflow_status {workflow}; workflow_assign {workflow}; workflow_step {workflow,title,body,evidence:[{source,path,digest,quote}]}; workflow_retry {workflow,reason}; workflow_close {workflow,summary}; workflow_return {workflow,reason}; finding {category:"Observed|Inferred|Unverified",text,evidence:[evidence IDs]}; propose {kind:"library|archive|memory",title,text,evidence:[...]};
 learn {scope:"project|institution",lesson,evidence}; learning_none {reason}; note {text}; done {summary}.
 Assignments are saved durable work orders dispatched as independent resident jobs.
-For substantial adaptation or prototype work, start a staged workflow and move it through Planning, Middle Department test planning, Implementation, then independent Review. Assign only the current phase, wait for its durable result, inspect workflow_status, then assign the next phase. Planning must create a reverse scaffold from the immutable archive source; Middle must write test cases and acceptance criteria before implementation. Never bypass the phase gate with an ordinary delivery assignment while a staged workflow is active. Use workflow_retry for a blocked phase, workflow_return after failed verification, and workflow_close only after successful verification. The Studio Lead assigns Lead Designers to Planning, Systems designers to Middle test planning, Lead Developers to Implementation, and Playtest reviewers to Review. Lead Developers may dispatch specialists only for non-workflow technical tasks. Every work session must close
+For substantial adaptation or prototype work, start a staged workflow and move it through Planning, Middle Department test planning, Implementation, then independent Review. Assign only the current phase, wait for its durable result, inspect workflow_status, then assign the next phase. Planning must create a reverse scaffold from the immutable archive source; Middle must write test cases and acceptance criteria before implementation. Never bypass the phase gate with an ordinary delivery assignment while a staged workflow is active. Use workflow_retry for a blocked phase, workflow_return after failed verification, and workflow_close only after successful verification. The Studio Lead assigns Lead Designers to Planning, Systems designers to Middle test planning, Lead Developers to Implementation, and Playtest reviewers to Review. During Implementation, the Lead Developer may delegate up to eight bounded implementation or analysis subtasks to approved specialists. Each subtask is durably linked to its Lead Developer parent and the same workflow phase, and receives the Middle Department checkpoints. Specialists cannot delegate. Use team_status to inspect reports; wait until every subtask is complete or blocked, consolidate the findings, and only then finish the Lead Developer assignment. A blocked subtask does not automatically block the phase if the Lead Developer explains how it was handled. Outside a staged workflow, ordinary technical assignments follow the same Studio Lead to Lead Developer to specialist hierarchy. Every work session must close
 out with learn or learning_none before done. Temporary
 appointments are limited to one approved project work order and expire or can be revoked.
 Builds and execution are sandboxed host services. You have no shell, network, external
@@ -86,18 +86,25 @@ LEAD_DESIGNER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Designer assigned directl
 You own the Planning Department stage in a staged workflow. For this assignment, inspect only the workflow's selected immutable archive source. Build a reverse scaffold in saved workflow_step checkpoints: identify source contents, major loop/data structures, reusable gameplay or data, hardware/library dependencies, unknowns, and one small portable-C experiment. Cite exact source evidence in each checkpoint. Do not claim the archived game runs on the C console. Do not inspect or edit the mutable project copy, build, test, or assign residents. If this is not a workflow assignment, prepare the requested design brief. Finish with learning_none and done so the Studio Lead can review and
 route the design to technical delivery.'''
 
-LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Developer on an independently dispatched, durable work order from the
-Studio Lead. You own technical execution. Break work into specialist assignments when
-useful, implement bounded changes when assigned, and dispatch a separate Playtest Reviewer
-assignment with mode=test after implementation. The test resident is independent and
-read-only: ask it to build/run the available cartridge tests and report observed results.
-Do not claim another resident's work as your own. Report status with done; the Studio Lead
-will receive your result and coordinate the next step.'''
+LEAD_DEVELOPER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Developer responsible for technical delivery. If this is a staged
+Implementation assignment, begin by reading the Planning and Middle Department workflow
+checkpoints. Convert them into a small build plan, implement the feature, and use up to eight
+bounded implementation or analysis subtasks when useful. Delegate only to approved
+specialists; each child assignment is linked to this Implementation assignment and receives
+the same checkpoint record. Use team_status to inspect durable reports. Do not finish while
+any child is running. Integrate completed work, explain blocked or unverified items, and
+report what you changed and tested. The Studio Lead will advance the workflow to independent
+Review after this assignment completes. Do not dispatch a Playtest Reviewer yourself during
+a staged workflow. For ordinary technical assignments outside a staged workflow, you own
+delivery and may dispatch bounded specialist work under the same hierarchy. Do not claim
+another resident's work as your own. Finish with learning_none or learn, then done.'''
 
 ASSIGNMENT_SYSTEM=WORK_SYSTEM+'''\nYou are an independently dispatched specialist working only on the assignment included
-in this packet. Respect its mode and task scope. Return evidence and uncertainty; never
-expand membership or publish/approve lasting material. Finish with learn or learning_none,
-then done so the Studio Lead receives a durable report.'''
+in this packet. Respect its mode and task scope. If this is a Lead Developer subtask, report
+to the Lead Developer, do not delegate, and do not advance or close the workflow. Return
+evidence, results, and uncertainty; never expand membership or publish/approve lasting
+material. Finish with learn or learning_none, then done so your manager receives a durable
+report.'''
 
 MIDDLE_TEST_PLAN_SYSTEM=WORK_SYSTEM+'''
 You are the Middle Department test planner. Use the Planning Department reverse scaffold and cited immutable-source evidence. Before any implementation, create a practical test plan as saved workflow_step checkpoints: observable assertions, input sequences/seeds, expected state or screen outcomes where knowable, resource limits, and explicit unverified questions. Do not edit, build, or run code. Keep expected outcomes grounded in evidence; mark uncertain visual expectations as unverified. Finish with learning_none then done.'''
@@ -504,7 +511,13 @@ class Studios:
         else:
             packet['accepted_learning']=learnings
             if row['kind']=='assignment':
-                packet['assignment']=dict(id=settings.get('assignment_id'),mode=settings.get('assignment_mode'),task=tasks[0] if tasks else None)
+                assignment_row=None
+                if settings.get('assignment_id'):
+                    with self.store.db() as cx:
+                        assignment_row=cx.execute('SELECT manager,assignee,workflow,phase,parent FROM studio_delegations WHERE id=?',(settings['assignment_id'],)).fetchone()
+                packet['assignment']=dict(id=settings.get('assignment_id'),mode=settings.get('assignment_mode'),task=tasks[0] if tasks else None,parent=assignment_row['parent'] if assignment_row else '',workflow=assignment_row['workflow'] if assignment_row else '',phase=assignment_row['phase'] if assignment_row else '')
+                if settings.get('assignment_mode')=='lead-developer' and assignment_row and not assignment_row['parent']:
+                    packet['implementation_team']=self.store.team_status(iid,pid,actor,settings['assignment_id'])
             if row['kind']=='manager':
                 packet['inbox']={'message':current_message,'recent_thread':conversation,'delegations':delegations,'available_projects':available_projects}
             if settings.get('workflow'):
@@ -531,9 +544,7 @@ class Studios:
                 'design':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','workflow_step','finding','note','learning_none','done'},
                 'test-plan':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','workflow_step','finding','note','learning_none','done'},
 
-                'test-plan':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','workflow_step','finding','note','learning_none','done'},
-
-                'lead-developer':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','edit','patch','build','tests','create_machine','run_machine','observe','snapshot','reset','drop','inspect','finding','task','delegate','note','propose','learn','learning_none','done'},
+                'lead-developer':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','edit','patch','build','tests','create_machine','run_machine','observe','snapshot','reset','drop','inspect','finding','task','delegate','team_status','note','propose','learn','learning_none','done'},
                 'implementation':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','edit','patch','build','tests','create_machine','run_machine','observe','snapshot','reset','drop','inspect','finding','note','learn','learning_none','done'},
                 'analysis':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','note','learning_none','done'},
                 'test':{'tree','read','search','reference','knowledge_search','source','source_tree','sdk','build','tests','create_machine','run_machine','observe','snapshot','reset','drop','inspect','finding','note','learning_none','done'},
@@ -627,6 +638,9 @@ class Studios:
             observed=self.workbench.machine(iid,args['machine'],'observe')
             result=dict(visual_review=self.infer(row['id'],'Inspect the supplied actual 320x180 workstation screenshot. State uncertainty. Do not execute tools.',dict(question=bounded(args['question'],1000,'visual question'),metrics=observed['metrics']),observed['png']))
         elif action=='task':result=self.store.task(iid,pid,actor,**args)
+        elif action=='team_status':
+            if assignment_mode!='lead-developer' or not assignment_id:raise PermissionError('team_status is available only to the Lead Developer on an active assignment')
+            result=self.store.team_status(iid,pid,actor,assignment_id)
         elif action=='delegate':
             target=args['resident'];title=bounded(args['title'],200,'assignment title');notes=bounded(args.get('notes',''),2000,'assignment notes',empty=True)
             with self.store.db() as cx:
@@ -635,7 +649,8 @@ class Studios:
                 if settings.get('thread_id') and cx.execute('SELECT count(*) FROM studio_messages WHERE thread=?',(settings['thread_id'],)).fetchone()[0]>=30:
                     raise RuntimeError('Conversation reached its autonomous work cap; finish current tasks and start a new owner/Captain request later')
             mode=args.get('mode','delivery' if settings.get('actor_title')=='Studio Lead' else 'implementation')
-            assignment=self.store.delegate(iid,pid,actor,target,title,notes,mode)
+            parent_assignment=assignment_id if assignment_id and assignment_mode=='lead-developer' else ''
+            assignment=self.store.delegate(iid,pid,actor,target,title,notes,mode,workflow if parent_assignment else '',workflow_phase if parent_assignment else '',parent_assignment)
             job=self.start(dict(institution=iid,project=pid,kind='assignment',assignment_id=assignment['id'],minutes=60,turns=96,thread_id=settings.get('thread_id','')))
             result=dict(assignment,job=job['id'],state='queued',independent_worker=True,can_edit=assignment['mode'] not in ('analysis','test'),can_run_tests=assignment['mode'] not in ('analysis',))
         elif action=='workflow_start':

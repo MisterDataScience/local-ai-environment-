@@ -127,7 +127,7 @@ def initialize(cx):
         CREATE TABLE IF NOT EXISTS studio_events(id TEXT PRIMARY KEY,institution TEXT NOT NULL,job TEXT NOT NULL,actor TEXT NOT NULL,kind TEXT NOT NULL,body TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_tasks(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,owner TEXT NOT NULL,title TEXT NOT NULL,state TEXT NOT NULL,notes TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_appointments(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,work_order TEXT NOT NULL,resident TEXT NOT NULL,role TEXT NOT NULL,title TEXT NOT NULL,sponsor TEXT NOT NULL,expires INTEGER NOT NULL,state TEXT NOT NULL,created INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS studio_delegations(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,task TEXT NOT NULL,manager TEXT NOT NULL,assignee TEXT NOT NULL,state TEXT NOT NULL,result TEXT NOT NULL,created INTEGER NOT NULL,mode TEXT NOT NULL DEFAULT 'analysis',workflow TEXT NOT NULL DEFAULT '',phase TEXT NOT NULL DEFAULT '');
+        CREATE TABLE IF NOT EXISTS studio_delegations(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,task TEXT NOT NULL,manager TEXT NOT NULL,assignee TEXT NOT NULL,state TEXT NOT NULL,result TEXT NOT NULL,created INTEGER NOT NULL,mode TEXT NOT NULL DEFAULT 'analysis',workflow TEXT NOT NULL DEFAULT '',phase TEXT NOT NULL DEFAULT '',parent TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS studio_workflows(id TEXT PRIMARY KEY,institution TEXT NOT NULL,project TEXT NOT NULL,title TEXT NOT NULL,goal TEXT NOT NULL,phase TEXT NOT NULL,state TEXT NOT NULL,source TEXT NOT NULL,source_sha256 TEXT NOT NULL,artifacts TEXT NOT NULL,history TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_workflow_steps(id TEXT PRIMARY KEY,workflow TEXT NOT NULL,institution TEXT NOT NULL,project TEXT NOT NULL,phase TEXT NOT NULL,ordinal INTEGER NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,evidence TEXT NOT NULL,digest TEXT NOT NULL,created INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS studio_messages(id TEXT PRIMARY KEY,thread TEXT NOT NULL,institution TEXT NOT NULL,project TEXT NOT NULL,sender TEXT NOT NULL,body TEXT NOT NULL,response TEXT NOT NULL,state TEXT NOT NULL,job TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
@@ -141,6 +141,7 @@ def initialize(cx):
         if 'mode' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN mode TEXT NOT NULL DEFAULT 'analysis'")
         if 'workflow' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN workflow TEXT NOT NULL DEFAULT ''")
         if 'phase' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN phase TEXT NOT NULL DEFAULT ''")
+        if 'parent' not in delegation_columns:cx.execute("ALTER TABLE studio_delegations ADD COLUMN parent TEXT NOT NULL DEFAULT ''")
         if [r[0] for r in cx.execute('SELECT version FROM institution_schema')]!=[1]:raise RuntimeError('Unsupported institution schema')
 
 
@@ -516,39 +517,74 @@ class Store:
         self.appointment_task(cx,iid,pid,row['work_order'])
         return dict(row)
 
-    def delegate(self,iid,pid,manager,assignee,title,notes='',mode='delivery',workflow='',phase=''):
+    def delegate(self,iid,pid,manager,assignee,title,notes='',mode='delivery',workflow='',phase='',parent=''):
         with self.db() as cx,cx:
             manager_title=self.member(cx,iid,manager);assignee_title=self.member(cx,iid,assignee);self.project(cx,pid,iid)
+            parent=bounded(parent,120,'parent assignment',empty=True)
+            assignment_workflow='';assignment_phase='';parent_assignment=''
             if manager_title=='Studio Lead':
+                if parent:raise PermissionError('Only a Lead Developer can create a child assignment')
                 if not workflow and cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked') LIMIT 1",(iid,pid)).fetchone():raise PermissionError('Use the active staged workflow for all project assignments')
                 if workflow:
                     wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=?",(workflow,iid,pid)).fetchone()
                     expected={'planning':('Lead Designer','design'),'middle':('Systems designer','test-plan'),'implementation':('Lead Developer','delivery'),'verification':('Playtest reviewer','test')}
                     if not wf or wf['phase']!=phase or wf['state']!='active':raise PermissionError('Workflow phase is not ready for assignment')
                     if (assignee_title,mode)!=expected.get(phase):raise PermissionError('Workflow phase must be assigned to its designated department role')
-                    if cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND state='running'",(workflow,phase)).fetchone():raise RuntimeError('Workflow phase already has an active assignment')
+                    if cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND parent='' AND state='running'",(workflow,phase)).fetchone():raise RuntimeError('Workflow phase already has an active assignment')
                     assignment_mode={'planning':'design','middle':'test-plan','implementation':'lead-developer','verification':'test'}[phase]
+                    assignment_workflow=workflow;assignment_phase=phase
                 elif assignee_title=='Lead Designer':
-                    allowed=mode=='design';assignment_mode='design'
+                    if mode!='design':raise PermissionError('Lead Designer assignments require design mode')
+                    assignment_mode='design'
                 else:
-                    allowed=assignee_title=='Lead Developer' and mode=='delivery';assignment_mode='lead-developer'
+                    if assignee_title!='Lead Developer' or mode!='delivery':raise PermissionError('Studio Lead assignments must go to a Lead Designer or Lead Developer')
+                    assignment_mode='lead-developer'
                     active=cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close') LIMIT 1",(iid,pid)).fetchone()
                     if active:raise PermissionError('Use the active staged workflow to dispatch project work')
-                    if not allowed:raise PermissionError('Studio Lead assignments must go to a Lead Designer or Lead Developer')
             elif manager_title=='Lead Developer':
-                if workflow:raise PermissionError('Only the Studio Lead assigns workflow phases')
-                if assignee_title=='Playtest reviewer':
-                    allowed=mode=='test';assignment_mode='test'
+                if workflow or parent:
+                    root=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=? AND assignee=? AND mode='lead-developer' AND parent='' AND state='running'",(parent,iid,pid,manager)).fetchone() if parent else None
+                    if not root:raise PermissionError('Lead Developer subtasks must belong to its active parent assignment')
+                    if root['workflow']:
+                        wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=?",(root['workflow'],iid,pid)).fetchone()
+                        if (not wf or wf['phase']!='implementation' or wf['state']!='running' or
+                                workflow!=root['workflow'] or phase!='implementation' or root['phase']!='implementation'):
+                            raise PermissionError('Lead Developer subtasks must belong to its active Implementation assignment')
+                    else:
+                        if workflow or phase:
+                            raise PermissionError('A non-workflow Lead Developer assignment cannot attach to a workflow')
+                        if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked') LIMIT 1",(iid,pid)).fetchone():
+                            raise PermissionError('Use the active staged workflow for all project assignments')
+                    if assignee_title in ('Studio Lead','Lead Developer','Lead Designer','Playtest reviewer') or mode not in ('implementation','analysis'):
+                        raise PermissionError('Lead Developer subtasks must go to approved implementation or analysis specialists')
+                    if cx.execute("SELECT count(*) FROM studio_delegations WHERE parent=?",(parent,)).fetchone()[0]>=8:
+                        raise ValueError('A Lead Developer assignment is limited to eight specialist subtasks')
+                    assignment_mode=mode;assignment_workflow=root['workflow'];assignment_phase=root['phase'];parent_assignment=parent
                 else:
-                    allowed=assignee_title not in ('Studio Lead','Lead Developer','Lead Designer') and mode in ('implementation','analysis')
-                    assignment_mode=mode
-                if not allowed:raise PermissionError('Assignments must follow Studio Lead → Lead Designer or Lead Developer → specialist')
+                    if cx.execute("SELECT 1 FROM studio_workflows WHERE institution=? AND project=? AND state IN ('active','running','ready_to_close','blocked') LIMIT 1",(iid,pid)).fetchone():
+                        raise PermissionError('Use the active staged workflow for all project assignments')
+                    if assignee_title=='Playtest reviewer':
+                        if mode!='test':raise PermissionError('Playtest reviewer assignments require test mode')
+                        assignment_mode='test'
+                    else:
+                        if assignee_title in ('Studio Lead','Lead Developer','Lead Designer') or mode not in ('implementation','analysis'):
+                            raise PermissionError('Assignments must follow Studio Lead → Lead Developer → specialist')
+                        assignment_mode=mode
             else:raise PermissionError('Only studio leads can dispatch work')
             task=ident('studio-task');delegation=ident('studio-delegation')
             cx.execute('INSERT INTO studio_tasks VALUES(?,?,?,?,?,?,?)',(task,iid,pid,assignee,bounded(title,200,'assignment title'),'open',bounded(notes,4000,'assignment notes',empty=True)))
-            cx.execute('INSERT INTO studio_delegations(id,institution,project,task,manager,assignee,state,result,created,mode,workflow,phase) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(delegation,iid,pid,task,manager,assignee,'running','',int(time.time()),assignment_mode,workflow,phase))
-            if workflow:cx.execute("UPDATE studio_workflows SET state='running',updated=? WHERE id=?",(int(time.time()),workflow))
-            return dict(id=delegation,task=task,state='running',assignee=assignee,title=assignee_title,mode=assignment_mode,workflow=workflow,phase=phase)
+            cx.execute('INSERT INTO studio_delegations(id,institution,project,task,manager,assignee,state,result,created,mode,workflow,phase,parent) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',(delegation,iid,pid,task,manager,assignee,'running','',int(time.time()),assignment_mode,assignment_workflow,assignment_phase,parent_assignment))
+            if assignment_workflow:cx.execute("UPDATE studio_workflows SET state='running',updated=? WHERE id=?",(int(time.time()),assignment_workflow))
+            return dict(id=delegation,task=task,state='running',assignee=assignee,title=assignee_title,mode=assignment_mode,workflow=assignment_workflow,phase=assignment_phase,parent=parent_assignment)
+
+    def team_status(self,iid,pid,lead_developer,assignment):
+        with self.db() as cx:
+            if self.member(cx,iid,lead_developer)!='Lead Developer':raise PermissionError('Only a Lead Developer can inspect its assignment team')
+            root=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=? AND assignee=? AND mode='lead-developer' AND parent='' AND state='running'",(assignment,iid,pid,lead_developer)).fetchone()
+            if not root:raise PermissionError('Active Lead Developer assignment is unavailable')
+            rows=[dict(r) for r in cx.execute("SELECT d.id,d.task,d.assignee,d.state,d.result,d.mode,d.workflow,d.phase,t.title FROM studio_delegations d JOIN studio_tasks t ON t.id=d.task WHERE d.parent=? ORDER BY d.created,d.id",(assignment,))]
+            for row in rows:row['result']=row['result'][:1600]
+            return dict(assignment=assignment,workflow=root['workflow'],phase=root['phase'],total=len(rows),active=sum(r['state']=='running' for r in rows),children=rows)
 
     def start_workflow(self,iid,pid,actor,title,goal):
         title=bounded(title,160,'workflow title',empty=False);goal=bounded(goal,2000,'workflow goal',empty=False)
@@ -609,6 +645,8 @@ class Store:
             if self.member(cx,iid,actor)!='Studio Lead':raise PermissionError('Only the Studio Lead can restart a blocked workflow stage')
             wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND state='blocked'",(ref,iid)).fetchone()
             if not wf:raise PermissionError('Only a blocked workflow stage can be retried')
+            if wf['phase']=='implementation' and cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase='implementation' AND parent<>'' AND state='running' LIMIT 1",(ref,)).fetchone():
+                raise RuntimeError('Wait for the assigned Lead Developer specialists to finish before retrying Implementation')
             history=json.loads(wf['history']);history.append(dict(event='retry',phase=wf['phase'],reason=reason,at=int(time.time())))
             cx.execute("UPDATE studio_workflows SET state='active',history=?,updated=? WHERE id=?",(encoded(history),int(time.time()),ref));pid=wf['project']
         self.refresh_project_manifest(pid)
@@ -666,12 +704,26 @@ class Store:
             row=cx.execute('SELECT * FROM studio_delegations WHERE id=?',(delegation,)).fetchone()
             if not row:raise ValueError('Delegated assignment unavailable')
             text=bounded(result,6000,'delegated report',empty=True)
+            children=[]
+            if not row['parent'] and row['mode']=='lead-developer':
+                children=[dict(r) for r in cx.execute("SELECT d.id,d.task,d.assignee,d.state,d.result,t.title FROM studio_delegations d JOIN studio_tasks t ON t.id=d.task WHERE d.parent=? ORDER BY d.created,d.id",(delegation,))]
+                if any(child['state']=='running' for child in children):
+                    raise ValueError('Specialist subtasks are still running; inspect team_status and consolidate their reports before finishing')
+            if row['parent']:
+                parent=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=? AND assignee=? AND mode='lead-developer' AND parent='' AND state='running'",(row['parent'],row['institution'],row['project'],row['manager'])).fetchone()
+                if not parent:raise PermissionError('The assigned Lead Developer parent is unavailable')
             cx.execute('UPDATE studio_delegations SET state=?,result=? WHERE id=?',(state,text,delegation))
             cx.execute('UPDATE studio_tasks SET state=?,notes=? WHERE id=?',( 'done' if state=='complete' else 'blocked', text,row['task']))
-            if row['workflow']:
+            if row['workflow'] and row['parent']:
+                wf=cx.execute('SELECT * FROM studio_workflows WHERE id=?',(row['workflow'],)).fetchone()
+                if not wf or wf['phase']!='implementation' or wf['state'] not in ('running','blocked'):raise RuntimeError('Workflow changed while a specialist assignment was running')
+                history=json.loads(wf['history']);history.append(dict(event='implementation_subtask_'+state,assignment=delegation,parent=row['parent'],at=int(time.time())))
+                cx.execute('UPDATE studio_workflows SET history=?,updated=? WHERE id=?',(encoded(history),int(time.time()),row['workflow']))
+            elif row['workflow']:
                 wf=cx.execute('SELECT * FROM studio_workflows WHERE id=?',(row['workflow'],)).fetchone()
                 if not wf or wf['phase']!=row['phase'] or wf['state']!='running':raise RuntimeError('Workflow changed while its phase assignment was running')
-                artifacts=json.loads(wf['artifacts']);history=json.loads(wf['history']);entry=dict(assignment=delegation,task=row['task'],phase=row['phase'],state=state,result=text,digest=sha(text),at=int(time.time()))
+                child_reports=[dict(id=child['id'],task=child['task'],title=child['title'],assignee=child['assignee'],state=child['state'],result=child['result'][:1600],digest=sha(child['result'])) for child in children]
+                artifacts=json.loads(wf['artifacts']);history=json.loads(wf['history']);entry=dict(assignment=delegation,task=row['task'],phase=row['phase'],state=state,result=text,digest=sha(text),children=child_reports,at=int(time.time()))
                 artifacts.setdefault(row['phase'],[]).append(entry);history.append(dict(event='phase_'+state,phase=row['phase'],assignment=delegation,at=int(time.time())))
                 if state!='complete':next_phase=row['phase'];workflow_state='blocked'
                 elif row['phase']=='planning':next_phase='middle';workflow_state='active'
