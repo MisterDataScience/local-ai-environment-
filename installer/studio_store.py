@@ -614,7 +614,7 @@ class Store:
             self.project(cx,row['project'],iid)
             steps=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created,review_id FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(ref,))]
             out=dict(row);out['artifacts']=json.loads(out['artifacts']);out['history']=json.loads(out['history']);out['steps']=steps
-            out['phase_label']={'planning':'Planning Department','middle':'Design Integration and Production Planning Department','implementation':'Implementation Department','verification':'Independent Review'}.get(out['phase'],out['phase'])
+            out['phase_label']={'planning':'Planning Department','middle':'Design Integration and Production Planning','implementation':'Implementation Department','verification':'Independent Review'}.get(out['phase'],out['phase'])
             return out
 
     def save_workflow_verification(self,iid,ref,assignment,actor,payload):
