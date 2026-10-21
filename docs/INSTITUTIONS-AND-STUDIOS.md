@@ -74,3 +74,10 @@ The existing **whole-Village source erasure** is deliberately much broader: it n
 ## Validation boundary
 
 Real C compilation, Wasmtime execution, replay/checkpoints, local worker transport, fuel traps, forbidden imports, scopes and owner review are tested using authored fixtures. Offline player logic is also exercised with actual Wasm. The authoring host is not your Mac: native sandbox execution, installer permission dialogs, browser layout, your two games and sustained local-model performance are not represented as tested. The runtime compiler fixture is Clang; the pinned production compiler is Zig. Optional native tooling must pass its build on the actual Mac before a project can run. Missing native acceptance is engineering validation, not an instruction for you to manually create all the residents.
+
+
+## Portable experiment evidence (Workstream 3)
+
+Each cartridge machine session writes a compact, versioned JSON evidence record beneath that build's `evidence/` directory. The record links its project, build manifest and source hashes, seed, bounded input sequence, latest metrics and state/screen hashes, and any cartridge test assertions. Studio work packets include recent records so residents can cite them. Findings use exactly three labels: **Observed**, **Inferred**, and **Unverified**. Observed and Inferred findings must cite evidence record IDs from the same project; Unverified findings may state what still needs a build or playtest. Records preserve claims and citations, not hidden model reasoning.
+
+Input sequences are capped at 2,048 actions per record; assertions and findings are capped at 64 each; records are limited to 256 KiB and count against the institution storage quota. Screenshots are omitted by default. An owner may opt in for a work session using “Retain screenshots in experiment evidence”; each retained PNG is capped at 256 KiB. Machine checkpoints and downloaded players do not include these evidence records. Records live with their build and are preserved by normal project backup and restore.
