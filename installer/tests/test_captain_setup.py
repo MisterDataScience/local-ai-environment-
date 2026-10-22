@@ -1,4 +1,6 @@
 import tempfile
+import io
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -8,10 +10,29 @@ from text_models import upgrade_text_configuration
 from captain_setup import configure, select_artifacts, build_tools, download_artifact, install_minicpm, LLAMA_REVISION
 import work_agent
 import captain_setup
+import captain_check
 from common import ollama_environment
 
 
 class CaptainSetupTests(unittest.TestCase):
+    def test_usage_cli_reads_authenticated_report_without_running_acceptance(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); (root / 'control').mkdir()
+            (root / 'control/config.json').write_text(json.dumps({'api_key': 'test-key'}))
+            with patch('sys.argv', ['captain_check', '--root', folder, '--usage']), \
+                 patch('urllib.request.build_opener') as opener, \
+                 patch.object(captain_check, 'verify') as verify, \
+                 patch('sys.stdout', new_callable=io.StringIO) as output:
+                opener.return_value.open.return_value.__enter__.return_value = io.BytesIO(b'{"totals":{"requests":4}}')
+                captain_check.main()
+            request = opener.return_value.open.call_args.args[0]
+            self.assertEqual(request.full_url, 'http://127.0.0.1:8001/control/usage')
+            self.assertEqual(request.get_header('Authorization'), 'Bearer test-key')
+            self.assertEqual(opener.call_args.args[0].proxies, {})
+            self.assertEqual(json.loads(output.getvalue())['totals']['requests'], 4)
+            verify.assert_not_called()
+            self.assertFalse((root / 'captain-acceptance-report.json').exists())
+
     def metadata(self):
         base = {'sha': captain_setup.MODEL_REVISION, 'siblings': [
             {'rfilename': name, 'lfs': {'sha256': checksum}}
