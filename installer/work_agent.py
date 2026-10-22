@@ -167,6 +167,7 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
     captain = captain_settings(config)
     if captain['enabled']:
         roles = dict(roles, coordinator=captain['model_id'])
+    roles = dict(roles, essay_document=roles['document'], scaffold_document=roles['document'])
     plugin = root / 'control/opencode-team.mjs'
     if not plugin.is_file():
         raise RuntimeError('Model team policy missing. Rerun the installer.')
@@ -232,8 +233,10 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
     settings['agent']['plan']['permission'].update(edit='deny', bash='ask')
     descriptions = {'analyst': 'Focused reasoning, planning and evidence synthesis',
                     'coder': 'Inspect project code, implement bounded fixes and run relevant tests with approval',
-                    'document': 'Read and summarise supplied text using the configured document profile'}
-    for role in ('analyst', 'coder', 'document'):
+                    'document': 'Read and summarise supplied text using the configured document profile',
+                    'essay_document': 'Copyedit an explicit ESSAY_EDIT request',
+                    'scaffold_document': 'Process one explicit reverse-scaffolding stage'}
+    for role in ('analyst', 'coder', 'document', 'essay_document', 'scaffold_document'):
         settings['agent'][role] = {
             'description': descriptions[role],
             'mode': 'all',
@@ -245,11 +248,14 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                        'For delegated work follow the supplied return_format exactly, addressing every acceptance ID. '
                        'Keep delegated results within 10000 characters; preserve essential code and caveats.')}
     essay_prompt = (root / 'control/essay-edit-prompt.txt').read_text()
-    settings['agent']['document']['prompt'] += ('\nOnly when a delegated handoff contains essay_mode=copyedit-v1, apply the following installed instructions. '
-        'For ordinary /document requests retain the normal read/summarise behaviour.\n' + essay_prompt)
     scaffold_prompt = (root / 'control/reverse-scaffold-prompt.txt').read_text()
-    settings['agent']['document']['prompt'] += ('\nOnly for a delegated scaffold_mode=reverse-v1 handoff, use this reverse-scaffolding prompt instead of essay editing. '
-        'Normal document and essay-edit tasks must not run this workflow.\n' + scaffold_prompt)
+    document_prompt = settings['agent']['document']['prompt']
+    settings['agent']['essay_document'] = {
+        **settings['agent']['document'],
+        'prompt': document_prompt + '\\nMode: ESSAY_EDIT only. Follow the supplied copyedit-v1 contract.\\n' + essay_prompt}
+    settings['agent']['scaffold_document'] = {
+        **settings['agent']['document'],
+        'prompt': document_prompt + '\\nMode: REVERSE_SCAFFOLD only. Follow the supplied reverse-v1 contract.\\n' + scaffold_prompt}
     settings['agent']['coder'].update(steps=12,
         permission={'*': 'deny', 'read': {'*': 'allow', '*.env': 'deny', '*.env.*': 'deny'},
                     'glob': 'allow', 'grep': 'allow', 'edit': 'ask', 'bash': 'ask',

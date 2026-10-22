@@ -199,7 +199,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
   }
 
   function envelope(args) {
-    if (!['analyst', 'coder', 'document'].includes(args.subagent_type)) fail('specialist must be analyst, coder or an explicitly authorised document edit');
+    if (!['analyst', 'coder', 'document', 'essay_document', 'scaffold_document'].includes(args.subagent_type)) fail('specialist must be analyst, coder or an explicitly authorised document edit');
     if (args.task_id || args.background || args.command) fail('resuming, commands and background delegation are disabled');
     if (typeof args.description !== 'string' || args.description.length > 160) fail('description exceeds 160 characters');
     if (typeof args.prompt !== 'string' || args.prompt.length > MAX_INPUT) fail('handoff exceeds 12000 characters');
@@ -229,7 +229,8 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       config.tools.local_video = true;
       config.tools.local_speech = true;
       for (const name of ['plan', 'build']) {
-        config.agent[name].permission.task = { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow' };
+        config.agent[name].permission.task = { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow',
+          essay_document: 'allow', scaffold_document: 'allow' };
         config.agent[name].permission.local_image = 'ask';
         config.agent[name].permission.local_video = 'ask';
         config.agent[name].permission.local_speech = 'ask';
@@ -324,10 +325,11 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         const { key, messages, sourceMessages } = await identity(input);
         const turn = ledger.turns[key] ?? { calls: [] };
         if (turn.calls.some(c => c.id === input.callID)) fail('duplicate call already consumed its attempt');
-        if ((turn.essay || turn.scaffold) && output.args.subagent_type !== 'document') fail('essay turns use the tool-free document specialist only');
+        if ((turn.essay || turn.scaffold) && !['document', turn.essay ? 'essay_document' : 'scaffold_document'].includes(output.args.subagent_type))
+          fail('essay turns use the tool-free document specialist only');
         let essayRequest, scaffoldRequest;
         if (turn.scaffold?.result) fail('this scaffold step is already completed by the host; do not delegate or advance stages');
-        if (output.args.subagent_type === 'document') {
+        if (['document', 'essay_document', 'scaffold_document'].includes(output.args.subagent_type)) {
           if (!roles.document || (!turn.essay && !turn.scaffold)) fail('document tasks require an explicit ESSAY_EDIT or REVERSE_SCAFFOLD request in this user turn');
           if (turn.essay) essayRequest = await loadRequest(turn.essay);
           if (turn.scaffold) scaffoldRequest = await loadScaffold(turn.scaffold);
@@ -335,12 +337,15 @@ export default async function LocalTeam({ client, directory }, options = {}) {
           try { supplied = JSON.parse(output.args.prompt); } catch { fail('document prompt must be JSON; use {} on the first attempt'); }
           if (!supplied || Array.isArray(supplied) || Object.keys(supplied).some(k => k !== 'retry_failure')) fail('document draft and permissions come only from the saved user request');
           output.args.prompt = JSON.stringify(essayRequest ? makeContract(essayRequest, supplied.retry_failure) : scaffoldContract(scaffoldRequest,turn.calls.length+1,supplied.retry_failure));
+          output.args.subagent_type = essayRequest ? 'essay_document' : 'scaffold_document';
           if (output.args.prompt.length > MAX_INPUT) {
             (turn.essay || turn.scaffold).status = 'incomplete_input_limit'; await save();
             fail('essay does not fit the handoff; original preserved. Submit a separately scoped section, no silent truncation.');
           }
         }
         const value = envelope(output.args);
+        const taskRole = ['essay_document', 'scaffold_document'].includes(output.args.subagent_type)
+          ? 'document' : output.args.subagent_type;
         if (turn.calls.length >= 2) fail('two specialist attempts already used for this user turn');
         if (active.has(input.sessionID)) {
           // Errors do not call the after hook. Native persisted error state is
@@ -351,12 +356,12 @@ export default async function LocalTeam({ client, directory }, options = {}) {
           if (!finished) fail('wait for the active specialist before another handoff');
           active.delete(input.sessionID);
         }
-        if (turn.calls.some(c => c.role === output.args.subagent_type) && !value.retry_failure) {
+        if (turn.calls.some(c => c.role === taskRole) && !value.retry_failure) {
           fail('a repeated specialist requires retry_failure describing the concrete failure');
         }
         const contract = bindContract(value, sourceMessages);
         const acceptanceHash = hash(JSON.stringify(contract.acceptance));
-        const prior = turn.calls.find(c => c.role === output.args.subagent_type);
+        const prior = turn.calls.find(c => c.role === taskRole);
         if (prior && prior.acceptance_hash !== acceptanceHash) fail('retry must preserve the original acceptance checklist');
         contract.return_format = RESULT_INSTRUCTION;
         if (essayRequest) {
@@ -372,7 +377,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         const saved = await saveArtifact(join(dirname(ledgerPath), 'handoff-contracts'),
           hash(key + input.callID) + '.json', contract);
         output.args.prompt = packet;
-        turn.calls.push({ id: input.callID, role: output.args.subagent_type, status: 'reserved',
+        turn.calls.push({ id: input.callID, role: taskRole, agent: output.args.subagent_type, status: 'reserved',
           acceptance_hash: acceptanceHash, contract_file: saved.path, contract_sha256: saved.sha256 });
         ledger.turns[key] = turn;
         await save();

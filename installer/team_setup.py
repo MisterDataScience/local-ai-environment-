@@ -63,7 +63,7 @@ def verify_work_agent(process, env, enabled, timeout=90):
             request = Request('http://127.0.0.1:4096/agent', headers={'Authorization': 'Basic ' + token})
             with urlopen(request, timeout=3) as response:
                 agents = {a['name']: a for a in json.load(response)}
-            for role in ('analyst', 'document'):
+            for role in ('analyst', 'document', 'essay_document', 'scaffold_document'):
                 rules = agents.get(role, {}).get('permission', [])
                 tool_rules = [r for r in rules if r['permission'] != 'external_directory']
                 if not tool_rules or tool_rules[-1] != {'permission': '*', 'pattern': '*', 'action': 'deny'}:
@@ -83,7 +83,7 @@ def verify_work_agent(process, env, enabled, timeout=90):
                 raise RuntimeError('Coder step limit was not loaded')
             for parent in ('plan', 'build'):
                 rules = agents.get(parent, {}).get('permission', [])
-                for role in ('analyst', 'coder', 'document'):
+                for role in ('analyst', 'coder', 'document', 'essay_document', 'scaffold_document'):
                     matches = [r for r in rules if r['permission'] in ('*', 'task') and r['pattern'] in ('*', role)]
                     if not matches or matches[-1]['action'] != 'allow':
                         raise RuntimeError('OpenCode model team policy did not load; delegation remains disabled')
