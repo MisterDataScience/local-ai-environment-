@@ -122,6 +122,44 @@ export function assessResult(contract, raw, toolParts, sourceIssues = []) {
     caveat: 'Recorded tool execution does not prove test adequacy or semantic correctness. Analysis and file claims need review.' };
 }
 
+export function reviewBrief(report) {
+  const reasons = [];
+  const mark = reason => {if (!reasons.includes(reason)) reasons.push(reason);};
+  const clip = (value, limit, field) => {
+    if (typeof value !== 'string') {mark(field); return '[invalid value]';}
+    if (value.length > limit) mark(field);
+    return value.slice(0, limit);
+  };
+  const list = (values, count, field, project) => {
+    if (values.length > count) mark(field);
+    return values.slice(0, count).map((value, i) => project(value, field + '[' + i + ']'));
+  };
+  if (report.status !== 'ready_for_review' || report.acceptance.some(c => c.status !== 'met')) mark('unresolved_review');
+  let brief = {
+    status: report.status,
+    summary_excerpt: clip(report.summary, 1600, 'summary'), summary_shortened: report.summary.length > 1600,
+    acceptance: report.acceptance.map(c => ({id: c.id, status: c.status, basis: c.basis,
+      requirement: clip(c.requirement, 240, 'requirements'), evidence: clip(c.evidence, 400, 'evidence')})),
+    tests: list(report.tests, 6, 'tests', (t, field) => ({
+      command: clip(t.command, 240, field), status: t.status,
+      tool_call_id: clip(t.tool_call_id, 200, field), execution_verified: t.execution_verified,
+    })),
+    changed_files: list(report.changed_files, 8, 'changed_files', (v, field) => clip(v, 400, field)),
+    assumptions: list(report.assumptions, 4, 'assumptions', (v, field) => clip(v, 240, field)),
+    unresolved: list(report.unresolved, 4, 'unresolved', (v, field) => clip(v, 240, field)),
+    issues: list(report.issues, 12, 'issues', (v, field) => clip(v, 240, field)),
+  };
+  // Bound the complete preview too; Unicode and several individually small lists can add up.
+  if (Buffer.byteLength(JSON.stringify(brief)) > 8000) {
+    mark('oversized_brief');
+    brief = {status: report.status, summary_excerpt: clip(report.summary, 400, 'summary'),
+      summary_shortened: report.summary.length > 400,
+      acceptance: report.acceptance.map(({id, status, basis}) => ({id, status, basis})),
+      issue_count: report.issues.length, details_omitted: true};
+  }
+  return {...brief, full_report_required: reasons.length > 0, report_read_reasons: reasons};
+}
+
 export async function saveArtifact(directory, name, value) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const info = await lstat(directory);
