@@ -43,7 +43,7 @@ async function fixture(t, options = {}) {
       try {await options.run?.({path, body, assignment, sessions, messages, hooks});}
       finally {running--;}
       const response = {info: {role: 'assistant', agent: body.agent, finish: 'stop'},
-        parts: [{type: 'text', text: 'Finding for ' + assignment.task_id}]};
+        parts: [{type: 'text', text: options.output ?? 'Finding for ' + assignment.task_id}]};
       messages.get(path.id).push(response); return {data: response};
     },
     abort: async ({path}) => {aborted.push(path.id); return {data: true};},
@@ -81,7 +81,7 @@ test('native workers overlap, retain source packets, publish messages and preser
     if (++arrivals === 3) release();
     await gate;
     const inbox = JSON.parse(await hooks.tool.team_inbox.execute({}, f.workerContext(path.id, 'team_inbox')));
-    assert(inbox.length >= 1);
+    assert(inbox.messages.length >= 1);
   }});
   const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('mechanics'), task('matchups'), task('review', 'reviewer')]}, f.context('run')));
   assert.equal(f.maximum(), 3);
@@ -101,6 +101,125 @@ test('duplicate work, invalid profiles, excess workers and overlapping writers f
   assert.throws(() => validateTasks([task('a', 'coder'), task('b', 'coder')]), /one editing/);
   assert.throws(() => validateTasks([task('a', 'admin')]), /invalid role/);
   assert.throws(() => validateTasks(Array.from({length: 6}, (_, i) => task('t' + i))), /submit 1/);
+});
+
+test('board and inbox share bounded unread pages and explicit replay does not rewind progress', async t => {
+  const f = await fixture(t);
+  for (let i = 0; i < 7; i++) await f.hooks.tool.team_note.execute({text: 'Note ' + i}, f.context('note-' + i));
+  const read = async (tool, args = {}) => JSON.parse(await f.hooks.tool[tool].execute(args, f.context('read-' + Math.random())));
+  const first = await read('team_board', {limit: 2});
+  assert.deepEqual(first.messages.map(m => m.text), ['Note 0', 'Note 1']);
+  assert.equal(first.has_more, true);
+  const next = await read('team_inbox', {limit: 2});
+  assert.deepEqual(next.messages.map(m => m.text), ['Note 2', 'Note 3']);
+  const last = await read('team_board');
+  assert.deepEqual(last.messages.map(m => m.text), ['Note 4', 'Note 5', 'Note 6']);
+  assert.equal(last.has_more, false);
+  assert.deepEqual((await read('team_inbox')).messages, []);
+  const replay = await read('team_inbox', {after: 0, limit: 12});
+  assert.equal(replay.messages.length, 7);
+  assert.deepEqual((await read('team_board')).messages, []);
+  await assert.rejects(read('team_board', {after: 999}), /cursor/);
+  await assert.rejects(read('team_inbox', {limit: 13}), /limit/);
+  await assert.rejects(read('team_inbox', {after: -1}), /cursor/);
+});
+
+test('native legacy schemas keep cursor controls optional for an empty default read', async t => {
+  const f = await fixture(t);
+  for (const toolID of ['team_board', 'team_inbox']) {
+    const properties = f.hooks.tool[toolID].args;
+    const output = {jsonSchema: {type: 'object', properties, required: Object.keys(properties)}};
+    await f.hooks['tool.definition']({toolID}, output);
+    assert.deepEqual(output.jsonSchema.required, []);
+    assert.equal(output.jsonSchema.properties, properties);
+  }
+});
+
+test('board emits compact changed tasks while explicit task reads and full reports retain detail', async t => {
+  const f = await fixture(t, {output: 'Evidence '.repeat(700)});
+  await f.hooks.tool.team_run.execute({tasks: [task('long')]}, f.context('run'));
+  const read = async args => JSON.parse(await f.hooks.tool.team_board.execute(args, f.context('board-' + Math.random())));
+  const first = await read({});
+  assert.equal(first.tasks.length, 1);
+  assert.equal(first.tasks[0].summary.length, 400);
+  assert.equal(first.tasks[0].truncated, true);
+  assert.deepEqual((await read({})).tasks, []);
+  const detail = await read({task_id: 'long'});
+  assert.equal(detail.tasks[0].summary.length, 3000);
+  assert.equal(detail.tasks[0].truncated, true);
+  assert.equal(JSON.parse(await readFile(detail.tasks[0].report)).output.length, 6300);
+  await f.hooks.tool.team_retire.execute({ids: ['long']}, f.context('retire'));
+  assert.equal((await read({})).tasks[0].retired, true);
+  assert.deepEqual((await read({})).tasks, []);
+  await f.hooks.tool.team_retire.execute({ids: ['long']}, f.context('retire-again'));
+  assert.deepEqual((await read({})).tasks, []);
+});
+
+test('read cursors survive a new plugin instance and old ledgers migrate without losing messages', async t => {
+  const f = await fixture(t);
+  await f.hooks.tool.team_note.execute({text: 'Preserved note'}, f.context('note'));
+  await f.hooks.tool.team_inbox.execute({}, f.context('read'));
+  const reconnect = async suffix => {
+    const fresh = (await import('../captain.mjs?cursor-restart=' + suffix)).default;
+    return fresh({client: f.client, directory: f.root}, {statePath: f.statePath,
+      modeToken: 'gateway:0:max', model: 'local-ai-gateway/local-ai-captain'});
+  };
+  const fresh = await reconnect('saved');
+  assert.deepEqual(JSON.parse(await fresh.tool.team_inbox.execute({}, f.context('reconnected'))).messages, []);
+  await fresh.tool.team_note.execute({text: 'New note'}, f.context('new-note'));
+  const next = JSON.parse(await fresh.tool.team_inbox.execute({}, f.context('next')));
+  assert.deepEqual(next.messages.map(m => m.text), ['New note']);
+  const legacy = JSON.parse(await readFile(f.statePath));
+  for (const turn of Object.values(legacy.turns)) {
+    delete turn.sequence; delete turn.readers;
+    for (const message of turn.messages) delete message.seq;
+  }
+  await writeFile(f.statePath, JSON.stringify(legacy));
+  const migrated = await reconnect('legacy');
+  const recovered = JSON.parse(await migrated.tool.team_inbox.execute({}, f.context('legacy-read')));
+  assert.deepEqual(recovered.messages.map(m => m.text), ['Preserved note', 'New note']);
+  assert.deepEqual(recovered.messages.map(m => m.seq), [1, 2]);
+  assert.deepEqual(JSON.parse(await migrated.tool.team_inbox.execute({}, f.context('legacy-again'))).messages, []);
+});
+
+test('worker pages cannot consume another reader cursor or disclose messages to other recipients', async t => {
+  let sent;
+  const gate = new Promise(resolve => {sent = resolve;});
+  const f = await fixture(t, {run: async ({path, assignment, hooks}) => {
+    if (assignment.task_id === 'sender') {
+      await hooks.tool.team_message.execute({to: 'captain', text: 'Captain only'}, f.workerContext(path.id, 'team_message'));
+      await hooks.tool.team_message.execute({to: 'recipient', text: 'Peer only'}, f.workerContext(path.id, 'team_message'));
+      sent();
+    } else {
+      await gate;
+      const inbox = JSON.parse(await hooks.tool.team_inbox.execute({}, f.workerContext(path.id, 'team_inbox')));
+      assert.deepEqual(inbox.messages.map(m => m.text), ['Peer only']);
+      const board = JSON.parse(await hooks.tool.team_board.execute({}, f.workerContext(path.id, 'team_board')));
+      assert.deepEqual(board.messages, []);
+      const replay = JSON.parse(await hooks.tool.team_board.execute({after: 0}, f.workerContext(path.id, 'team_board')));
+      assert.deepEqual(replay.messages.map(m => m.text), ['Peer only']);
+    }
+  }});
+  const cohort = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('sender'), task('recipient')]}, f.context('run')));
+  assert(cohort.tasks.every(task => task.status === 'completed'));
+  const inbox = JSON.parse(await f.hooks.tool.team_inbox.execute({}, f.context('captain-inbox')));
+  assert.deepEqual(inbox.messages.map(m => m.text), ['Captain only']);
+});
+
+test('a recovered interrupted task is a new board update even after its previous state was read', async t => {
+  const f = await fixture(t), ledger = JSON.parse(await readFile(f.statePath));
+  const turn = Object.values(ledger.turns)[0];
+  turn.tasks = [{...task('crashed'), status: 'running', update_seq: 1}];
+  turn.sequence = 1; turn.readers = {captain: {tasks: 1, messages: 0}};
+  await writeFile(f.statePath, JSON.stringify(ledger));
+  const fresh = (await import('../captain.mjs?interrupted-cursor-recovery')).default;
+  const hooks = await fresh({client: f.client, directory: f.root}, {statePath: f.statePath,
+    modeToken: 'gateway:0:max', model: 'local-ai-gateway/local-ai-captain'});
+  const board = JSON.parse(await hooks.tool.team_board.execute({}, f.context('recovered-board')));
+  assert.equal(board.tasks.length, 1);
+  assert.equal(board.tasks[0].status, 'interrupted');
+  assert.equal(board.tasks[0].update_seq, 2);
+  assert.deepEqual(JSON.parse(await hooks.tool.team_board.execute({}, f.context('recovered-again'))).tasks, []);
 });
 
 test('Captain can contact the autonomous Studio Lead and workers cannot impersonate the Captain', async t => {
