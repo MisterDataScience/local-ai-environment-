@@ -45,6 +45,23 @@ class CaptainSetupTests(unittest.TestCase):
             self.assertFalse(settings['tools']['village_publish'])
             self.assertFalse(settings['tools']['team_run'])  # host policy enables after initialization
 
+    def test_captain_and_worker_style_reaches_both_native_agents(self):
+        cfg = self.config()
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); (root / 'control').mkdir()
+            for name in ('opencode-team.mjs', 'captain.mjs', 'essay-edit-prompt.txt', 'reverse-scaffold-prompt.txt'):
+                (root / 'control' / name).write_text('test')
+            settings = work_agent.configuration(cfg, list(cfg['text_models']), 'max', root,
+                                               {'instance_id': 'gateway', 'epoch': 0, 'mode': 'max'})
+            for name in ('plan', 'build'):
+                prompt = settings['agent'][name]['prompt']
+                self.assertIn(captain_setup.CAPTAIN_RESPONSE_STYLE, prompt)
+                self.assertIn('You are the captain', prompt)
+            for role in captain_setup.ROLES:
+                prompt = settings['agent']['captain-' + role]['prompt']
+                self.assertIn(captain_setup.WORKER_REPORT_STYLE, prompt)
+                self.assertIn('Work only on your assigned objective', prompt)
+
     def test_scoped_automation_cannot_activate_the_team(self):
         cfg = self.config(); cfg['desktop'] = {'enabled': True}
         settings = {'agent': {}, 'tools': {}}

@@ -12,6 +12,12 @@ worker still asks for native approval before an edit or command. The coordinator
 existing Office, file, PDF, browser, image and speech tools remain available in
 their existing permission profiles.
 
+The Captain's Plan and Build instructions require candid, concise replies in natural
+British English. Delegated workers report findings plainly and follow the same
+phrasing preferences when drafting text for the owner. The Captain remains
+responsible for the final wording. These are model instructions; native behaviour
+must still be checked on the Mac.
+
 The conversation and Discord interfaces use the same OpenCode harness, so they
 also get the captain. Ordinary Open WebUI chat remains its existing native tool
 loop; selecting the Captain model there selects the shared inference profile,

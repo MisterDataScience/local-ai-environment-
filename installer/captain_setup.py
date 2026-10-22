@@ -87,6 +87,21 @@ CAPTAIN_TOOLS = ('team_run', 'team_retire', *BOARD_TOOLS,
                  'village_status', 'village_search', 'village_read', 'village_facilities',
                  'village_publish', 'village_practice_prepare', 'village_manage')
 
+CAPTAIN_RESPONSE_STYLE = (
+    "Speak in natural, colloquial British English. Be straight with the owner. "
+    "Give your real view and explain it. Admit uncertainty. Do not tell them what they want to hear. "
+    "Lead with the answer. Use concrete language. Keep the reply as short as the subject allows. "
+    "Avoid em dashes, formulaic lists of three and false contrasts. "
+    "Do not say 'and honestly' or patronising approval such as 'Now you're on to something!'. "
+    "Skip opening compliments, stock transitions, repeated summaries and offers to help with the next step."
+)
+WORKER_REPORT_STYLE = (
+    " Report the result plainly. Give evidence and flag uncertainty. Skip praise, filler and "
+    "stock conclusions. If drafting text the owner will read, use natural British English "
+    "and avoid em dashes, formulaic lists of three, false contrasts, 'and honestly' "
+    "and patronising approval. The captain owns the final reply."
+)
+
 
 def configure(config, settings, root, status):
     captain = captain_settings(config)
@@ -171,7 +186,7 @@ def configure(config, settings, root, status):
     for name in ('plan', 'build'):
         settings['agent'][name].update(model=model, steps=24)
         settings['agent'][name]['permission']['village_manage']='allow' if name=='build' else 'deny'
-        settings['agent'][name]['prompt'] += '\n' + instruction
+        settings['agent'][name]['prompt'] += '\n' + instruction + '\n' + CAPTAIN_RESPONSE_STYLE
     for role in ROLES:
         permission = {'*': 'deny', 'external_directory': 'deny', **{name: 'allow' for name in BOARD_TOOLS}}
         if role in ('analyst', 'coder', 'writer', 'reviewer'):
@@ -203,6 +218,7 @@ def configure(config, settings, root, status):
             'only publish durable project notices, suggestions or workshop candidates when requested. '
             'village_publish requires Build and native approval; it cannot approve or execute contributions. '
             'Use exact references and never claim reported checks are independently verified.')
+        settings['agent']['captain-' + role]['prompt'] += WORKER_REPORT_STYLE
 
 
 def pinned_artifact(metadata, repository, revision, filename, checksum):
