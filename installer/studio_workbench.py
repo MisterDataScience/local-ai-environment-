@@ -1,9 +1,11 @@
 """Bounded build sandbox and shared Wasm worker; never a resident shell tool."""
+import heapq
 import base64
 import copy
 import io
 import json
 import os
+import re
 from pathlib import Path
 import resource
 import selectors
@@ -59,6 +61,7 @@ class Workbench:
         self.tools=self.install/'studio-tools';self.python=Path(tool_python) if tool_python else self.tools/'.venv/bin/python'
         self.zig=Path(zig) if zig else None;self.test_trusted=test_trusted
         self.lock=threading.RLock();self.build_lock=threading.Lock();self.process=None;self.machines={};self.cancel=threading.Event()
+        self._evidence_summaries={}
         self.credit=200.;self.last=time.monotonic();self.measurements={};self.busy=None
         try:self.measurements=json.loads((store.root/'studio-measurements.json').read_text())
         except (OSError,ValueError):pass
@@ -316,21 +319,56 @@ class Workbench:
         finding=dict(category=category,text=bounded(text,1200,'finding'),created=int(time.time()))
         for record in rows:
             record['findings']=(record.get('findings',[])+[finding])[-64:];record['updated']=int(time.time())
-            self.write_evidence(dict(institution=iid,build=record['build']),record)
+            self.write_evidence(dict(institution=iid,project=pid,build=record['build']),record)
         return dict(category=category,evidence=evidence_ids,saved=True)
 
-    def recent_evidence(self,iid,pid,limit=20):
-        rows=[];root=self.store.directory/iid.split(':')[1]/'builds'
-        with self.store.db() as cx:builds=[r[0] for r in cx.execute('SELECT id FROM studio_builds WHERE project=?',(pid,))]
-        for bid in builds:
-            folder=root/bid.split(':')[1]/'evidence'
-            if folder.is_dir():
-                for path in folder.glob('*.json'):
+    def recent_evidence(self,iid,pid,limit=20,*,summary_only=False):
+        # Select recent writes using metadata before decoding bounded evidence files.
+        if type(limit) is not int or not 1<=limit<=100:raise ValueError('Invalid evidence limit')
+        root=self.store.directory/iid.split(':')[1]/'builds'
+        with self.store.db() as cx:
+            self.store.project(cx,pid,iid)
+            builds=[r[0] for r in cx.execute('SELECT id FROM studio_builds WHERE project=?',(pid,))]
+        def candidates():
+            for bid in builds:
+                for path in (root/bid.split(':')[1]/'evidence').glob('*.json'):
                     try:
-                        x=json.loads(path.read_text())
-                        rows.append({k:x.get(k) for k in ('id','task','build','source_sha256','seed','created','updated','input_sequence','assertions','findings','observation')})
-                    except (OSError,ValueError):pass
-        return sorted(rows,key=lambda x:x.get('updated') or 0,reverse=True)[:limit]
+                        info=path.stat()
+                        yield (info.st_mtime_ns,str(path),info)
+                    except OSError:continue
+        rows=[]
+        for _,name,info in heapq.nlargest(limit,candidates(),key=lambda item:(item[0],item[1])):
+            path=Path(name);key=(name,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+            try:
+                if summary_only and key in self._evidence_summaries:item=self._evidence_summaries[key]
+                else:
+                    x=json.loads(path.read_text())
+                    if x.get('project')!=pid:continue
+                    if summary_only:
+                        item={k:x.get(k) for k in ('id','task','build','source_sha256','seed','created','updated')}
+                        item.update(input_count=len(x.get('input_sequence',[])),assertion_count=len(x.get('assertions',[])),finding_count=len(x.get('findings',[])),detail_action='evidence_read')
+                        if len(self._evidence_summaries)>=128:self._evidence_summaries.clear()
+                        self._evidence_summaries[key]=item
+                    else:item={k:x.get(k) for k in ('id','task','build','source_sha256','seed','created','updated','input_sequence','assertions','findings','observation')}
+                rows.append(dict(item))
+            except (OSError,ValueError):continue
+        return rows
+
+    def evidence_detail(self,iid,pid,eid,start=0,limit=128):
+        if not isinstance(eid,str) or not re.fullmatch(r'evidence:[0-9a-f]{32}',eid):raise ValueError('Invalid evidence ID')
+        if type(start) is not int or start<0 or type(limit) is not int or not 1<=limit<=256:raise ValueError('Evidence page must request 1 to 256 inputs from a nonnegative offset')
+        with self.store.db() as cx:builds=[r[0] for r in cx.execute('SELECT id FROM studio_builds WHERE project=?',(pid,))]
+        filename=eid.split(':',1)[1]+'.json';root=self.store.directory/iid.split(':')[1]/'builds'
+        for bid in builds:
+            path=root/bid.split(':',1)[1]/'evidence'/filename
+            if not path.is_file():continue
+            record=json.loads(path.read_text())
+            if record.get('project')!=pid:raise PermissionError('Evidence record is unavailable for this project')
+            sequence=record.get('input_sequence',[])
+            result={k:v for k,v in record.items() if k not in ('input_sequence','screenshot_png_base64')}
+            result.update(input_sequence=sequence[start:start+limit],input_count=len(sequence),input_start=start,input_truncated=start+limit<len(sequence),screenshot_available=bool(record.get('screenshot_png_base64') or record.get('screenshot')))
+            return result
+        raise ValueError('Evidence record is unavailable for this project')
 
     def checkpoint_payload(self,mid,state):
         meta=self.machines[mid];cartridge,_=self.cartridge(meta['build'])
@@ -382,11 +420,12 @@ class Workbench:
                 if operation=='reset':result['evidence']=self.new_evidence(mid,args.get('seed',1))
             return result
 
-    def restore(self,iid,saved):
+    def restore(self,iid,saved,project=None):
         if not isinstance(saved,str) or not saved.startswith('machine:') or len(saved)!=40:raise ValueError('Invalid saved machine')
         root=self.store.directory/iid.split(':')[1]/'machines';path=root/(saved.split(':')[1]+'.json')
         raw=path.read_bytes();content=json.loads(raw);candidate,changed=self.migrate_checkpoint(content);meta=candidate.get('meta')
         if not isinstance(meta,dict) or not meta.get('build'):raise ValueError('Saved machine has no build identity')
+        if project is not None and meta.get('project')!=project:raise PermissionError('Saved machine belongs to another project')
         cartridge,_=self.cartridge(meta['build'],iid);manifest=cartridge.get('build_manifest')
         if candidate.get('build_manifest') is not None:
             validate_build_manifest(candidate['build_manifest'])
@@ -411,7 +450,18 @@ class Workbench:
 
     def tests(self,iid,bid):
         cartridge,_=self.cartridge(bid,iid);results=[]
-        for test in cartridge['tests']:
+        tests=cartridge.get('tests')
+        if not isinstance(tests,list) or not 1<=len(tests)<=32:raise ValueError('Define at least one bounded authored cartridge test')
+        names=set()
+        for test in tests:
+            if not isinstance(test,dict):raise ValueError('Cartridge tests must be objects')
+            name=test.get('name');expected=test.get('expect_metrics')
+            if not isinstance(name,str) or not name.strip() or len(name)>120 or name in names:raise ValueError('Cartridge tests need unique nonempty names matching the planned test IDs')
+            names.add(name)
+            if not isinstance(expected,dict) or not expected:raise ValueError('Each cartridge test needs nonempty expected metrics')
+            if any(not str(key).isdigit() or not 0<=int(key)<128 or type(value) is not int for key,value in expected.items()):raise ValueError('Expected metrics must name valid metric keys and integer values')
+            if not isinstance(test.get('inputs',[]),list) or len(test.get('inputs',[]))>100:raise ValueError('Test input limit exceeded')
+        for test in tests:
             instance=self.create(iid,bid,test.get('seed',1));mid=instance['machine'];observation=instance
             try:
                 inputs=test.get('inputs',[])
