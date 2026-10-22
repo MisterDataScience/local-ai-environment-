@@ -57,6 +57,9 @@ class CaptainSetupTests(unittest.TestCase):
                 prompt = settings['agent'][name]['prompt']
                 self.assertIn(captain_setup.CAPTAIN_RESPONSE_STYLE, prompt)
                 self.assertIn('You are the captain', prompt)
+                self.assertLess(len(prompt), 5500)
+                self.assertIn('studio_contact', prompt)
+                self.assertFalse(settings['tools']['studio_contact'])
             for role in captain_setup.ROLES:
                 prompt = settings['agent']['captain-' + role]['prompt']
                 self.assertIn(captain_setup.WORKER_REPORT_STYLE, prompt)
