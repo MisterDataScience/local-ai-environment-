@@ -159,6 +159,7 @@ test('oversized results are preserved in a recoverable full report', async t => 
   const result = await f.after(args, 'x'.repeat(15000));
   const brief = JSON.parse(result.output);
   assert.equal(brief.status, 'needs_attention');
+  assert.equal(brief.full_report_required, true);
   assert.equal(JSON.parse(await readFile(brief.full_report, 'utf8')).raw_result, 'x'.repeat(15000));
   assert(result.output.length < 3000);
 });
@@ -227,6 +228,9 @@ test('native child return produces a complete source-bound review artifact', asy
   await f.hooks['tool.execute.after']({ tool: 'task', sessionID: 'session1', callID: 'delegate' }, output);
   const brief = JSON.parse(output.output), report = JSON.parse(await readFile(brief.full_report, 'utf8'));
   assert.equal(brief.status, 'ready_for_review');
+  assert.equal(brief.full_report_required, false);
+  assert.equal(brief.acceptance[0].evidence, 'Analysis complete');
+  assert.equal(brief.acceptance[0].requirement, 'Task');
   assert.equal(report.raw_result, raw);
   assert.equal(report.acceptance[0].source.message_id, 'user1');
   assert.equal(report.acceptance[0].requirement, 'Task');
