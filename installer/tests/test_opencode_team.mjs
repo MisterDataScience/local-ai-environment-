@@ -18,7 +18,7 @@ async function fixture(t) {
   const client = { session: {
     get: async () => ({ data: session }), messages: async () => ({ data: messages }),
   }};
-  const options = { ledgerPath, modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code', document: 'doc' } };
+  const options = { ledgerPath, modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code', document: 'doc', essay_document: 'doc', scaffold_document: 'doc' } };
   const hooks = await LocalTeam({ client, directory: root }, options);
   await hooks['chat.message']({ sessionID: 'session1' }, { message: messages[0].info, parts: messages[0].parts });
   function call(id, role = 'analyst', extra = {}, parent = 'user1') {
@@ -136,9 +136,22 @@ test('configuration enables only named specialists and rejects role model change
   const config = { tools: { task: false }, agent: { plan: { permission: {} }, build: { permission: {} } } };
   await f.hooks.config(config);
   assert.equal(config.tools.task, true);
-  assert.deepEqual(config.agent.plan.permission.task, { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow' });
+  assert.equal(config.tools.local_video, false);
+  assert.equal(config.agent.plan.permission.local_video, 'deny');
+  assert.deepEqual(config.agent.plan.permission.task, { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow', essay_document: 'allow', scaffold_document: 'allow' });
   await f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'local-ai-gateway', id: 'code' } });
   await assert.rejects(f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'cloud', id: 'code' } }), /model changed/);
+});
+
+test('Max exposes video while ordinary turns carry no document workflow directive', async t => {
+  const f = await fixture(t);
+  assert(!f.messages[0].parts.some(p => p.synthetic));
+  const hooks = await LocalTeam({client: f.client, directory: f.directory},
+    {...f.options, modeToken: 'backend:0:max'});
+  const config = {tools: {}, agent: {plan: {permission: {}}, build: {permission: {}}}};
+  await hooks.config(config);
+  assert.equal(config.tools.local_video, true);
+  assert.equal(config.agent.build.permission.local_video, 'ask');
 });
 
 test('oversized results are preserved in a recoverable full report', async t => {
@@ -360,8 +373,15 @@ async function essayTurn(f,id='essay-user',draft='The result may improve by 10%.
 test('essay delegation requires explicit current-turn activation and immutable supplied evidence',async t=>{
   const f=await fixture(t);const blocked=f.call('blocked','document');blocked[1].args.prompt='{}';
   await assert.rejects(f.before(blocked),/explicit ESSAY_EDIT/);
-  const args=await essayTurn(f);await f.before(args);
-  const packet=JSON.parse(args[1].args.prompt);assert.equal(packet.essay_mode,'copyedit-v1');
+  const args=await essayTurn(f);
+  const directive=f.messages.find(m=>m.info.id==='essay-user').parts.find(p=>p.synthetic);
+  assert.match(directive.text,/Host document workflow/);
+  assert.match(directive.text,/original, edited and notes paths/);
+  assert(!directive.text.includes('Stage 7A'));
+  const cross=f.call('cross-mode','scaffold_document',{},'essay-user');cross[1].args.prompt='{}';
+  await assert.rejects(f.before(cross),/tool-free document specialist/);
+  await f.before(args);
+  const packet=JSON.parse(args[1].args.prompt);assert.equal(args[1].args.subagent_type,'essay_document');assert.equal(packet.essay_mode,'copyedit-v1');
   assert.equal(JSON.parse(packet.evidence).draft[0].text,'The result may improve by 10%.');
   assert.equal(JSON.parse(packet.constraints).reorder,'none');assert.ok(args[1].args.prompt.length<=12000);
   await f.after(args);
@@ -398,8 +418,11 @@ async function scaffoldTurn(f,id='scaffold-user'){
 }
 test('reverse scaffolding binds one stage and shares the two-attempt native budget',async t=>{
  const f=await fixture(t),args=await scaffoldTurn(f);await f.before(args);
+ const directive=f.messages.find(m=>m.info.id==='scaffold-user').parts.find(p=>p.synthetic);
+ assert.match(directive.text,/Stage 7A/);
+ assert(!directive.text.includes('original, edited and notes paths'));
  const packet=JSON.parse(args[1].args.prompt),evidence=JSON.parse(packet.evidence);
- assert.equal(packet.scaffold_mode,'reverse-v1');assert.equal(packet.essay_mode,undefined);
+ assert.equal(args[1].args.subagent_type,'scaffold_document');assert.equal(packet.scaffold_mode,'reverse-v1');assert.equal(packet.essay_mode,undefined);
  assert.equal(evidence.control.requested_stage,'1');assert.equal(evidence.control.attempt,1);
  await f.after(args);
  const retry=f.call('scaffold-retry','document',{},'scaffold-user');retry[1].args.prompt=JSON.stringify({retry_failure:'Missing structured stage result'});await f.before(retry);await f.after(retry);
