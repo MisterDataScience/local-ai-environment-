@@ -56,10 +56,12 @@ class ContextProtocolTests(unittest.TestCase):
                                         'prompt_eval_count': 20, 'eval_count': 7}
                             body = {'model': 'local-ai', 'stream': stream, 'max_completion_tokens': 7,
                                     'truncate': True, 'shift': True,
-                                    '_finish_reason': 'injected',
+                                    '_finish_reason': 'injected', 'usage_workflow': 'coder',
+                                    '_accounting_usage': {'prompt_tokens': 9999, 'completion_tokens': 9999},
                                     'messages': [{'role': 'user', 'content': 'Write an essay'}]}
                             request = Request(f'http://127.0.0.1:{server.server_port}/v1/chat/completions',
-                                data=json.dumps(body).encode(), headers={'Authorization': 'Bearer test-key'})
+                                data=json.dumps(body).encode(), headers={'Authorization': 'Bearer test-key',
+                                    'X-Local-AI-Workflow': 'essay'})
                             def streaming(base, payload, sink):
                                 result = backend(base, '/api/chat', payload)
                                 sink.send({'content': result['message']['content']})
@@ -80,6 +82,18 @@ class ContextProtocolTests(unittest.TestCase):
                                 self.assertEqual(result['choices'][0]['message']['content'], 'unfinished essay')
                             self.assertEqual(result['choices'][0]['finish_reason'], expected)
                             self.assertEqual(result['usage']['completion_tokens'], 7)
+                usage_url = f'http://127.0.0.1:{server.server_port}/control/usage'
+                with self.assertRaises(HTTPError) as denied:
+                    urlopen(usage_url, timeout=2)
+                self.assertEqual(denied.exception.code, 401)
+                with urlopen(Request(usage_url, headers={'Authorization': 'Bearer test-key'}), timeout=2) as response:
+                    report = json.load(response)
+                self.assertEqual(report['totals']['requests'], 6)
+                self.assertEqual(report['totals']['measured_prompt_tokens'], 120)
+                self.assertEqual(report['totals']['measured_completion_tokens'], 42)
+                self.assertEqual(report['totals']['cutoff_requests'], 2)
+                self.assertEqual(report['workflows'][0]['workflow'], 'essay')
+                self.assertEqual(report['workflows'][0]['source'], 'client')
             finally:
                 server.shutdown()
                 server.server_close()
