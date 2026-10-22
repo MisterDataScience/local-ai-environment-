@@ -247,6 +247,24 @@ export default async function Captain({client, directory}, options) {
     }
   }
   const tools = {
+    studio_contact: {description: 'Contact the autonomous Studio Lead directly as Village Captain. Use with an institution name or ID and a message; optionally specify an active project ID or exact title. If omitted, the Lead selects it when there is only one active project, or chooses among projects in its inbox. Use a thread ID to read the conversation, or omit both message and thread to list studios. The Captain can talk to the Lead but cannot approve membership, permanent knowledge or temporary appointments.',
+      args: {institution: {type: 'string', maxLength: 100}, message: {type: 'string', maxLength: 4000}, thread: {type: 'string', maxLength: 100}, project: {type: 'string', maxLength: 120}},
+      async execute(args, context) {
+        if (Object.keys(args).some(k => !['institution', 'message', 'thread', 'project'].includes(k))) fail('unknown Studio Lead contact fields');
+        const binding = await origin(context);
+        if (binding.task || !['plan', 'build'].includes(binding.parentAgent)) fail('only the Village Captain can contact the Studio Lead');
+        const gatewayKey = process.env.LOCAL_AI_GATEWAY_KEY;
+        if (!gatewayKey) fail('Captain gateway credential is unavailable');
+        const operation = args.thread ? 'studio_conversation' : args.message ? 'captain_studio_message' : 'studios_directory';
+        const payload = args.thread ? {operation, institution: args.institution, thread: args.thread} :
+          args.message ? {operation, institution: args.institution, message: text(args.message, 4000, 'message'), ...(args.project ? {project: text(args.project, 120, 'project')} : {})} : {operation};
+        const response = await fetch('http://127.0.0.1:8001/control/studios', {method: 'POST',
+          headers: {Authorization: 'Bearer ' + gatewayKey, 'Content-Type': 'application/json'},
+          body: JSON.stringify(payload), redirect: 'error', signal: context.abort});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) fail(result.error || 'Studio Lead inbox unavailable');
+        return JSON.stringify(result);
+      }},
     team_run: {description: 'Dispatch 1–5 independent temporary workers concurrently and await their results. Captain retains ownership. Different tool profiles share one model. Dependent stages require separate calls. Only one coder per cohort. Workers cannot delegate.',
       args: {tasks: {type: 'array', minItems: 1, maxItems: 5, items: {type: 'object', additionalProperties: false,
         properties: {id: {type: 'string'}, role: {type: 'string', enum: ROLES}, objective: {type: 'string'},
@@ -392,7 +410,7 @@ export default async function Captain({client, directory}, options) {
   return {tool: tools,
     async config(config) {
       for (const name of Object.keys(tools)) config.tools[name] = true;
-      for (const name of ['plan', 'build']) for (const tool of ['team_run', 'team_retire', ...BOARD, 'village_status', 'village_search', 'village_read'])
+      for (const name of ['plan', 'build']) for (const tool of ['team_run', 'team_retire', 'studio_contact', ...BOARD, 'village_status', 'village_search', 'village_read'])
         config.agent[name].permission[tool] = 'allow';
       for (const name of ['plan', 'build']) {
         config.agent[name].permission[FACILITY_READ] = 'allow';
@@ -451,3 +469,4 @@ export default async function Captain({client, directory}, options) {
       }
     }};
 }
+

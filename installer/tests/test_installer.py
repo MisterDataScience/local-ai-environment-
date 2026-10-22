@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import Mock, patch
 import zipfile
@@ -13,6 +14,18 @@ import installer
 
 
 class InstallerTests(unittest.TestCase):
+    def test_installed_studio_imports_without_repository_on_python_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # Exercise actual file installation, then stop before package/network work.
+            with patch.object(installer, 'run'), patch('dependency_locks.install_locked', side_effect=RuntimeError('Stop before dependencies')):
+                with self.assertRaisesRegex(RuntimeError, 'Stop before dependencies'):
+                    installer.install_environments(root, Path('/unused/uv'), root/'state.json')
+            result = subprocess.run([sys.executable, '-I', '-c',
+                'import sys; sys.path.insert(0,sys.argv[1]); import studios, studio_roles; assert studios.WORKFLOW_ROLES == studio_roles.WORKFLOW_ROLES',
+                str(root/'control')], cwd=root, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_comfy_dependencies_upgrade_when_old_checkpoint_has_unpinned_torch(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -367,4 +380,5 @@ class InstallerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 
