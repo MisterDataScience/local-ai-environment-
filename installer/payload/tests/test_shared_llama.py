@@ -6,6 +6,14 @@ from shared_llama import SharedLlama, digest
 
 
 class SharedLlamaTests(unittest.TestCase):
+    def test_partial_usage_is_retained_for_accounting_on_invalid_completion(self):
+        body = {'messages': [{'role': 'user', 'content': 'hello'}]}
+        with patch('shared_llama.api', return_value={'choices': [], 'usage': {'prompt_tokens': 13}}):
+            with self.assertRaises((ValueError, RuntimeError, IndexError)):
+                SharedLlama({}).chat(body, 100)
+        self.assertEqual(body['_accounting_usage'], {'prompt_tokens': 13, 'completion_tokens': None})
+        self.assertNotIn('_usage', body)
+
     def test_selected_abliterated_variant_requires_verified_adapter_for_every_slot(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
