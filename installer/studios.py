@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 import village
 import village_memory as memory
 from commons_transport import Turn
-from studio_store import Store,atomic,files,unpack,encoded,sha,ident,bounded,MAX_PROJECT
+from studio_store import Store,atomic,files,archive,unpack,encoded,sha,ident,bounded,MAX_PROJECT
 from studio_workbench import Workbench
 
 FOUNDING_SYSTEM='''You are preparing a private studio from reference C projects.
@@ -53,7 +53,7 @@ PRODUCTION_STAGE_SYSTEM = {
     'planning': 'You are the Lead Designer in the planning stage. Deliver a bounded game vision and player journey for one small 320x180 portable-C game. Make the player, visible world, core loop, beginning, middle and end explicit. Use project notes and tasks; do not implement code.',
     'middle': 'You are the Systems Designer in the middle stage. Convert the accepted plan into a build-ready design and test handover. Define game states, inputs, visible feedback, edge cases, scope limits and observable acceptance checks. Do not implement the game.',
     'implementation': 'You are the Engine Specialist in implementation. Follow the accepted middle-stage handover. Edit the working project, build the portable cartridge, and report exact build results. Do not change design scope without documenting the reason.',
-    'playtest': 'You are the Playtest Reviewer. Test the implementation against the accepted middle-stage checks. Use machine and inspect tools where available. Distinguish observed behavior from inference and unverified visual quality. Do not edit the implementation.',
+    'playtest': 'You are the Playtest Reviewer. Do not finish until the acceptance record confirms: a passing cartridge build for the current project files, passing authored cartridge tests, a machine run with recorded input, and an image-capable visual inspection of its rendered 320x180 frame marked pass. Use build, tests, create_machine, run_machine, then inspect. If inspection is unavailable or needs revision, report that and do not claim acceptance. The game renders in a headless Wasm worker; no monitor is needed. Do not edit the implementation.',
 }
 
 WORK_SYSTEM='''You are an approved studio resident. Projects persist between turns.
@@ -75,6 +75,7 @@ Only supplied approved members can help. Helpers return advice, not tools/delega
 Builds and execution are sandboxed host services. You have no shell, network, external
 accounts, package installer or outsourcing. Never claim screenshots were inspected unless
 an image was actually supplied. Metrics are program-reported and not visual proof.
+The machine renders frames offscreen in its Wasm worker; inspect sends the actual PNG frame to the configured local model, which must support images for visual review.
 Use the studio SDK for portable C: vm_init(seed), vm_update(buttons), vm_draw(),
 320x180 screen, fixed 60 Hz simulated time. Rendering may be skipped in tests, so it
 must not mutate simulation state. studio.json names C sources, numbered assets and
@@ -190,7 +191,7 @@ class Studios:
             if kind=='production':
                 previous=cx.execute("SELECT progress FROM studio_jobs WHERE project=? AND kind='production' ORDER BY created DESC,rowid DESC LIMIT 1",(pid,)).fetchone()
                 if previous:progress['notes']=json.loads(previous[0]).get('notes','')[-6000:]
-                progress.update(pipeline_stage='planning',pipeline_phase='department',stage_index=0,handoffs={},completed_stages=[],stage_feedback='',review_attempts=0)
+                progress.update(pipeline_stage='planning',pipeline_phase='department',stage_index=0,handoffs={},completed_stages=[],stage_feedback='',review_attempts=0,acceptance=dict(build=None,tests=None,run=None,visual=None))
             jid=ident('studio-job')
             with cx:
                 cx.execute('INSERT INTO studio_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',(jid,iid,pid,kind,'paused',encoded(settings),encoded(progress),minutes*60,0,0,'Ready',int(time.time())))
@@ -340,6 +341,49 @@ class Studios:
             sources=[dict(r) for r in cx.execute("SELECT id,project FROM studio_sources WHERE institution=? AND state='active'",(iid,))]
         return dict(objective=settings['objective'],resident=actor,instructions=profile,memory_map=navigation,approved_documents=docs,members=members,project=pid,sources=sources,notes=progress['notes'][-4000:],last_result=progress['last_result'],tasks=tasks,evidence=self.workbench.recent_evidence(iid,pid),files=[] if settings.get('plan_only') else self.store.tree(pid)[:100],machines=[m for m in self.workbench.status()['instances'] if m['institution']==iid])
 
+    def production_gate_missing(self,pid,progress):
+        acceptance=progress.get('acceptance',{})
+        missing=[]
+        build=acceptance.get('build') or {}
+        current_sha=sha(archive(files(self.store.path(pid))))
+        if build.get('state')!='passed' or not build.get('id') or build.get('source_sha256')!=current_sha:
+            missing.append('a passing cartridge build for the current working-copy revision')
+        if not (acceptance.get('tests') or {}).get('passed') or (acceptance.get('tests') or {}).get('build')!=build.get('id'):
+            missing.append('passing authored cartridge tests for that build')
+        run=acceptance.get('run') or {}
+        if run.get('build')!=build.get('id') or not run.get('evidence') or not run.get('screen_sha256') or not run.get('steps'):
+            missing.append('a recorded machine run with input on that build')
+        visual=acceptance.get('visual') or {}
+        if visual.get('build')!=build.get('id') or visual.get('status')!='pass' or not visual.get('image_sent') or not visual.get('evidence'):
+            missing.append('a passing visual inspection of a rendered frame from that build')
+        elif visual.get('screen_sha256')!=run.get('screen_sha256'):
+            missing.append('a visual inspection of the latest recorded machine frame')
+        return missing
+
+    def record_production_acceptance(self,row,progress,action,args,result):
+        if row['kind']!='production':return
+        acceptance=progress.setdefault('acceptance',dict(build=None,tests=None,run=None,visual=None))
+        iid=row['institution'];pid=row['project']
+        if action=='build':
+            acceptance.update(build={k:result.get(k) for k in ('id','state','source_sha256')},tests=None,run=None,visual=None)
+        elif action=='tests':
+            acceptance['tests']=dict(build=args.get('build'),passed=bool(result.get('passed')),evidence=[t.get('evidence') for t in result.get('tests',[]) if t.get('evidence')])
+        elif action=='run_machine':
+            machine=args.get('machine');meta=self.workbench.machines.get(machine,{})
+            if meta.get('institution')==iid and meta.get('project')==pid:
+                acceptance['run']=dict(machine=machine,build=meta.get('build'),evidence=result.get('evidence'),screen_sha256=result.get('screen_sha256'),steps=args.get('steps',1),buttons=args.get('buttons',0))
+                acceptance['visual']=None
+        elif action=='inspect':
+            machine=args.get('machine');meta=self.workbench.machines.get(machine,{})
+            review=result.get('visual_review') or {}
+            if meta.get('institution')==iid and meta.get('project')==pid and isinstance(review,dict):
+                acceptance['visual']=dict(machine=machine,build=meta.get('build'),evidence=result.get('evidence'),screen_sha256=result.get('screen_sha256'),image_sent=True,status=review.get('status'),review=review.get('review',''),issues=review.get('issues',[]))
+            if review.get('status')=='revise':
+                progress['stage_index']=2;progress['pipeline_stage']='implementation';progress['pipeline_phase']='department'
+                progress['stage_feedback']=bounded('Playtest returned the rendered screen for implementation fixes: '+str(review.get('review',''))+'; issues: '+encoded(review.get('issues',[])),1200,'stage feedback')
+                progress['pending_handoff']=dict(summary='Visual acceptance needs implementation changes.',department='Playtest reviewer')
+                progress['acceptance']=dict(build=None,tests=None,run=None,visual=None)
+
     def work_action(self,row,progress,value):
         if not isinstance(value,dict) or set(value)-{'action','args','note'}:raise ValueError('Invalid studio action')
         action=value['action'];args=value.get('args',{});iid=row['institution'];pid=row['project'];settings=json.loads(row['settings']);actor=settings['actor']
@@ -394,17 +438,34 @@ class Studios:
         elif action=='build':
             if args.get('kind','cartridge')!='cartridge':raise PermissionError('Residents can build only portable cartridges')
             result=self.workbench.build(pid)
-        elif action=='tests':result=self.workbench.tests(iid,args['build'])
-        elif action=='create_machine':result=self.workbench.create(iid,args['build'],args.get('seed',1),args.get('task'))
+        elif action=='tests':
+            cartridge,build=self.workbench.cartridge(args['build'],iid)
+            if build['project']!=pid:raise PermissionError('Tests must use a cartridge built from this project')
+            result=self.workbench.tests(iid,args['build'])
+        elif action=='create_machine':
+            cartridge,build=self.workbench.cartridge(args['build'],iid)
+            if build['project']!=pid:raise PermissionError('Machines must use a cartridge built from this project')
+            result=self.workbench.create(iid,args['build'],args.get('seed',1),args.get('task'))
         elif action=='finding':result=self.workbench.add_finding(iid,pid,args.get('category'),args.get('text',''),args.get('evidence',[]))
         elif action in ('run_machine','observe','snapshot','reset','drop'):
             operation='run' if action=='run_machine' else action
             args['retain_screenshot']=bool(settings.get('retain_evidence_screenshots',False))
-            result=self.workbench.machine(iid,args.pop('machine'),operation,**args)
+            machine=args.pop('machine')
+            result=self.workbench.machine(iid,machine,operation,**args)
+            args['machine']=machine
         elif action=='restore':result=self.workbench.restore(iid,args['saved'])
         elif action=='inspect':
-            observed=self.workbench.machine(iid,args['machine'],'observe')
-            result=dict(visual_review=self.infer(row['id'],'Inspect the supplied actual 320x180 workstation screenshot. State uncertainty. Do not execute tools.',dict(question=bounded(args['question'],1000,'visual question'),metrics=observed['metrics']),observed['png']))
+            machine=args['machine'];meta=self.workbench.machines.get(machine,{})
+            if meta.get('institution')!=iid or meta.get('project')!=pid:raise PermissionError('Inspect a running machine from this project')
+            observed=self.workbench.machine(iid,machine,'observe')
+            frame=observed.get('png')
+            raw=base64.b64decode(frame,validate=True) if isinstance(frame,str) else b''
+            if len(raw)<24 or raw[:8]!=b'\x89PNG\r\n\x1a\n' or (int.from_bytes(raw[16:20],'big'),int.from_bytes(raw[20:24],'big'))!=(320,180):
+                raise RuntimeError('Headless renderer did not return a valid 320x180 PNG frame')
+            visual_system='Inspect the supplied actual 320x180 rendered PNG frame. This is an offscreen/headless render. Assess whether the visible screen is coherent and shows the intended game state; distinguish uncertainty and do not infer unseen behavior. Return JSON only: {"status":"pass"|"revise"|"unavailable","review":"brief visual assessment","issues":["specific visible issue"]}. Use unavailable if the image cannot be interpreted.'
+            visual_review=self.json_answer(self.infer(row['id'],visual_system,dict(question=bounded(args['question'],1000,'visual question'),metrics=observed['metrics'],screen_sha256=observed['screen_sha256']),frame))
+            if visual_review.get('status') not in ('pass','revise','unavailable') or not isinstance(visual_review.get('review'),str) or not visual_review['review'].strip() or not isinstance(visual_review.get('issues',[]),list):raise ValueError('Visual inspection returned an invalid result')
+            result=dict(visual_review=visual_review,evidence=observed.get('evidence'),screen_sha256=observed.get('screen_sha256'),image_sent=True)
         elif action=='task':result=self.store.task(iid,pid,actor,**args)
         elif action=='help':
             target=args['resident']
@@ -422,8 +483,16 @@ class Studios:
         elif action=='done':
             result=dict(summary=bounded(args['summary'],2000,'summary'))
             if row['kind']=='adaptation-plan':result.update(planning_only=True,source=settings['adaptation']['source'],material=settings['adaptation']['material'],experiment=settings['adaptation']['experiment'])
+            if row['kind']=='production' and progress.get('pipeline_stage')=='playtest':
+                missing=self.production_gate_missing(pid,progress)
+                if missing:
+                    result=dict(acceptance_blocked=True,required=missing,acceptance=progress.get('acceptance',{}))
+                    progress['last_result']=result
+                    self.store.event(iid,row['id'],actor,'acceptance_blocked',result)
+                    return result,False
             return result,True
         else:raise ValueError('Unknown studio tool')
+        self.record_production_acceptance(row,progress,action,args,result)
         if isinstance(result,dict) and 'png' in result:result={k:v for k,v in result.items() if k!='png'}|dict(screen_available=True)
         self.store.event(iid,row['id'],actor,action,dict(args=args,result=result))
         return result,False
@@ -437,10 +506,16 @@ class Studios:
         if not isinstance(index,int) or not 0<=index<len(PRODUCTION_STAGES):raise RuntimeError('Invalid production stage')
         stage=PRODUCTION_STAGES[index]
         if progress.get('pipeline_phase')=='review':
+            if stage['id']=='playtest':
+                missing=self.production_gate_missing(pid,progress)
+                if missing:
+                    progress['pipeline_phase']='department'
+                    progress['last_result']=dict(acceptance_blocked=True,required=missing,acceptance=progress.get('acceptance',{}))
+                    return progress,False
             handoff=progress.get('pending_handoff',{})
             packet=dict(objective=settings['objective'],production_stage=stage['id'],stage_title=stage['title'],
                 department=stage['resident_title'],stage_objective=stage['objective'],handoff=handoff,
-                previous_handoffs=progress.get('handoffs',{}),files=self.store.tree(pid)[:30],
+                previous_handoffs=progress.get('handoffs',{}),acceptance=progress.get('acceptance',{}),files=self.store.tree(pid)[:30],
                 evidence=self.workbench.recent_evidence(iid,pid),tasks=[])
             answer=self.json_answer(self.infer(row['id'],PRODUCTION_REVIEW_SYSTEM,packet))
             decision=answer.get('decision')
@@ -457,7 +532,8 @@ class Studios:
             handoffs=progress.setdefault('handoffs',{})
             handoffs[stage['id']]=dict(department=stage['resident_title'],handoff=handoff.get('summary',''),
                 review=bounded(answer['review'],1200,'stage review'),accepted=True)
-            progress.setdefault('completed_stages',[]).append(stage['id'])
+            completed=progress.setdefault('completed_stages',[])
+            if stage['id'] not in completed:completed.append(stage['id'])
             next_index=index+1
             state='complete' if next_index==len(PRODUCTION_STAGES) else 'active'
             next_stage='complete' if state=='complete' else PRODUCTION_STAGES[next_index]['id']
@@ -478,7 +554,8 @@ class Studios:
         packet=self.work_packet(stage_row,progress)
         packet.update(production_stage=stage['id'],stage_title=stage['title'],stage_objective=stage['objective'],
                       studio_lead=settings['actor'],previous_handoffs=progress.get('handoffs',{}),
-                      studio_lead_feedback=progress.get('stage_feedback',''),current_handoff=progress.get('pending_handoff',{}))
+                      studio_lead_feedback=progress.get('stage_feedback',''),current_handoff=progress.get('pending_handoff',{}),
+                      acceptance=progress.get('acceptance',{}))
         answer=self.json_answer(self.infer(row['id'],
             PRODUCTION_STAGE_SYSTEM[stage['id']]+'\n\n'+WORK_SYSTEM,packet))
         result,done=self.work_action(stage_row,progress,answer)
@@ -608,3 +685,4 @@ class Studios:
             self.store.record_external_export(build['project'],dict(id=export_id,build=r['build'],created=int(time.time()),cartridge_sha256=sha(package),external_copy=True,managed_backup=False,withdrawal_recall=False,notice=notice))
             return dict(filename='studio-cartridge.zip',base64=base64.b64encode(package).decode(),export_id=export_id,external_copy=True,notice=notice)
         raise ValueError('Unknown studio owner operation')
+
