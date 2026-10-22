@@ -157,6 +157,8 @@ class SharedLlama:
         if isinstance(body.get('temperature'), (int, float)):
             payload['temperature'] = body['temperature']
         response = (transport or api)(self.base, '/v1/chat/completions', payload, timeout=1800)
+        usage = response.get('usage') if isinstance(response.get('usage'), dict) else {}
+        body['_accounting_usage'] = {k: usage.get(k) for k in ('prompt_tokens', 'completion_tokens')}
         choices = response.get('choices')
         if not isinstance(choices, list) or not choices:
             raise RuntimeError('Local GGUF server returned no completion')
@@ -174,7 +176,6 @@ class SharedLlama:
                 seen.add(identifier)
                 call['id'] = identifier
         body['_finish_reason'] = choice.get('finish_reason', 'stop')
-        usage = response.get('usage', {})
         if all(type(usage.get(k)) is int and usage[k] >= 0 for k in ('prompt_tokens', 'completion_tokens')):
             body['_usage'] = {'prompt_tokens': usage['prompt_tokens'], 'completion_tokens': usage['completion_tokens'],
                               'total_tokens': usage['prompt_tokens'] + usage['completion_tokens']}
