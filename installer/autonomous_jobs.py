@@ -217,7 +217,7 @@ def inference(config, job, item, content):
     )
     result = http("http://127.0.0.1:8001/v1/chat/completions", {
         "model": job["model"], "max_tokens": 2048,
-        "tool_choice": "none", "inference_only": True,
+        "tool_choice": "none", "inference_only": True, "usage_workflow": "batch",
         "messages": [{"role": "user", "content": prompt}]
     }, key=config["api_key"], timeout=1900)
     choice = result["choices"][0]
