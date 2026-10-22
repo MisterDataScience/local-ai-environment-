@@ -1,4 +1,5 @@
 """Bounded build sandbox and shared Wasm worker; never a resident shell tool."""
+import heapq
 import base64
 import copy
 import io
@@ -60,6 +61,7 @@ class Workbench:
         self.tools=self.install/'studio-tools';self.python=Path(tool_python) if tool_python else self.tools/'.venv/bin/python'
         self.zig=Path(zig) if zig else None;self.test_trusted=test_trusted
         self.lock=threading.RLock();self.build_lock=threading.Lock();self.process=None;self.machines={};self.cancel=threading.Event()
+        self._evidence_summaries={}
         self.credit=200.;self.last=time.monotonic();self.measurements={};self.busy=None
         try:self.measurements=json.loads((store.root/'studio-measurements.json').read_text())
         except (OSError,ValueError):pass
@@ -320,18 +322,37 @@ class Workbench:
             self.write_evidence(dict(institution=iid,project=pid,build=record['build']),record)
         return dict(category=category,evidence=evidence_ids,saved=True)
 
-    def recent_evidence(self,iid,pid,limit=20):
-        rows=[];root=self.store.directory/iid.split(':')[1]/'builds'
-        with self.store.db() as cx:builds=[r[0] for r in cx.execute('SELECT id FROM studio_builds WHERE project=?',(pid,))]
-        for bid in builds:
-            folder=root/bid.split(':')[1]/'evidence'
-            if folder.is_dir():
-                for path in folder.glob('*.json'):
+    def recent_evidence(self,iid,pid,limit=20,*,summary_only=False):
+        # Select recent writes using metadata before decoding bounded evidence files.
+        if type(limit) is not int or not 1<=limit<=100:raise ValueError('Invalid evidence limit')
+        root=self.store.directory/iid.split(':')[1]/'builds'
+        with self.store.db() as cx:
+            self.store.project(cx,pid,iid)
+            builds=[r[0] for r in cx.execute('SELECT id FROM studio_builds WHERE project=?',(pid,))]
+        def candidates():
+            for bid in builds:
+                for path in (root/bid.split(':')[1]/'evidence').glob('*.json'):
                     try:
-                        x=json.loads(path.read_text())
-                        rows.append({k:x.get(k) for k in ('id','task','build','source_sha256','seed','created','updated','input_sequence','assertions','findings','observation')})
-                    except (OSError,ValueError):pass
-        return sorted(rows,key=lambda x:x.get('updated') or 0,reverse=True)[:limit]
+                        info=path.stat()
+                        yield (info.st_mtime_ns,str(path),info)
+                    except OSError:continue
+        rows=[]
+        for _,name,info in heapq.nlargest(limit,candidates(),key=lambda item:(item[0],item[1])):
+            path=Path(name);key=(name,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+            try:
+                if summary_only and key in self._evidence_summaries:item=self._evidence_summaries[key]
+                else:
+                    x=json.loads(path.read_text())
+                    if x.get('project')!=pid:continue
+                    if summary_only:
+                        item={k:x.get(k) for k in ('id','task','build','source_sha256','seed','created','updated')}
+                        item.update(input_count=len(x.get('input_sequence',[])),assertion_count=len(x.get('assertions',[])),finding_count=len(x.get('findings',[])),detail_action='evidence_read')
+                        if len(self._evidence_summaries)>=128:self._evidence_summaries.clear()
+                        self._evidence_summaries[key]=item
+                    else:item={k:x.get(k) for k in ('id','task','build','source_sha256','seed','created','updated','input_sequence','assertions','findings','observation')}
+                rows.append(dict(item))
+            except (OSError,ValueError):continue
+        return rows
 
     def evidence_detail(self,iid,pid,eid,start=0,limit=128):
         if not isinstance(eid,str) or not re.fullmatch(r'evidence:[0-9a-f]{32}',eid):raise ValueError('Invalid evidence ID')

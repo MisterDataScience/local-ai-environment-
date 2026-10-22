@@ -28,7 +28,8 @@ WORKFLOW_ROLES = {
 ACTION_SPECS = {
     'select_project': '{project}',
     'evidence_read': '{evidence_id,start?,limit?}',
-    'tree': '{}',
+    'tree': '{offset?,limit:1..100}',
+    'result_read': '{result_id,start?,chars:1..2000}',
     'read': '{path,start,lines}',
     'search': '{query}',
     'edit': '{path,text,expected}',
@@ -36,7 +37,7 @@ ACTION_SPECS = {
     'sdk': '{file?}',
     'reference': '{reference}',
     'knowledge_search': '{query}',
-    'source_tree': '{source}',
+    'source_tree': '{source,offset?,limit:1..100}',
     'source': '{source,path,start,lines}',
     'build': '{kind:"cartridge"}',
     'tests': '{build}',
@@ -48,13 +49,14 @@ ACTION_SPECS = {
     'reset': '{machine,seed}',
     'drop': '{machine}',
     'restore': '{saved}',
+    'task_read': '{task}',
     'task': '{title,notes,state,task?}',
     'help': '{resident,question}',
     'delegate': '{resident,title,notes,mode}',
     'team_status': '{}',
     'workflow_start': '{title,goal}',
     'workflow_status': '{workflow}',
-    'workflow_read': '{workflow,phase?,offset?,limit:1..2,report_id?,section?}',
+    'workflow_read': '{workflow,phase?,offset?,limit:1..2,report_id?,section?,artifact?}',
     'workflow_assign': '{workflow}',
     'workflow_review': '{workflow,decision:"accept"|"revise",review,next_focus?}',
     'workflow_step': '{workflow,title,body,evidence,review_id?}',
@@ -72,7 +74,7 @@ ACTION_SPECS = {
 
 _READ = frozenset({
     'evidence_read', 'workflow_read', 'tree', 'read', 'search', 'reference', 'knowledge_search',
-    'source', 'source_tree', 'sdk',
+    'source', 'source_tree', 'sdk', 'result_read', 'task_read',
 })
 _RUN = frozenset({
     'build', 'tests', 'create_machine', 'run_machine', 'observe',
@@ -105,10 +107,10 @@ ROLE_ACTIONS = {
     }),
     'appointment': frozenset({
         'tree', 'read', 'search', 'edit', 'patch', 'sdk', 'build', 'tests',
-        'learn', 'learning_none', 'note', 'done',
+        'learn', 'learning_none', 'note', 'done', 'result_read', 'task_read',
     }),
     'adaptation-plan': frozenset({
-        'source_tree', 'source', 'sdk', 'knowledge_search', 'done',
+        'source_tree', 'source', 'sdk', 'knowledge_search', 'done', 'result_read',
     }),
 }
 ROLE_ACTIONS['work'] = ROLE_ACTIONS['analysis']

@@ -158,7 +158,7 @@ def initialize(cx):
 
 class Store:
     def __init__(self,root,connector=village.connect):
-        self.root=Path(root);self.connector=connector
+        self.root=Path(root);self.connector=connector;self._tree_cache={}
         with self.db() as cx:initialize(cx)
         self.directory=self.root/'institutions';self.directory.mkdir(mode=0o700,exist_ok=True)
         if self.directory.is_symlink():raise PermissionError('Institution path is linked')
@@ -369,7 +369,30 @@ class Store:
         atomic(p,text.encode());self.refresh_project_manifest(pid);return dict(path=name,sha256=sha(text))
 
     def tree(self,pid):
-        return [dict(path=n,size=len(b),sha256=sha(b)) for n,b in files(self.path(pid))]
+        return self.tree_page(pid,0,MAX_FILES)['files']
+
+    def tree_page(self,pid,offset=0,limit=24):
+        if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=MAX_FILES:raise ValueError('Invalid project tree page')
+        root=self.path(pid);entries=[];total_bytes=0
+        for path in sorted(root.rglob('*')):
+            if '.git' in path.relative_to(root).parts:continue
+            if path.is_symlink():raise PermissionError('Source contains a symbolic link')
+            if path.is_dir():continue
+            name=path.relative_to(root).as_posix();checked(root,name);info=path.stat()
+            total_bytes+=info.st_size
+            if info.st_size>MAX_FILE or total_bytes>MAX_PROJECT or len(entries)>=MAX_FILES:raise ValueError('Project exceeds intake limits')
+            entries.append((name,path,info))
+        rows=[]
+        for name,path,info in entries[offset:offset+limit]:
+            key=(str(path),info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+            digest=self._tree_cache.get(key)
+            if digest is None:
+                digest=sha(path.read_bytes())
+                if len(self._tree_cache)>=MAX_FILES:self._tree_cache.clear()
+                self._tree_cache[key]=digest
+            rows.append(dict(path=name,size=info.st_size,sha256=digest))
+        total=len(entries);end=offset+len(rows)
+        return dict(files=rows,offset=offset,total=total,truncated=end<total,next_offset=end if end<total else None)
 
     def patch(self,pid,name,old,new,expected):
         if not isinstance(old,str) or not old or not isinstance(new,str) or max(len(old.encode()),len(new.encode()))>65536:raise ValueError('Patch needs nonempty old text and bounded replacement')
@@ -665,12 +688,13 @@ class Store:
         self.refresh_project_manifest(wf['project'])
         return dict(id=ref,project=wf['project'],state='cancelled')
 
-    def workflow_view(self,iid,ref):
+    def workflow_view(self,iid,ref,*,compact=False):
         with self.db() as cx:
             row=cx.execute('SELECT * FROM studio_workflows WHERE id=? AND institution=?',(ref,iid)).fetchone()
             if not row:raise PermissionError('Workflow unavailable')
             self.project(cx,row['project'],iid)
-            steps=[dict(r) for r in cx.execute('SELECT id,phase,ordinal,title,body,evidence,digest,created,review_id FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(ref,))]
+            fields='id,phase,ordinal,title,substr(body,1,500) AS body,length(body) AS body_chars,digest,created,review_id' if compact else 'id,phase,ordinal,title,body,evidence,digest,created,review_id'
+            steps=[dict(r) for r in cx.execute('SELECT '+fields+' FROM studio_workflow_steps WHERE workflow=? ORDER BY ordinal LIMIT 64',(ref,))]
             out=dict(row);out['artifacts']=json.loads(out['artifacts']);out['history']=json.loads(out['history']);out['steps']=steps
             out['phase_label']={'planning':'Planning Department','middle':'Design Integration and Production Planning','implementation':'Implementation Department','verification':'Independent Review'}.get(out['phase'],out['phase'])
             return out
