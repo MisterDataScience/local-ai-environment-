@@ -90,6 +90,21 @@ class TeamTests(unittest.TestCase):
             self.assertFalse(settings['command']['code']['subtask'])
             self.assertEqual(settings['agent']['document']['permission'], {'*':'deny'})
             self.assertEqual(settings['agent']['document']['mode'], 'all')
+            self.assertNotIn('Essay prompt', settings['agent']['document']['prompt'])
+            self.assertNotIn('Scaffold prompt', settings['agent']['document']['prompt'])
+            self.assertIn('Essay prompt', settings['agent']['essay_document']['prompt'])
+            self.assertNotIn('Scaffold prompt', settings['agent']['essay_document']['prompt'])
+            self.assertIn('Scaffold prompt', settings['agent']['scaffold_document']['prompt'])
+            self.assertNotIn('Essay prompt', settings['agent']['scaffold_document']['prompt'])
+            self.assertEqual(settings['agent']['essay_document']['permission'], {'*':'deny'})
+            self.assertEqual(settings['agent']['scaffold_document']['permission'], {'*':'deny'})
+            for name in ('essay_document', 'scaffold_document'):
+                self.assertEqual(settings['agent'][name]['mode'], 'subagent')
+                self.assertTrue(settings['agent'][name]['hidden'])
+                self.assertIn('\nMode: ', settings['agent'][name]['prompt'])
+                self.assertEqual(settings['agent'][name]['model'], settings['agent']['document']['model'])
+            for tool in ('edit', 'write', 'apply_patch'):
+                self.assertEqual(settings['agent']['plan']['permission'][tool], 'deny')
             self.assertNotIn('essay-edit', settings['command'])
             self.assertEqual(settings['provider']['local-ai-gateway']['models']['local-ai-large']['limit']['context'], 32768)
             work_agent.environment(root, cfg, settings)
@@ -134,13 +149,15 @@ class TeamTests(unittest.TestCase):
         response = Mock()
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
-        agents.append({'name':'document','permission':[{'permission':'*','pattern':'*','action':'deny'}]})
+        agents.extend({'name': name, 'permission': [{'permission': '*', 'pattern': '*', 'action': 'deny'}]}
+                      for name in ('document', 'essay_document', 'scaffold_document'))
         response.read.return_value = json.dumps(agents).encode()
         with patch.object(team_setup, 'urlopen', return_value=response):
             with self.assertRaisesRegex(RuntimeError, 'policy did not load'):
                 team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
             for agent in agents[2:4]:
-                agent['permission'].extend({'permission': 'task', 'pattern': r, 'action': 'allow'} for r in ('analyst', 'coder', 'document'))
+                agent['permission'].extend({'permission': 'task', 'pattern': r, 'action': 'allow'}
+                                           for r in ('analyst', 'coder', 'document', 'essay_document', 'scaffold_document'))
                 agent['permission'].extend({'permission': r, 'pattern': '*', 'action': 'ask'} for r in ('local_image', 'local_video', 'local_speech'))
             response.read.return_value = json.dumps(agents).encode()
             team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)

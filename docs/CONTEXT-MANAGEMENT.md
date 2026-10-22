@@ -26,6 +26,8 @@ The supervisor applies and verifies compaction settings through WebUI's supporte
 
 OpenCode advertises input = context minus output, with an additional reserve of up to 2,048 tokens for instructions and tool work. This makes its native reserved budget effective; advertising context alone did not. Smaller contexts reduce the reserve. A mode transition stops the harness; restart it to refresh its advertised limits.
 
+The Captain keeps a compact standing routing policy. Detailed essay and reverse-scaffolding instructions are selected by the host for the explicit workflow, rather than appended to every document request. The ordinary document profile loads neither workflow. Native permissions filter tool schemas by role: document specialists remain tool-free, Plan denies edits/writes/patches, and video is hidden outside Max. The independent execution hooks retain their checks even when a tool schema is absent. Prompt character counts measure configuration size, not token usage or model quality.
+
 The gateway honours positive integer max_tokens and max_completion_tokens, using the lower if both are supplied. Output is additionally bounded to half the effective context. These are ceilings, not minimum answer lengths. Legacy/custom contexts remain at most 16K. Validated team profiles allow 8K coordinator, 32K analyst/document and 16K coder; Gaming remains at most 4K. The installer migrates recognised stock contexts once and preserves custom models, contexts, timeouts and credentials. One model still runs at a time with the existing unload policy. No GPU memory-safeguard override was introduced.
 
 ## Native input protection

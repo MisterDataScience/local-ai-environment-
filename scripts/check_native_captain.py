@@ -43,18 +43,25 @@ TASKS = [
 class SyntheticGateway(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, project):
+    def __init__(self, project, document_model):
         super().__init__(('127.0.0.1', 8001), Handler)
         self.project = project
         self.arrivals = set()
         self.condition = threading.Condition()
         self.failures = []
+        self.document_model = document_model
+        self.requests = []
 
     def completion(self, body):
+        self.requests.append(body)
         if not body.get('tools'):
             return {'role': 'assistant', 'content': 'Local acceptance check'}
         users = '\n'.join(content_text(m.get('content')) for m in body['messages'] if m['role'] == 'user')
         previous = [m for m in body['messages'] if m['role'] == 'tool']
+        if 'Native essay profile probe.' in users or 'Native scaffold profile probe.' in users:
+            if not previous:
+                return call('task', {'subagent_type': 'document', 'description': 'Document profile probe', 'prompt': '{}'})
+            return {'role': 'assistant', 'content': 'Profile inspected; authored fixture is not an accepted document.'}
         approval = native_approvals.completion(self.project, users, previous, content_text)
         if approval is not None:
             return approval
@@ -127,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= 2_000_000:
                 raise RuntimeError('Unexpected request size')
             body = json.loads(self.rfile.read(length))
-            if body['model'] != 'local-ai-captain':
+            if body['model'] not in ('local-ai-captain', self.server.document_model):
                 raise RuntimeError('Native worker/captain used the wrong model')
             message = self.server.completion(body)
             reason = 'tool_calls' if message.get('tool_calls') else 'stop'
@@ -195,7 +202,7 @@ def check(binary):
             if auth == 'wrong':
                 headers['Authorization'] = 'Basic ' + base64.b64encode(b'opencode:wrong-password').decode()
             return api(path, body, headers)
-        server = SyntheticGateway(project)
+        server = SyntheticGateway(project, config['model_team']['roles']['document'])
         thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
         process = None
         try:
@@ -251,9 +258,55 @@ def check(binary):
                         raise RuntimeError('Native worker tool did not execute: ' + expected)
                 if set(json.loads(retired['state']['output'])['retired']) != {'calc', 'file-check'}:
                     raise RuntimeError('Native retirement did not cover both workers')
+                # Inspect real outbound prompts/schemas, not only generated config.
+                forbidden = {'task', 'team_run', 'studio_contact', 'local_image', 'local_video', 'local_speech',
+                             'edit', 'write', 'apply_patch', 'bash'}
+                for request in server.requests:
+                    users = '\n'.join(content_text(m.get('content')) for m in request['messages'] if m['role'] == 'user')
+                    names = {tool['function']['name'] for tool in request.get('tools', [])}
+                    if re.search(r'"task_id"\s*:\s*"(calc|file-check)"', users) and names & forbidden:
+                        raise RuntimeError('Irrelevant native worker schemas: ' + str(names & forbidden))
+                    if 'Native captain protocol check.' in users and names & {'edit', 'write', 'apply_patch'}:
+                        raise RuntimeError('Plan received write tool schemas')
+                essay_text = (control / 'essay-edit-prompt.txt').read_text()
+                scaffold_text = (control / 'reverse-scaffold-prompt.txt').read_text()
+                probes = [
+                    ('document', 'Native general document probe.', False, False),
+                    ('plan', 'ESSAY_EDIT\n' + json.dumps({'draft': 'Native essay profile probe.'}), True, False),
+                    ('plan', 'REVERSE_SCAFFOLD\n' + json.dumps(dict(run_id='native-profile', stage='1',
+                        brief_sufficient=True, word_count=240, referencing_style='Harvard', sources=[dict(
+                            id='B', kind='brief', title='Official brief', anchors=[dict(id='B:AC1.1',
+                            kind='criterion', text='Native scaffold profile probe.')])])), False, True),
+                ]
+                for agent, prompt, wants_essay, wants_scaffold in probes:
+                    before = len(server.requests)
+                    probe = native('/session', {'title': 'Native document prompt isolation'})['id']
+                    result = native('/session/' + probe + '/message', {'agent': agent, 'parts': [{'type': 'text', 'text': prompt}]})
+                    if result.get('info', {}).get('error'):
+                        raise RuntimeError('Document profile probe failed: ' + str(result['info']['error']))
+                    requests = [r for r in server.requests[before:] if r['model'] == server.document_model]
+                    if not requests:
+                        raise RuntimeError('Native document specialist never reached inference')
+                    for request in requests:
+                        text = '\n'.join(content_text(m.get('content')) for m in request['messages'])
+                        if (essay_text in text) != wants_essay or (scaffold_text in text) != wants_scaffold:
+                            raise RuntimeError('Inactive workflow leaked into a native document prompt')
+                        if request.get('tools'):
+                            raise RuntimeError('Tool-free document profile received tool schemas')
+                    if agent == 'plan':
+                        history = native('/session/' + probe + '/message')
+                        tasks = [p for m in history for p in m['parts'] if p['type'] == 'tool' and p['tool'] == 'task']
+                        expected = 'essay_document' if wants_essay else 'scaffold_document'
+                        if len(tasks) != 1 or tasks[0]['state']['status'] != 'completed':
+                            raise RuntimeError('Native task did not use the host-selected workflow profile')
+                        child = tasks[0]['state'].get('metadata', {}).get('sessionId')
+                        child_history = native('/session/' + child + '/message') if child else []
+                        if not any(m['info'].get('agent') == expected for m in child_history if m['info']['role'] == 'assistant'):
+                            raise RuntimeError('Native task created the wrong document agent')
                 if server.failures:
                     raise RuntimeError('Synthetic gateway failures: ' + str(server.failures))
                 print('Real OpenCode: two overlapping workers, native read/note tools, reports and retirement verified.')
+                print('Real OpenCode: general/essay/scaffold prompt isolation and role tool-schema filtering verified.')
         except Exception:
             print((root / 'opencode.log').read_text()[-12000:], file=sys.stderr)
             raise
