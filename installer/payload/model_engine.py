@@ -18,7 +18,7 @@ import uuid
 from backend_http import api, port_open
 from routing import messages_and_route
 from text_models import configured_text_models, output_ceiling
-from context_policy import compaction_policy
+from context_policy import compaction_policy, UsageCounters
 from web_client import retrieve
 from tool_protocol import tools_for_ollama, assistant_for_openai
 from workflows import fill_workflow, output_files
@@ -68,6 +68,7 @@ class Engine:
         self.text_profile = None
         (root / "media").mkdir(exist_ok=True)
         (root / "logs").mkdir(exist_ok=True)
+        self.usage = UsageCounters(root / 'logs/model-usage.sqlite')
         self.model_jobs = ModelQueue()
         self.prepare_lock = threading.RLock()
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=6 if self.captain['enabled'] else 1)
@@ -223,6 +224,7 @@ class Engine:
         if stream is not None:
             body['_stream'] = stream
         body.pop("_usage", None)
+        body.pop('_accounting_usage', None)
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
@@ -489,6 +491,7 @@ class Engine:
 
     def run_inner(self, messages, route, prompt, body):
         LOG.info("Starting %s request", route)
+        accounting, result_for_usage, succeeded = None, None, False
         try:
             self.check_policy(body, route)
             with self.prepare_lock:
@@ -527,8 +530,11 @@ class Engine:
                 guard = (body.get('_commons_turn') or body.get('_founding_turn') or body.get('_studio_turn'))
                 if guard is not None and guard.is_set():
                     raise RuntimeError('Commons turn cancelled during model preparation')
+                accounting = dict(backend='llama', mode=self.mode, messages=messages,
+                    tools=[] if request.get('tool_choice') == 'none' else request.get('tools', []), request=request)
                 result = self.shared_llama.chat(request, output_limit(body, self.mode, preset), messages,
                                                 **({'transport': guard.api} if guard is not None else {}))
+                result_for_usage, succeeded = result, True
                 if request is not body:
                     for name in ('_usage', '_finish_reason'):
                         if name in request:
@@ -570,11 +576,13 @@ class Engine:
             # submits the next inference turn with their results.
             stream = body.get('_stream') if route == 'text' else None
             guard = (body.get('_commons_turn') or body.get('_founding_turn') or body.get('_studio_turn'))
+            accounting = dict(backend='ollama', mode=self.mode, messages=messages, tools=tools, counts={})
             response = (guard.api(base, '/api/chat', payload, timeout=1800) if guard is not None
                         else token_stream.chat(base, payload, stream) if stream
                         else api(base, '/api/chat', payload, timeout=1800))
-            message = response['message']
             counts = [response.get('prompt_eval_count'), response.get('eval_count')]
+            accounting['counts'] = dict(prompt_tokens=counts[0], completion_tokens=counts[1])
+            message = response['message']
             if all(type(n) is int and n >= 0 for n in counts):
                 body['_usage'] = {'prompt_tokens': counts[0], 'completion_tokens': counts[1],
                                   'total_tokens': sum(counts)}
@@ -591,8 +599,13 @@ class Engine:
             body['_finish_reason'] = ('length' if response.get('done_reason') == 'length'
                                       else 'tool_calls' if isinstance(answer, dict) and answer.get('tool_calls')
                                       else 'stop')
+            result_for_usage, succeeded = answer, True
             return answer + links if isinstance(answer, str) else answer
         finally:
+            if accounting is not None:
+                counts = accounting.get('counts', accounting.get('request', {}).get('_accounting_usage', {}))
+                self.usage.record(body, accounting['mode'], accounting['backend'], accounting['messages'],
+                    accounting['tools'], result_for_usage, counts, succeeded=succeeded)
             if self.shared_llama and body['model'] == self.captain['model_id']:
                 self.shared_last_used = time.monotonic()
             self.state = "generating-text" if self.model_jobs.status()['active'] > 1 else "idle"
