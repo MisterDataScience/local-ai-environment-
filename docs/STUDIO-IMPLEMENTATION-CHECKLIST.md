@@ -4,7 +4,9 @@ This checklist records the agreed scope. It is not a claim of completion.
 
 - Integrated institution creation in the main Village installer; studio is the first type.
 - Independent institution membership, purpose, Library, Archive, workshop and budget.
-- Leadership title **Lead Designer**; persistent project ownership and focused local help.
+- Separate leadership: the **Studio Lead** owns production progression and manages the **Lead Designer**, who owns game vision.
+- One active game production per studio; imported immutable source projects remain available as references.
+- Ordered Planning → Middle department → Implementation → Playtest stages with Studio Lead review/return at every handover.
 - Preserve both supplied C projects as immutable source snapshots; never discard originals.
 - Local folder/ZIP and explicitly selected, commit-pinned GitHub intake.
 - Inspect, index, compare and cite code/assets/build instructions; no claim that indexing proves understanding.

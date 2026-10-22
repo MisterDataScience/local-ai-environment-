@@ -22,7 +22,10 @@ class Engine:
     def submit(self,body,studio_turn=None):
         assert self.studios.owns(studio_turn);assert body['inference_only'] and not body.get('tools')
         self.calls.append(body);packet=json.loads(body['messages'][-1]['content']);f=concurrent.futures.Future()
-        if 'sources' in packet and 'objective' not in packet:
+        system=body['messages'][0]['content']
+        if system.startswith('You are the Studio Lead.'):
+            f.set_result(json.dumps(dict(decision='accept',review='Handoff is complete and stage evidence is present.',next_focus='')))
+        elif 'sources' in packet and 'objective' not in packet:
             source=packet['sources'][0];e=dict(source=source['source'],path=source['path'],digest=source['digest'],quote=source.get('text',source.get('quote',''))[:50])
             f.set_result(json.dumps(dict(items=[dict(title='Update loop',text='The reference increments a counter. Runtime behaviour remains unverified.',evidence=[e])])) )
         else:f.set_result(json.dumps(dict(action='done',args=dict(summary='No unverified claims.'),note='Keep this project note.')))
@@ -85,15 +88,35 @@ class StudioTests(unittest.TestCase):
         self.s.ingest(self.i,'Second game',[('second.c',b'int counter; void tick(void) { counter += 2; }')],dict(kind='fixture'))
         job=self.c.start(dict(institution=self.i,kind='founding',turns=10))['id'];row=self.wait(job)
         self.assertEqual(row['state'],'complete',row['reason'])
-        proposals=self.s.view(self.i)['proposals'];self.assertTrue(any(p['kind']=='library' for p in proposals));self.assertEqual(sum(p['kind']=='staff' for p in proposals),4)
+        proposals=self.s.view(self.i)['proposals'];self.assertTrue(any(p['kind']=='library' for p in proposals));self.assertEqual(sum(p['kind']=='staff' for p in proposals),5)
         with self.s.db() as cx:self.assertEqual(len(village.status(cx)),5)
         self.assertTrue(all(p['state']=='pending' for p in proposals))
-    def test_project_ownership_notes_and_explicit_resume(self):
-        lead=self.approve(self.s.prepare_staff(self.i)[0]['id'])['resident']
-        job=self.c.start(dict(institution=self.i,kind='work',project=self.p['project'],resident=lead,objective='Inspect'))['id']
+    def test_studio_lead_runs_sequential_department_handoffs(self):
+        staff=self.s.prepare_staff(self.i)
+        approved={self.approve(item['id'])['title']:True for item in staff}
+        self.assertIn('Studio Lead',approved)
+        job=self.c.start(dict(institution=self.i,kind='production',project=self.p['project'],objective='Make a small game'))['id']
         row=self.wait(job);self.assertEqual(row['state'],'complete',row['reason'])
-        self.assertIn('Keep this project note',json.loads(row['progress'])['notes'])
-        calls=len(self.engine.calls);self.c.pause();time.sleep(.02);self.assertEqual(len(self.engine.calls),calls)
+        progress=json.loads(row['progress'])
+        self.assertEqual(progress['pipeline_stage'],'complete')
+        self.assertEqual(progress['completed_stages'],['planning','middle','implementation','playtest'])
+        self.assertIn('Keep this project note',progress['notes'])
+        with self.s.db() as cx:
+            production=cx.execute('SELECT state,stage,handoffs FROM studio_productions WHERE job=?',(job,)).fetchone()
+        self.assertEqual((production['state'],production['stage']),('complete','complete'))
+        self.assertEqual(set(json.loads(production['handoffs'])),{'planning','middle','implementation','playtest'})
+
+    def test_only_one_active_production_per_studio(self):
+        for item in self.s.prepare_staff(self.i):self.approve(item['id'])
+        with self.s.db() as cx,cx:
+            self.s.begin_production(cx,self.i,self.p['project'],'studio-job-reserved')
+        other=self.s.ingest(self.i,'Second game',[('other.c',b'int other;')],dict(kind='fixture'))
+        with self.assertRaisesRegex(RuntimeError,'already has an active production'):
+            self.c.start(dict(institution=self.i,kind='production',project=other['project'],objective='Another game'))
+        cancelled=self.c.cancel_production(self.i,self.p['project'])
+        self.assertEqual(cancelled['state'],'cancelled')
+        started=self.c.start(dict(institution=self.i,kind='production',project=other['project'],objective='Now the next game'))
+        self.assertEqual(started['state'],'running')
     def test_owner_review_requires_matching_preview(self):
         ref=self.s.prepare_staff(self.i)[0]['id']
         with self.assertRaises(ValueError):self.s.review(ref,'stale','approve')
@@ -113,7 +136,7 @@ class StudioTests(unittest.TestCase):
 
     def test_resident_tools_follow_the_advertised_paths_and_memory_review(self):
         lead=self.approve(self.s.prepare_staff(self.i)[0]['id'])['resident']
-        row=dict(id='fixture',institution=self.i,project=self.p['project'],settings=json.dumps(dict(actor=lead)))
+        row=dict(id='fixture',institution=self.i,project=self.p['project'],kind='production',settings=json.dumps(dict(actor=lead)))
         progress=dict(notes='')
         result,_=self.c.work_action(row,progress,dict(action='read',args=dict(path='game.c')))
         self.c.work_action(row,progress,dict(action='edit',args=dict(path='new.c',text='int new_value;',expected='')))
