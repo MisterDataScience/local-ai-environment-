@@ -4,7 +4,7 @@ import { readFile, open, rename } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import {workers as captainWorkers, activeCaptains} from './captain-runtime.mjs';
 import { dirname, join, resolve } from 'node:path';
-import { hash, validateContract, bindContract, assessResult, saveArtifact, RESULT_INSTRUCTION } from './handoff-contract.mjs';
+import { hash, validateContract, bindContract, assessResult, reviewBrief, saveArtifact, RESULT_INSTRUCTION } from './handoff-contract.mjs';
 
 import {parseRequest, preserve, loadRequest, makeContract, persistResult, RETURN_INSTRUCTION as ESSAY_RETURN} from './essay-edit.mjs';
 
@@ -464,11 +464,10 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         await save();
         active.delete(input.sessionID);
       });
-      output.output = JSON.stringify({ status: report.status, ...(report.essay ? {essay:report.essay} : {}), ...(report.scaffold ? {scaffold:report.scaffold} : {}),
-        summary_excerpt: report.summary.slice(0, 1600), summary_shortened: report.summary.length > 1600,
-        acceptance: report.acceptance.map(c => ({ id: c.id, status: c.status, basis: c.basis })),
-        issues: report.issues.slice(0, 12), full_report: artifact.path, sha256: artifact.sha256,
-        instruction: 'Read the full report before claiming completion. It preserves the exact checklist, complete specialist result and native tool evidence. Review every criterion; needs_attention is not completion. Native execution alone does not prove correctness.' });
+      output.output = JSON.stringify({ ...reviewBrief(report),
+        ...(report.essay ? {essay:report.essay} : {}), ...(report.scaffold ? {scaffold:report.scaffold} : {}),
+        full_report: artifact.path, sha256: artifact.sha256,
+        instruction: 'Review every criterion and its evidence. Read full_report when full_report_required is true or evidence is disputed or unclear. Otherwise use this complete review brief without rereading the saved report. Unresolved items remain open. Native execution alone does not prove correctness.' });
       output.metadata = { ...output.metadata, localTeamReview: report.status, localTeamReport: artifact.path,
         localTeamReportSha256: artifact.sha256 };
     },

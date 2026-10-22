@@ -190,9 +190,9 @@ coordinator as its shared model. No additional model is downloaded per worker.
 - Task accounting: `work-agent/state/captain.json`, private local JSON.
 - Full worker results and native tool records: `.local-ai-team/` inside the
   project copy. Those files are excluded from the project's Git baseline/patches.
-- `team_board`: inspect task progress, findings and report paths.
+- `team_board`: read a bounded page of changed task previews and unread messages, with report paths. Use `task_id` to inspect one stored task summary.
 - `team_note`: publish a bounded finding to the whole team.
-- `team_message` and `team_inbox`: exchange focused messages with assigned peers.
+- `team_message` and `team_inbox`: exchange focused messages with assigned peers. Inbox returns `{messages,next_cursor,has_more}`; messages are addressed to that reader or broadcast to the team.
 - `team_retire`: delete finished native worker histories and preserve reports.
 
 These artifacts are plaintext local state. They are outside the encrypted vault

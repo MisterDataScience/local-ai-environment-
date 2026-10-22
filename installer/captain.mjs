@@ -27,6 +27,7 @@ const text = (value, limit, label) => {
   if (typeof value !== 'string' || !value.trim() || value.length > limit) fail('invalid ' + label);
   return value;
 };
+const touch = (turn, task) => {task.update_seq = ++turn.sequence;};
 export function validateTasks(tasks, maxWorkers = 5) {
   if (!Array.isArray(tasks) || tasks.length < 1 || tasks.length > maxWorkers) fail('submit 1–' + maxWorkers + ' tasks');
   const objectives = new Set(), names = new Set();
@@ -56,7 +57,15 @@ async function load(path) {
   if (ledger.version !== 1 || !ledger.turns || Array.isArray(ledger.turns)) fail('invalid task ledger');
   for (const turn of Object.values(ledger.turns)) {
     if (!Array.isArray(turn.tasks) || !Array.isArray(turn.calls) || !Array.isArray(turn.messages)) fail('invalid turn ledger');
-    for (const task of turn.tasks) if (['reserved', 'running'].includes(task.status)) task.status = 'interrupted';
+    if (turn.sequence === undefined) {
+      turn.sequence = 0;
+      for (const task of turn.tasks) touch(turn, task);
+      for (const message of turn.messages) message.seq = ++turn.sequence;
+    }
+    turn.readers ??= {};
+    for (const task of turn.tasks) if (['reserved', 'running'].includes(task.status)) {
+      task.status = 'interrupted'; touch(turn, task);
+    }
   }
   let chain = Promise.resolve();
   const exclusive = fn => {const next = chain.then(fn); chain = next.catch(() => {}); return next;};
@@ -169,8 +178,44 @@ export default async function Captain({client, directory}, options) {
     return path;
   }
   function snapshot(turn) {
-    return {tasks: turn.tasks.map(({id, role, objective, status, sessionID, report, summary, error}) =>
-      ({id, role, objective, status, sessionID, report, summary, error})), messages: turn.messages};
+    return {tasks: turn.tasks.map(({id, role, objective, status, sessionID, report, summary, truncated, error}) =>
+      ({id, role, objective, status, sessionID, report, summary, truncated, error}))};
+  }
+  async function readTeam(binding, args, board) {
+    const {turn, task} = binding, readerID = task ? 'worker:' + task.id : 'captain';
+    const recipient = task?.id ?? 'captain', limit = args.limit ?? 8;
+    if (Object.keys(args).some(k => !['after', 'limit', ...(board ? ['task_id'] : [])].includes(k)) ||
+        !Number.isInteger(limit) || limit < 1 || limit > 12 ||
+        (args.after !== undefined && (!Number.isInteger(args.after) || args.after < 0 || args.after > turn.sequence)))
+      fail('invalid team cursor or page limit');
+    if (board && args.task_id !== undefined) {
+      const selected = turn.tasks.find(t => t.id === args.task_id);
+      if (!selected) fail('unknown team task');
+      return {tasks: snapshot({tasks: [selected]}).tasks, messages: [], detail: true};
+    }
+    return exclusive(async () => {
+      const reader = Object.hasOwn(turn.readers, readerID) ? turn.readers[readerID] : {tasks: 0, messages: 0};
+      const tasksAfter = args.after ?? reader.tasks, messagesAfter = args.after ?? reader.messages;
+      const events = [
+        ...(board ? turn.tasks.filter(t => t.update_seq > tasksAfter).map(value => ({seq: value.update_seq, kind: 'tasks', value})) : []),
+        ...turn.messages.filter(m => m.seq > messagesAfter && (m.to === '*' || m.to === recipient))
+          .map(value => ({seq: value.seq, kind: 'messages', value})),
+      ].sort((a, b) => a.seq - b.seq);
+      const page = events.slice(0, limit);
+      for (const event of page) reader[event.kind] = Math.max(reader[event.kind], event.seq);
+      if (page.length) {turn.readers[readerID] = reader; await save();}
+      return {
+        ...(board ? {tasks: page.filter(e => e.kind === 'tasks').map(({value: t}) => ({
+          id: t.id, role: t.role, status: t.status, retired: !!t.retired, update_seq: t.update_seq,
+          objective: t.objective.slice(0, 200), objective_shortened: t.objective.length > 200,
+          summary: t.summary?.slice(0, 400), truncated: !!t.truncated || (t.summary?.length ?? 0) > 400,
+          report: t.report, error: t.error,
+        }))} : {}),
+        messages: page.filter(e => e.kind === 'messages').map(e => e.value),
+        next_cursor: page.at(-1)?.seq ?? args.after ?? (board ? Math.max(reader.tasks, reader.messages) : reader.messages),
+        has_more: events.length > page.length,
+      };
+    });
   }
   async function runWorker(task, binding, context) {
     let sessionID;
@@ -200,7 +245,7 @@ export default async function Captain({client, directory}, options) {
         title: task.id + ' · ' + task.role, permission}}));
       sessionID = session.id;
       await exclusive(async () => {
-        task.sessionID = sessionID; task.status = 'running';
+        task.sessionID = sessionID; task.status = 'running'; touch(binding.turn, task);
         workers.set(sessionID, {...binding, task, store, abortSignal: context.abort}); await save();
       });
       if (context.abort?.aborted) fail('dispatch cancelled');
@@ -237,11 +282,12 @@ export default async function Captain({client, directory}, options) {
       const report = await artifact(task.cohort + '-' + task.id, {task, output, native_tools: records,
         notice: 'Model claims require review. Native records show execution; they do not establish test adequacy or semantic correctness.'});
       await exclusive(async () => {task.status = 'completed'; task.report = report;
-        task.summary = output.slice(0, 3000); task.truncated = output.length > 3000; await save();});
+        task.summary = output.slice(0, 3000); task.truncated = output.length > 3000;
+        touch(binding.turn, task); await save();});
     } catch (error) {
       await abort();
       await exclusive(async () => {task.status = context.abort?.aborted ? 'cancelled' : 'failed';
-        task.error = String(error.message ?? error).slice(0, 500); await save();});
+        task.error = String(error.message ?? error).slice(0, 500); touch(binding.turn, task); await save();});
     } finally {
       context.abort?.removeEventListener('abort', abort);
     }
@@ -290,6 +336,7 @@ export default async function Captain({client, directory}, options) {
           cohort = hash(binding.turnKey + context.callID).slice(0, 24);
           binding.turn.calls.push(context.callID);
           binding.turn.tasks.push(...tasks.map(task => ({...task, cohort, status: 'reserved'})));
+          for (const task of binding.turn.tasks.filter(t => t.cohort === cohort)) touch(binding.turn, task);
           await save(); activeParents.add(binding.parentID); activeCaptains.add(binding.parentID);
         });
         try {
@@ -299,8 +346,9 @@ export default async function Captain({client, directory}, options) {
             instruction: 'Read full reports where needed, resolve contradictions, retire completed workers, and synthesize one response.'});
         } finally {activeParents.delete(binding.parentID); activeCaptains.delete(binding.parentID);}
       }},
-    team_board: {description: 'Read this task team’s objectives, progress, messages and report paths.', args: {},
-      async execute(args, context) {const b = await origin(context); return JSON.stringify(snapshot(b.turn));}},
+    team_board: {description: 'Read only changed task previews and unread messages for you. Bounded pages; has_more means another page remains. Omit after to use your saved cursor; after=0 replays history. task_id explicitly reads one stored task summary without consuming messages. Full reports remain at report paths.',
+      args: {after: {type: 'integer', minimum: 0}, limit: {type: 'integer', minimum: 1, maximum: 12}, task_id: {type: 'string', maxLength: 40}},
+      async execute(args, context) {return JSON.stringify(await readTeam(await origin(context), args, true));}},
     village_status: {description: 'Show registered specialists and lineage. Read-only.', args: {},
       async execute(args, context) {
         const b = await origin(context); if (b.task) fail('captain only');
@@ -366,18 +414,18 @@ export default async function Captain({client, directory}, options) {
       args: {text: {type: 'string', maxLength: 1600}}, async execute(args, context) {
         const b = await origin(context); const note = text(args.text, 1600, 'note');
         await exclusive(async () => {if (b.turn.messages.length >= 64) fail('message budget reached');
-          b.turn.messages.push({from: b.task?.id ?? 'captain', to: '*', text: note, at: Date.now()}); await save();});
+          b.turn.messages.push({seq: ++b.turn.sequence, from: b.task?.id ?? 'captain', to: '*', text: note, at: Date.now()}); await save();});
         return 'Finding published.';}},
     team_message: {description: 'Send a focused message to an assigned peer or captain. Does not create work or grant permissions.',
       args: {to: {type: 'string'}, text: {type: 'string', maxLength: 1200}}, async execute(args, context) {
         const b = await origin(context); const note = text(args.text, 1200, 'message');
         if (args.to !== 'captain' && !b.turn.tasks.some(t => t.id === args.to)) fail('unknown peer');
         await exclusive(async () => {if (b.turn.messages.length >= 64) fail('message budget reached');
-          b.turn.messages.push({from: b.task?.id ?? 'captain', to: args.to, text: note, at: Date.now()}); await save();});
+          b.turn.messages.push({seq: ++b.turn.sequence, from: b.task?.id ?? 'captain', to: args.to, text: note, at: Date.now()}); await save();});
         return 'Message queued; peers read it using team_inbox.';}},
-    team_inbox: {description: 'Read team findings and messages addressed to you. Never poll repeatedly or block waiting for a peer.', args: {},
-      async execute(args, context) {const b = await origin(context), id = b.task?.id ?? 'captain';
-        return JSON.stringify(b.turn.messages.filter(m => m.to === '*' || m.to === id));}},
+    team_inbox: {description: 'Read a page of unread team messages addressed to you. Shares message progress with team_board. Omit after for saved progress; after=0 replays preserved messages. Never repeatedly poll or block for a peer.',
+      args: {after: {type: 'integer', minimum: 0}, limit: {type: 'integer', minimum: 1, maximum: 12}},
+      async execute(args, context) {return JSON.stringify(await readTeam(await origin(context), args, false));}},
     team_retire: {description: 'Retire finished workers and delete their native conversation contexts. Saved task reports remain. Only the captain can retire workers.',
       args: {ids: {type: 'array', items: {type: 'string'}, maxItems: 24}}, async execute(args, context) {
         const b = await origin(context); if (b.task || activeParents.has(b.parentID)) fail('retire only after the cohort ends');
@@ -391,7 +439,7 @@ export default async function Captain({client, directory}, options) {
             if (response?.error) fail('native session could not be retired');
             workers.delete(task.sessionID);
           }
-          await exclusive(async () => {task.retired = true; await save();}); result.push(id);
+          await exclusive(async () => {if (!task.retired) {task.retired = true; touch(b.turn, task); await save();}}); result.push(id);
         }
         return JSON.stringify({retired: result, reports_preserved: true});}},
   };
@@ -408,6 +456,12 @@ export default async function Captain({client, directory}, options) {
         return JSON.stringify(await response.json());}};
   }
   return {tool: tools,
+    async 'tool.definition'(input, output) {
+      // v1.18.34 marks every legacy args property required. Keep read controls optional
+      // so native callers can use {} for saved progress instead of replaying after=0.
+      if (['team_board', 'team_inbox'].includes(input.toolID))
+        output.jsonSchema = {...output.jsonSchema, required: []};
+    },
     async config(config) {
       for (const name of Object.keys(tools)) config.tools[name] = true;
       for (const name of ['plan', 'build']) for (const tool of ['team_run', 'team_retire', 'studio_contact', ...BOARD, 'village_status', 'village_search', 'village_read'])
@@ -425,7 +479,7 @@ export default async function Captain({client, directory}, options) {
       await exclusive(async () => {const k = key(input.sessionID, output.message.id);
         if (ledger.turns[k]) return;
         if (Object.keys(ledger.turns).length >= 10000) fail('archive the task state before starting more turns');
-        ledger.turns[k] = {tasks: [], calls: [], messages: [], restricted: output.parts.some(p =>
+        ledger.turns[k] = {tasks: [], calls: [], messages: [], sequence: 0, readers: {}, restricted: output.parts.some(p =>
           p.type === 'text' && /^\s*(ESSAY_EDIT|REVERSE_SCAFFOLD)\b/.test(p.text))}; await save();});
     },
     async 'tool.execute.before'(input) {

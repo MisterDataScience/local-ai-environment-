@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateContract, bindContract, assessResult } from '../handoff-contract.mjs';
+import { validateContract, bindContract, assessResult, reviewBrief } from '../handoff-contract.mjs';
 
 const contract = (kind = 'analysis') => ({ facts: [], assumptions: [], unknowns: [], references: [],
   acceptance: [{ id: 'A1', requirement: 'Keep the feature', source_quote: 'Keep the feature',
@@ -59,4 +59,44 @@ test('inspection requires a linked successful native inspection', () => {
 test('unresolved issues and malformed output cannot pass', () => {
   assert.equal(run('analysis', { ...result(), unresolved: ['Still broken'] }).status, 'needs_attention');
   assert.equal(assessResult(contract(), 'plain text', []).status, 'needs_attention');
+});
+
+test('complete short review briefs include criteria evidence and native test receipts', () => {
+  const r = result(); r.tests = [{tool_call_id: 'call1', command: 'npm test', status: 'passed'}];
+  const report = run('test', r, [tool()]);
+  const brief = reviewBrief(report);
+  assert.equal(brief.full_report_required, false);
+  assert.equal(brief.acceptance[0].requirement, 'Keep the feature');
+  assert.equal(brief.acceptance[0].evidence, 'Checked');
+  assert.equal(brief.tests[0].command, 'npm test');
+  assert.equal(brief.tests[0].execution_verified, true);
+  assert.deepEqual(brief.report_read_reasons, []);
+});
+
+test('clipped evidence and unresolved results require full reports without altering saved evidence', () => {
+  const r = result(); r.summary = 'Long summary '.repeat(200); r.acceptance[0].evidence = 'Source '.repeat(100);
+  const report = run('analysis', r), before = JSON.stringify(report);
+  const brief = reviewBrief(report);
+  assert.equal(brief.full_report_required, true);
+  assert(brief.report_read_reasons.includes('summary'));
+  assert(brief.report_read_reasons.includes('evidence'));
+  assert.equal(brief.acceptance[0].evidence.length, 400);
+  assert.equal(JSON.stringify(report), before);
+  const unresolved = reviewBrief(run('analysis', {...result(), unresolved: ['Needs reproduction']}));
+  assert.equal(unresolved.full_report_required, true);
+  assert.equal(unresolved.status, 'needs_attention');
+  assert.deepEqual(unresolved.unresolved, ['Needs reproduction']);
+});
+
+test('the combined preview stays bounded with Unicode and preserves its need for detail', () => {
+  const r = result();
+  r.summary = '漢'.repeat(1600);
+  r.assumptions = Array(4).fill('字'.repeat(240));
+  r.changed_files = Array(8).fill('漢'.repeat(400));
+  const report = run('analysis', r), brief = reviewBrief(report);
+  assert.equal(brief.full_report_required, true);
+  assert(brief.report_read_reasons.includes('oversized_brief'));
+  assert.equal(brief.acceptance[0].status, 'met');
+  assert(Buffer.byteLength(JSON.stringify(brief)) < 8000);
+  assert.equal(report.summary, r.summary);
 });
