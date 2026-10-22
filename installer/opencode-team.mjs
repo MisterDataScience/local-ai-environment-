@@ -220,6 +220,14 @@ export default async function LocalTeam({ client, directory }, options = {}) {
   }
 
   return {
+    async 'chat.headers'(input, output) {
+      const workflow = ({plan: 'captain', build: 'captain', analyst: 'analyst', coder: 'coder',
+        document: 'document', essay_document: 'essay', scaffold_document: 'scaffold',
+        compaction: 'compaction', title: 'maintenance', summary: 'maintenance'})[input.agent]
+        ?? (['researcher', 'analyst', 'coder', 'writer', 'reviewer'].some(role => input.agent === 'captain-' + role)
+          ? 'worker.' + input.agent.slice('captain-'.length) : undefined);
+      if (typeof workflow === 'string') output.headers['X-Local-AI-Workflow'] = workflow;
+    },
     tool: { local_image: mediaTool('image'), local_video: mediaTool('video'), local_speech: mediaTool('speak') },
     async config(config) {
       // Base configuration denies task. Only successful plugin initialization
