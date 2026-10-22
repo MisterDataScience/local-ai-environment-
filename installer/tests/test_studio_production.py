@@ -14,6 +14,7 @@ import unittest
 import test_studios as fixtures
 from studio_store import Store, sha
 from studios import Studios
+from studio_execution_fixture import seed_execution
 
 
 class ProductionTests(unittest.TestCase):
@@ -147,10 +148,7 @@ class ProductionTests(unittest.TestCase):
                 action, args = 'edit', dict(path='game.c', text='int counter = 1;\n', expected=last['sha256'])
             elif mode == 'test' and not last:
                 action = 'workflow_verify'
-                args = dict(workflow=ref, verdict='verified',
-                    build=dict(build_id='authored-routing-fixture', source_digest=sha('fixture'), build_status='success', runtime_status='loaded', errors=[], resources={}),
-                    tests=[dict(test_id='fixture', description='Authored routing fixture, not runtime acceptance.', seed=1, inputs=[], expected='fixture', actual='fixture', status='passed', evidence=['authored-fixture'])],
-                    findings=[], unverified_questions=[], explanation='Authored fixture exercises the verification route only.')
+                args = seed_execution(self.s,self.i,self.pid,ref,assignment['id'],self.staff['Playtest reviewer'])['report']
             elif last.get('saved') and not str(last.get('id','')).startswith('studio-verification:'):
                 action, args = 'done', dict(summary='Saved fixture handoff; compilation was not run.')
                 if mode == 'lead-developer': specialist_seen.extend(packet['implementation_team']['children'])

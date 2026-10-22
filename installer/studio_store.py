@@ -636,6 +636,9 @@ class Store:
             wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND state='awaiting_review'",(ref,iid)).fetchone()
             if not wf:raise PermissionError('Workflow has no department handoff awaiting review')
             artifacts=json.loads(wf['artifacts']);pending=artifacts.pop('pending_handoff')
+            if decision=='accept' and pending['next_state']=='ready_to_close':
+                missing=self.workflow_acceptance_missing(cx,wf,pending['assignment'])
+                if missing:raise ValueError('Handoff acceptance requires '+ '; '.join(missing))
             phase=pending['next_phase'] if decision=='accept' else wf['phase']
             state=pending['next_state'] if decision=='accept' else 'active'
             artifacts['stage_feedback']='' if decision=='accept' else next_focus or review
@@ -672,6 +675,50 @@ class Store:
             out['phase_label']={'planning':'Planning Department','middle':'Design Integration and Production Planning','implementation':'Implementation Department','verification':'Independent Review'}.get(out['phase'],out['phase'])
             return out
 
+    def record_workflow_execution(self,iid,ref,assignment,actor,kind,payload,job=''):
+        """Host-only receipt. Model actions cannot supply execution receipts."""
+        if kind not in ('build','tests','run','visual','invalidate'):raise ValueError('Unknown execution receipt')
+        if len(encoded(payload).encode())>64*1024:raise ValueError('Execution receipt exceeds its bound')
+        with self.db() as cx,cx:
+            if job:
+                live=cx.execute("SELECT 1 FROM studio_jobs WHERE id=? AND institution=? AND state='running'",(job,iid)).fetchone()
+                if not live:raise PermissionError('Session paused or stopped before recording execution')
+            delegation=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND assignee=? AND workflow=? AND phase='verification' AND mode='test' AND state='running'",(assignment,iid,actor,ref)).fetchone()
+            wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND phase='verification' AND state='running'",(ref,iid)).fetchone()
+            if not delegation or not wf or delegation['project']!=wf['project']:raise PermissionError('Execution receipt needs the active independent Playtest assignment')
+            artifacts=json.loads(wf['artifacts']);acceptance=artifacts.get('acceptance',{})
+            if acceptance.get('assignment')!=assignment:acceptance=dict(assignment=assignment)
+            if kind=='build':acceptance=dict(assignment=assignment,build=payload)
+            elif kind=='tests':
+                if (acceptance.get('build') or {}).get('id')!=payload['build']['id']:acceptance=dict(assignment=assignment)
+                acceptance.update(build=payload['build'],tests=payload)
+            elif kind=='run':acceptance.update(run=payload,visual=None)
+            elif kind=='visual':acceptance['visual']=payload
+            else:acceptance.update(run=None,visual=None)
+            artifacts['acceptance']=acceptance
+            cx.execute('UPDATE studio_workflows SET artifacts=?,updated=? WHERE id=?',(encoded(artifacts),int(time.time()),ref))
+        self.refresh_project_manifest(wf['project'])
+
+    def workflow_acceptance_missing(self,cx,wf,assignment):
+        acceptance=json.loads(wf['artifacts']).get('acceptance',{})
+        if acceptance.get('assignment')!=assignment:return ['host-recorded execution by this independent Playtest assignment']
+        missing=[];build=acceptance.get('build') or {};tests=acceptance.get('tests') or {}
+        row=cx.execute("SELECT * FROM studio_builds WHERE id=? AND project=? AND kind='cartridge' AND state='passed'",(build.get('id',''),wf['project'])).fetchone()
+        current=sha(archive(files(self.path(wf['project']))))
+        if not row or row['digest']!=current or build.get('source_sha256')!=current:
+            missing.append('a passing cartridge build for the current working-copy revision')
+        results=tests.get('tests') or []
+        if tests.get('build',{}).get('id')!=build.get('id') or not tests.get('passed') or not results or any(
+                not item.get('passed') or not item.get('expected') or not item.get('evidence') for item in results):
+            missing.append('passing nonempty authored assertions for that build')
+        run=acceptance.get('run') or {};visual=acceptance.get('visual') or {}
+        if run.get('build')!=build.get('id') or not run.get('evidence') or not run.get('screen_sha256') or not run.get('steps',0)>0:
+            missing.append('a recorded input run on that build')
+        if visual.get('status')!='pass' or not visual.get('image_sent') or not run or any(
+                visual.get(k)!=run.get(k) for k in ('machine','build','evidence','screen_sha256','ticks')):
+            missing.append('a passing visual inspection of the same machine, run and frame')
+        return missing
+
     def save_workflow_verification(self,iid,ref,assignment,actor,payload):
         verdicts={'verified','return_to_implementation','return_to_middle','return_to_planning','human_review_required','blocked'}
         if not isinstance(payload,dict) or payload.get('verdict') not in verdicts:raise ValueError('Verification verdict is invalid')
@@ -702,7 +749,7 @@ class Store:
             normalized_claims.append(dict(claim=bounded(item.get('claim',''),1000,'implementation claim'),status=item['status'],result=bounded(item.get('result',''),1200,'claim result'),evidence=bounded_list(item.get('evidence',[]),32,'claim evidence')))
         unverified=[bounded(q,1000,'unverified question') for q in bounded_list(payload.get('unverified_questions',[]),64,'unverified questions')]
         explanation=bounded(payload.get('explanation',''),2000,'verdict explanation',empty=False);verdict=payload['verdict']
-        if verdict=='verified' and (not build_result['build_id'] or not build_result['source_digest'] or build_result['build_status']!='success' or build_result['runtime_status'] not in ('loaded','running') or not normalized_tests or any(x['status']!='passed' for x in normalized_tests) or any(x['certainty']!='Unverified' and x['severity'].lower() in ('blocker','critical','high') for x in normalized_findings)):
+        if verdict=='verified' and (not build_result['build_id'] or not build_result['source_digest'] or build_result['build_status']!='success' or build_result['errors'] or build_result['runtime_status'] not in ('loaded','running') or not normalized_tests or any(x['status']!='passed' for x in normalized_tests) or unverified or any(x['status']!='reproduced' for x in normalized_claims) or any(x['certainty']!='Unverified' and x['severity'].lower() in ('blocker','critical','high') for x in normalized_findings)):
             raise ValueError('verified requires a successful loaded build, passing results for every supplied test, and no unresolved high-severity finding')
         report=dict(build=build_result,implementation_claims=normalized_claims,tests=normalized_tests,findings=normalized_findings,unverified_questions=unverified,verdict=verdict,explanation=explanation)
         packed=encoded(report)
@@ -711,6 +758,19 @@ class Store:
             delegation=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=(SELECT project FROM studio_workflows WHERE id=? AND institution=?) AND assignee=? AND workflow=? AND phase='verification' AND mode='test' AND state='running'",(assignment,iid,ref,iid,actor,ref)).fetchone()
             wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=? AND phase='verification' AND state='running'",(ref,iid,delegation['project'] if delegation else '')).fetchone()
             if not delegation or not wf:raise PermissionError('Only the assigned independent Playtest Reviewer can record the active verification report')
+            if verdict=='verified':
+                missing=self.workflow_acceptance_missing(cx,wf,assignment)
+                if missing:raise ValueError('Verification requires '+ '; '.join(missing))
+                acceptance=json.loads(wf['artifacts'])['acceptance']
+                actual=acceptance['tests']['tests'];by_name={item['name']:item for item in actual}
+                if set(by_name)!={item['test_id'] for item in normalized_tests}:raise ValueError('Verification test IDs must match every authored cartridge test name')
+                if build_result['build_id']!=acceptance['build']['id'] or build_result['source_digest']!=acceptance['build']['source_sha256']:
+                    raise ValueError('Verification report build identity does not match host execution')
+                for item in normalized_tests:
+                    if by_name[item['test_id']]['evidence'] not in item['evidence']:raise ValueError('Each passed test must cite its host-recorded assertion evidence')
+                refs={acceptance['build']['id'],acceptance['run']['machine'],acceptance['run']['evidence'],*[test['evidence'] for test in actual]}
+                if any(not refs.intersection(item['evidence']) for item in normalized_claims):raise ValueError('Reproduced implementation claims must cite host execution evidence')
+                if any(item['certainty'] in ('Observed','Inferred') and not refs.intersection(item['evidence']) for item in normalized_findings):raise ValueError('Findings must cite host execution evidence from this build')
             artifacts=json.loads(wf['artifacts']);history=json.loads(wf['history']);reports=artifacts.setdefault('verification_reports',[])
             if len(reports)>=64:raise ValueError('Workflow verification report limit reached')
             report_id=ident('studio-verification');report.update(id=report_id,assignment=assignment,reviewer=actor,created=int(time.time()),digest=sha(packed))
@@ -747,6 +807,11 @@ class Store:
             if self.member(cx,iid,actor)!='Studio Lead':raise PermissionError('Only the Studio Lead closes a workflow')
             wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND state='ready_to_close' AND phase='verification'",(ref,iid)).fetchone()
             if not wf:raise PermissionError('Workflow must finish the verification phase before closure')
+            reports=json.loads(wf['artifacts']).get('verification_reports',[])
+            report=reports[-1] if reports else {}
+            if report.get('verdict')!='verified':raise ValueError('Final closeout requires a verified Playtest report')
+            missing=self.workflow_acceptance_missing(cx,wf,report.get('assignment',''))
+            if missing:raise ValueError('Final closeout requires '+ '; '.join(missing))
             artifacts=json.loads(wf['artifacts']);history=json.loads(wf['history']);history.append(dict(event='closed',summary=summary,at=int(time.time())))
             artifacts['closeout']=dict(summary=summary,digest=sha(summary))
             cx.execute("UPDATE studio_workflows SET state='complete',artifacts=?,history=?,updated=? WHERE id=?",(encoded(artifacts),encoded(history),int(time.time()),ref));pid=wf['project']
@@ -821,6 +886,9 @@ class Store:
             row=cx.execute('SELECT * FROM studio_delegations WHERE id=?',(delegation,)).fetchone()
             if not row:raise ValueError('Delegated assignment unavailable')
             text=bounded(result,6000,'delegated report',empty=True)
+            if state=='complete' and row['workflow'] and not row['parent'] and row['phase'] in ('planning','middle'):
+                if not cx.execute('SELECT 1 FROM studio_workflow_steps WHERE workflow=? AND phase=? LIMIT 1',(row['workflow'],row['phase'])).fetchone():
+                    raise ValueError('Save at least one durable '+row['phase']+' checkpoint before handing off this department')
             children=[]
             if not row['parent'] and row['mode']=='lead-developer':
                 children=[dict(r) for r in cx.execute("SELECT d.id,d.task,d.assignee,d.state,d.result,t.title FROM studio_delegations d JOIN studio_tasks t ON t.id=d.task WHERE d.parent=? ORDER BY d.created,d.id",(delegation,))]

@@ -1,5 +1,6 @@
 """Owner-controlled institutions, finite code founding and studio work sessions."""
 import base64
+import io
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
@@ -53,6 +54,7 @@ ASSIGNMENT_SYSTEM=WORK_SYSTEM+'''\nYou are an assigned specialist. Follow the ta
 DESIGN_INTEGRATION_AND_PRODUCTION_PLANNING_SYSTEM=WORK_SYSTEM+'''\nYou are the test planner for Design Integration and Production Planning. Turn the cited Planning scaffold into saved test checkpoints with stable IDs before implementation. Use workflow_read to inspect omitted Planning checkpoints and any linked review report. For each test specify observable state, available actions, starting/reset state, seed, exact bounded inputs and input limit, success/failure conditions, supported expected results, metrics or hashes, resource/time limits, AI testability, visual evidence, human-only questions and verification blockers. Mark unsupported or subjective expectations Unverified. Do not edit or run code.'''
 
 TESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent, read-only Playtest Reviewer. Use workflow_read to page through every supplied test checkpoint and linked report section. Reproduce each test and implementation claim against the build; also run bounded exploratory checks. Keep Observed, Inferred and Unverified distinct. Record only reproducible issues with build identity, seed, inputs and evidence. Subjective questions remain Unverified and route to human review. In staged Review, submit the complete structured result through workflow_verify; its schema is in available_actions and it is the sole Playtest report and finding record. Do not use generic finding. Use verified only for a successful loaded build, passing supplied tests and no implementation blocker.'''
+TESTER_SYSTEM+='''\nBefore verified, use build (or select a current existing build), tests, create_machine, run_machine with positive steps, then inspect. The host must record passing authored assertions, input execution and a passing image review of the same machine and frame in this assignment. Use each cartridge test name as its report test_id and cite its returned assertion evidence ID. A stale build, invented ID, empty assertion, unavailable image or visible failure cannot satisfy acceptance. For visible failures use return_to_implementation; for missing visual capability or unresolved subjective questions use human_review_required. Inspect uses offscreen PNG rendering and needs no monitor.'''
 
 CURATION_SYSTEM='''You are the Studio Lead reviewing one submitted studio learning record.
 Check whether its lesson follows from the submitted evidence, is useful to a later project
@@ -560,27 +562,71 @@ class Studios:
                             compact_artifacts[key]=[item]
                 packet['workflow']={k:workflow[k] for k in ('id','title','goal','phase','state','source','source_sha256')}
                 packet['workflow'].update(artifacts=compact_artifacts,history=workflow.get('history',[])[-4:],steps=workflow_steps,step_count=workflow_step_count,checkpoint_counts=workflow_counts)
+                acceptance=artifacts.get('acceptance') or {}
+                if acceptance:
+                    packet['workflow']['acceptance']=dict(assignment=acceptance.get('assignment'),build=acceptance.get('build'),
+                        tests_passed=(acceptance.get('tests') or {}).get('passed',False),
+                        tests=[{key:test.get(key) for key in ('name','passed','evidence')} for test in (acceptance.get('tests') or {}).get('tests',[])],
+                        run=acceptance.get('run'),visual=acceptance.get('visual'))
                 if settings.get('workflow_phase')=='planning':
                     packet['files']=[]
                     packet['workflow']['planning_rule']='Use only the immutable source archive as evidence. Do not inspect or modify the working copy.'
-        if appointment_id:
-            action_profile='appointment'
-        elif row['kind']=='adaptation-plan':
-            action_profile='adaptation-plan'
-        elif settings.get('actor_title')=='Studio Lead':
-            action_profile='manager'
-        elif settings.get('assignment_id'):
-            action_profile=settings.get('assignment_mode','work')
-        else:
-            action_profile='work'
-        permitted=ROLE_ACTIONS.get(action_profile,ROLE_ACTIONS['work'])
+        permitted=ROLE_ACTIONS[self.permission_profile(row)]
         packet['available_actions']={name:ACTION_SPECS[name] for name in sorted(permitted)}
         return packet
+
+    def permission_profile(self,row):
+        settings=json.loads(row['settings']);iid=row['institution'];pid=row['project'];actor=settings['actor']
+        with self.store.db() as cx:
+            if settings.get('appointment'):
+                self.store.appointment(cx,settings['appointment'],iid,pid,actor)
+                return 'appointment'
+            title=self.store.member(cx,iid,actor)
+            if settings.get('actor_title') and settings['actor_title']!=title:raise PermissionError('Resident role changed; refresh the assigned session')
+            if row.get('kind')=='adaptation-plan':return 'adaptation-plan'
+            assignment=settings.get('assignment_id')
+            if assignment:
+                saved=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=? AND assignee=? AND state='running'",(assignment,iid,pid,actor)).fetchone()
+                if not saved or saved['mode']!=settings.get('assignment_mode') or saved['workflow']!=settings.get('workflow','') or saved['phase']!=settings.get('workflow_phase',''):
+                    raise PermissionError('Assignment is stale, closed or belongs to another resident or department')
+                if saved['workflow']:
+                    workflow=cx.execute("SELECT phase,state FROM studio_workflows WHERE id=? AND institution=? AND project=?",(saved['workflow'],iid,pid)).fetchone()
+                    if not workflow or workflow['phase']!=saved['phase'] or workflow['state']!='running':raise PermissionError('Assignment is outside its active workflow department')
+                    if not saved['parent'] and title!=WORKFLOW_ROLES[saved['phase']][0]:raise PermissionError('Assigned resident no longer has the required department role')
+                return saved['mode']
+            if title=='Studio Lead':return 'manager'
+            # Legacy unassigned sessions cannot grant implementation or test tools.
+            return 'analysis'
+
+    def record_acceptance(self,row,action,args,result):
+        settings=json.loads(row['settings'])
+        if settings.get('workflow_phase')!='verification' or settings.get('assignment_mode')!='test':return
+        ref=settings['workflow'];assignment=settings['assignment_id'];actor=settings['actor'];iid=row['institution']
+        kind=None;payload=None
+        if action=='build':
+            kind='build';payload={k:result.get(k) for k in ('id','state','source_sha256')}
+        elif action=='tests':
+            _,build=self.workbench.cartridge(args['build'],iid)
+            kind='tests';payload=dict(build=dict(id=build['id'],source_sha256=build['digest']),passed=bool(result.get('passed')),
+                tests=[{k:test.get(k) for k in ('name','passed','expected','evidence')} for test in result.get('tests',[])])
+        elif action in ('run_machine','inspect'):
+            meta=self.workbench.machines[args['machine']]
+            kind='run' if action=='run_machine' else 'visual'
+            payload=dict(machine=args['machine'],build=meta['build'],evidence=result.get('evidence'),ticks=result.get('ticks'),screen_sha256=result.get('screen_sha256'))
+            if kind=='run':payload.update(steps=args.get('steps',1),buttons=args.get('buttons',0))
+            else:payload.update(result.get('visual_review') or {},image_sent=bool(result.get('image_sent')))
+        elif action in ('reset','restore'):kind='invalidate';payload={}
+        if kind:self.store.record_workflow_execution(iid,ref,assignment,actor,kind,payload,job=row['id'])
 
     def work_action(self,row,progress,value):
         if not isinstance(value,dict) or set(value)-{'action','args','note'}:raise ValueError('Invalid studio action')
         action=value['action'];args=value.get('args',{});iid=row['institution'];pid=row['project'];settings=json.loads(row['settings']);actor=settings['actor']
         if not isinstance(args,dict):raise ValueError('Action args must be an object')
+        args=dict(args)
+        if action not in ROLE_ACTIONS[self.permission_profile(row)]:raise PermissionError('This department does not permit '+str(action))
+        with self.store.db() as cx:
+            persisted=cx.execute('SELECT state FROM studio_jobs WHERE id=?',(row['id'],)).fetchone()
+            if persisted and persisted['state']!='running':raise PermissionError('Session is paused, closed or cancelled; no late action was applied')
         appointment_id=settings.get('appointment')
         assignment_id=settings.get('assignment_id');assignment_mode=settings.get('assignment_mode','')
         if settings.get('actor_title')=='Studio Lead':
@@ -673,19 +719,44 @@ class Studios:
         elif action=='patch':result=self.store.patch(pid,args['path'],args['old'],args['new'],args['expected'])
         elif action=='build':
             if args.get('kind','cartridge')!='cartridge':raise PermissionError('Residents can build only portable cartridges')
+            self.record_acceptance(row,action,args,{})
             result=self.workbench.build(pid)
-        elif action=='tests':result=self.workbench.tests(iid,args['build'])
-        elif action=='create_machine':result=self.workbench.create(iid,args['build'],args.get('seed',1),args.get('task'))
+        elif action in ('tests','create_machine'):
+            _,build=self.workbench.cartridge(args['build'],iid)
+            if build['project']!=pid:raise PermissionError('Use a cartridge built from this project')
+            if action=='tests':self.record_acceptance(row,action,args,dict(passed=False,tests=[]))
+            result=self.workbench.tests(iid,args['build']) if action=='tests' else self.workbench.create(iid,args['build'],args.get('seed',1),args.get('task'))
         elif action=='finding':result=self.workbench.add_finding(iid,pid,args.get('category'),args.get('text',''),args.get('evidence',[]))
         elif action in ('run_machine','observe','snapshot','reset','drop'):
+            meta=self.workbench.machines.get(args.get('machine'),{})
+            if meta.get('institution')!=iid or meta.get('project')!=pid:raise PermissionError('Use a machine from this project')
+            if action in ('run_machine','reset'):self.record_acceptance(row,'reset',args,{})
             operation='run' if action=='run_machine' else action
             args['retain_screenshot']=bool(settings.get('retain_evidence_screenshots',False))
-            result=self.workbench.machine(iid,args.pop('machine'),operation,**args)
-        elif action=='restore':result=self.workbench.restore(iid,args['saved'])
+            result=self.workbench.machine(iid,args['machine'],operation,**{k:v for k,v in args.items() if k!='machine'})
+        elif action=='restore':result=self.workbench.restore(iid,args['saved'],project=pid)
         elif action=='evidence_read':result=self.workbench.evidence_detail(iid,pid,args['evidence_id'])
         elif action=='inspect':
+            meta=self.workbench.machines.get(args.get('machine'),{})
+            if meta.get('institution')!=iid or meta.get('project')!=pid:raise PermissionError('Inspect a machine from this project')
             observed=self.workbench.machine(iid,args['machine'],'observe')
-            result=dict(visual_review=self.infer(row['id'],'Inspect the supplied actual 320x180 workstation screenshot. State uncertainty. Do not execute tools.',dict(question=bounded(args['question'],1000,'visual question'),metrics=observed['metrics']),observed['png']))
+            self.record_acceptance(row,action,args,dict(visual_review=dict(status='unavailable',review='Inspection has not completed.',issues=[]),image_sent=False,
+                **{k:observed.get(k) for k in ('evidence','ticks','screen_sha256')}))
+            raw=base64.b64decode(observed['png'],validate=True)
+            from PIL import Image
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.format!='PNG' or image.size!=(320,180):raise ValueError('Renderer must return a valid 320x180 PNG')
+                image.verify()
+            view=self.store.workflow_view(iid,settings['workflow']) if settings.get('workflow') else None
+            packet=dict(question=bounded(args['question'],1000,'visual question'),metrics=observed['metrics'],
+                objective=view['goal'] if view else settings.get('objective',''),
+                acceptance_checks=[step['body'] for step in view['steps'] if step['phase']=='middle'][:2] if view else [])
+            system='Inspect the supplied actual 320x180 rendered PNG against the objective and acceptance checks. Return JSON only: {"status":"pass"|"revise"|"unavailable","review":"brief assessment","issues":["visible issue"]}. Use revise for visible failures and unavailable when the image cannot be interpreted. Do not infer unseen behavior or claim that a coherent frame proves all gameplay.'
+            try:review=self.json_answer(self.infer(row['id'],system,packet,observed['png']));sent=True
+            except (ValueError,RuntimeError) as error:
+                review=dict(status='unavailable',review=str(error)[:1200],issues=[]);sent=False
+            if review.get('status') not in ('pass','revise','unavailable') or not isinstance(review.get('review'),str) or not review['review'].strip() or not isinstance(review.get('issues',[]),list):raise ValueError('Visual inspection returned an invalid structured result')
+            result=dict(visual_review=review,image_sent=sent,**{k:observed.get(k) for k in ('evidence','ticks','screen_sha256')})
         elif action=='task':result=self.store.task(iid,pid,actor,**args)
         elif action=='team_status':
             if assignment_mode!='lead-developer' or not assignment_id:raise PermissionError('team_status is available only to the Lead Developer on an active assignment')
@@ -807,6 +878,7 @@ class Studios:
                     cx.execute("UPDATE studio_appointments SET state='completed' WHERE id=?",(appointment_id,))
             return result,True
         else:raise ValueError('Unknown studio tool')
+        self.record_acceptance(row,action,args,result)
         if isinstance(result,dict) and 'png' in result:result={k:v for k,v in result.items() if k!='png'}|dict(screen_available=True)
         self.store.event(iid,row['id'],actor,action,dict(args=args,result=result))
         return result,False
@@ -871,9 +943,17 @@ class Studios:
                     answer=self.infer(jid,system,packet)
                     with self.store.db() as cx:
                         if cx.execute('SELECT state FROM studio_jobs WHERE id=?',(jid,)).fetchone()[0]!='running':break
-                    try:result,done=self.work_action(row,progress,self.json_answer(answer))
+                    value=None
+                    try:
+                        value=self.json_answer(answer)
+                        result,done=self.work_action(row,progress,value)
                     except (ValueError,RuntimeError,PermissionError,KeyError,TypeError,OSError) as error:
-                        result,done=dict(error=str(error)[:2000],instruction='Correct the tool arguments or approach; do not claim success.'),False
+                        permitted=ROLE_ACTIONS[self.permission_profile(row)]
+                        attempted=value.get('action') if isinstance(value,dict) else None
+                        result,done=dict(error=str(error)[:2000],error_type=type(error).__name__,
+                            attempted_action=attempted if isinstance(attempted,str) else None,
+                            allowed_actions=sorted(permitted),retryable=True,
+                            instruction='Correct the tool arguments or choose a permitted action; do not claim success.'),False
                         self.store.event(row['institution'],jid,json.loads(row['settings'])['actor'],'tool_error',result)
                     progress['last_result']=result
                     waiting=bool(isinstance(result,dict) and result.get('parent') and result.get('independent_worker'))

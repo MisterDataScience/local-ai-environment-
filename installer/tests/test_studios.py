@@ -13,6 +13,7 @@ import village
 import village_memory as memory
 from studio_store import Store,unpack,files,sha
 from studios import Studios
+from studio_execution_fixture import seed_execution
 from studio_roles import ACTION_SPECS,ROLE_ACTIONS,CORE_STAFF_ROLES,MAX_SPECIALIST_SUBTASKS
 
 
@@ -135,6 +136,7 @@ class StudioTests(unittest.TestCase):
         verification=dict(workflow=ref,verdict='verified',build=dict(build_id='build-001',source_digest='a'*64,build_status='success',runtime_status='loaded',errors=[],resources={'peak_memory_bytes':1024}),implementation_claims=[dict(claim='Update increments the counter.',status='reproduced',result='Replayed the update and observed one increment.',evidence=['build-001'])],tests=[dict(test_id='counter-once',description='One update increments counter once.',seed=1,inputs=['A'],expected='counter is 1',actual='counter is 1',status='passed',evidence=['build-001'])],findings=[],unverified_questions=[],explanation='The build loaded and the supplied deterministic assertion passed.')
         with self.assertRaises(ValueError):
             self.s.save_workflow_verification(self.i,ref,test['id'],reviewer,verification|dict(tests=[verification['tests'][0]|dict(status='failed')]))
+        verification.update(seed_execution(self.s,self.i,project,ref,test['id'],reviewer,names=('counter-once',))['report'])
         saved=self.s.save_workflow_verification(self.i,ref,test['id'],reviewer,verification)
         page,_=self.c.work_action(review_row,dict(notes='',last_result={}),dict(action='workflow_read',args=dict(workflow=ref,report_id=saved['id'],section='tests',offset=0,limit=2)))
         self.assertEqual(page['items'][0]['input_count'],1)
@@ -154,9 +156,11 @@ class StudioTests(unittest.TestCase):
         developer=residents['Lead Developer'];engine=residents['Systems designer']
         project=self.p['project'];workflow=self.s.start_workflow(self.i,project,lead,'Adapt counter game','Implement one bounded experiment')['id']
         planning=self.s.delegate(self.i,project,lead,designer,'Planning','Build the reverse scaffold.',mode='design',workflow=workflow,phase='planning')
+        self.s.save_workflow_step(self.i,workflow,project,designer,'Planning fixture','Saved scaffold for the blocked-child routing test.',[])
         self.s.finish_delegation(planning['id'],'complete','Scaffold saved.')
         self.s.review_workflow_stage(self.i,workflow,lead,'accept','Reviewed the durable department report.')
         test_plan=self.s.delegate(self.i,project,lead,test_planner,'Design Integration and Production Planning test plan','Define observable acceptance checks.',mode='test-plan',workflow=workflow,phase='middle')
+        self.s.save_workflow_step(self.i,workflow,project,test_planner,'Test-plan fixture','Saved checks for the blocked-child routing test.',[])
         self.s.finish_delegation(test_plan['id'],'complete','Test plan saved.')
         self.s.review_workflow_stage(self.i,workflow,lead,'accept','Reviewed the durable department report.')
         implementation=self.s.delegate(self.i,project,lead,developer,'Implementation','Implement the agreed experiment.',mode='delivery',workflow=workflow,phase='implementation')
@@ -232,11 +236,7 @@ class StudioTests(unittest.TestCase):
         ref=self.s.start_workflow(self.i,self.p['project'],lead,'Verified route override','Verify one deterministic result')['id']
         with self.s.db() as cx,cx:cx.execute("UPDATE studio_workflows SET phase='verification',state='active' WHERE id=?",(ref,))
         assignment=self.s.delegate(self.i,self.p['project'],lead,reviewer,'Verify','',mode='test',workflow=ref,phase='verification')
-        report=self.s.save_workflow_verification(self.i,ref,assignment['id'],reviewer,dict(
-            verdict='verified',
-            build=dict(build_id='build-override',source_digest='c'*64,build_status='success',runtime_status='loaded',errors=[],resources={}),
-            tests=[dict(test_id='loads',description='Cartridge loads.',seed=1,inputs=[],expected='loaded',actual='loaded',status='passed',evidence=['build-override'])],
-            findings=[],unverified_questions=[],explanation='The build loaded and the only supplied test passed.'))
+        report=self.s.save_workflow_verification(self.i,ref,assignment['id'],reviewer,seed_execution(self.s,self.i,self.p['project'],ref,assignment['id'],reviewer,names=('loads',))['report'])
         self.s.finish_delegation(assignment['id'],'complete','Verification saved.')
         self.s.review_workflow_stage(self.i,ref,lead,'accept','Reviewed the durable department report.')
         self.s.return_workflow(self.i,ref,lead,'A later integration check requires one more implementation pass.')
@@ -290,8 +290,11 @@ class StudioTests(unittest.TestCase):
             with self.assertRaises(PermissionError):self.s.project(cx,self.p['project'],other)
 
     def test_resident_tools_follow_the_advertised_paths_and_memory_review(self):
-        lead=self.approve(self.s.prepare_staff(self.i)[0]['id'])['resident']
-        row=dict(id='fixture',institution=self.i,project=self.p['project'],settings=json.dumps(dict(actor=lead)))
+        staff=self.staff();lead=staff['Lead Developer']
+        ref=self.s.start_workflow(self.i,self.p['project'],staff['Studio Lead'],'Tool fixture','Check implementation tools')['id']
+        with self.s.db() as cx,cx:cx.execute("UPDATE studio_workflows SET phase='implementation' WHERE id=?",(ref,))
+        assignment=self.s.delegate(self.i,self.p['project'],staff['Studio Lead'],lead,'Implementation tools','',mode='delivery',workflow=ref,phase='implementation')
+        row=dict(id='fixture',kind='assignment',institution=self.i,project=self.p['project'],settings=json.dumps(dict(actor=lead,assignment_id=assignment['id'],assignment_mode='lead-developer',workflow=ref,workflow_phase='implementation')))
         progress=dict(notes='')
         result,_=self.c.work_action(row,progress,dict(action='read',args=dict(path='game.c')))
         self.c.work_action(row,progress,dict(action='edit',args=dict(path='new.c',text='int new_value;',expected='')))
@@ -366,6 +369,10 @@ class StudioTests(unittest.TestCase):
         assigned=dict(id='test-work',kind='assignment',institution=self.i,project=self.p['project'],settings=json.dumps(dict(actor=reviewer,assignment_id=task['id'],assignment_mode='test')))
         progress=dict(notes='',last_result={})
         with self.assertRaises(PermissionError):self.c.work_action(assigned,progress,dict(action='edit',args=dict(path='tamper.c',text='bad',expected='')))
+        with self.assertRaises(PermissionError):self.c.work_action(assigned,progress,dict(action='tests',args=dict(build='fixture-build')))
+        fresh=self.s.delegate(self.i,self.p['project'],developer,reviewer,'Fresh read-only check','',mode='test')
+        assigned['settings']=json.dumps(dict(actor=reviewer,assignment_id=fresh['id'],assignment_mode='test'))
+        self.c.workbench.cartridge=lambda *args:({},dict(project=self.p['project']))
         self.c.workbench.tests=lambda iid,build:dict(ok=True,tests=3)
         result,_=self.c.work_action(assigned,progress,dict(action='tests',args=dict(build='fixture-build')))
         self.assertTrue(result['ok']);self.assertEqual(result['tests'],3)
@@ -390,9 +397,11 @@ class StudioTests(unittest.TestCase):
         packet=self.c.work_packet(row,json.loads(row['progress']))
         choices=packet['inbox']['available_projects']
         self.assertEqual({p['id'] for p in choices},{self.p['project'],second['project']})
+        with self.s.db() as cx,cx:cx.execute("UPDATE studio_jobs SET state='running' WHERE id=?",(row['id'],))
         selected,_=self.c.work_action(row,json.loads(row['progress']),dict(action='select_project',args=dict(project=second['project'])))
         self.assertTrue(selected['selected']);self.assertEqual(row['project'],second['project'])
         with self.s.db() as cx:self.assertEqual(cx.execute('SELECT project FROM studio_jobs WHERE id=?',(message['job'],)).fetchone()[0],second['project'])
+        with self.s.db() as cx,cx:cx.execute("UPDATE studio_jobs SET state='paused' WHERE id=?",(row['id'],))
         explicitly_routed=self.c.contact(self.i,'owner','Inspect the second game.','Second game')
         self.assertEqual(self.s.message(explicitly_routed['id'])['project'],second['project'])
 
@@ -419,6 +428,7 @@ class StudioTests(unittest.TestCase):
         progress=dict(notes='',last_result={})
         self.s.read(self.p['project'],'game.c')
         self.c.work_action(row,progress,dict(action='edit',args=dict(path='temporary.c',text='int temporary_work;',expected='')))
+        self.c.workbench.cartridge=lambda *args:({},dict(project=self.p['project']))
         self.c.workbench.tests=lambda iid,build:dict(ok=True,tests=1)
         tests,_=self.c.work_action(row,progress,dict(action='tests',args=dict(build='fixture-build')))
         self.assertTrue(tests['ok'])

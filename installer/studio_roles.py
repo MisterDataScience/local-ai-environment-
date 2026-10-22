@@ -76,7 +76,7 @@ _READ = frozenset({
 })
 _RUN = frozenset({
     'build', 'tests', 'create_machine', 'run_machine', 'observe',
-    'snapshot', 'reset', 'drop', 'inspect',
+    'snapshot', 'reset', 'drop', 'inspect', 'restore',
 })
 ROLE_ACTIONS = {
     'manager': _READ | frozenset({
@@ -86,7 +86,7 @@ ROLE_ACTIONS = {
         'workflow_close', 'workflow_return', 'help', 'propose', 'note',
         'learning_none', 'done',
     }),
-    'design': _READ | frozenset({
+    'design': (_READ - {'tree','read','search'}) | frozenset({
         'workflow_step', 'finding', 'note', 'learning_none', 'done',
     }),
     'test-plan': _READ | frozenset({
@@ -111,4 +111,4 @@ ROLE_ACTIONS = {
         'source_tree', 'source', 'sdk', 'knowledge_search', 'done',
     }),
 }
-ROLE_ACTIONS['work'] = frozenset(ACTION_SPECS)
+ROLE_ACTIONS['work'] = ROLE_ACTIONS['analysis']

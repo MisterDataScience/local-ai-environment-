@@ -399,11 +399,12 @@ class Workbench:
                 if operation=='reset':result['evidence']=self.new_evidence(mid,args.get('seed',1))
             return result
 
-    def restore(self,iid,saved):
+    def restore(self,iid,saved,project=None):
         if not isinstance(saved,str) or not saved.startswith('machine:') or len(saved)!=40:raise ValueError('Invalid saved machine')
         root=self.store.directory/iid.split(':')[1]/'machines';path=root/(saved.split(':')[1]+'.json')
         raw=path.read_bytes();content=json.loads(raw);candidate,changed=self.migrate_checkpoint(content);meta=candidate.get('meta')
         if not isinstance(meta,dict) or not meta.get('build'):raise ValueError('Saved machine has no build identity')
+        if project is not None and meta.get('project')!=project:raise PermissionError('Saved machine belongs to another project')
         cartridge,_=self.cartridge(meta['build'],iid);manifest=cartridge.get('build_manifest')
         if candidate.get('build_manifest') is not None:
             validate_build_manifest(candidate['build_manifest'])
@@ -428,7 +429,18 @@ class Workbench:
 
     def tests(self,iid,bid):
         cartridge,_=self.cartridge(bid,iid);results=[]
-        for test in cartridge['tests']:
+        tests=cartridge.get('tests')
+        if not isinstance(tests,list) or not 1<=len(tests)<=32:raise ValueError('Define at least one bounded authored cartridge test')
+        names=set()
+        for test in tests:
+            if not isinstance(test,dict):raise ValueError('Cartridge tests must be objects')
+            name=test.get('name');expected=test.get('expect_metrics')
+            if not isinstance(name,str) or not name.strip() or len(name)>120 or name in names:raise ValueError('Cartridge tests need unique nonempty names matching the planned test IDs')
+            names.add(name)
+            if not isinstance(expected,dict) or not expected:raise ValueError('Each cartridge test needs nonempty expected metrics')
+            if any(not str(key).isdigit() or not 0<=int(key)<128 or type(value) is not int for key,value in expected.items()):raise ValueError('Expected metrics must name valid metric keys and integer values')
+            if not isinstance(test.get('inputs',[]),list) or len(test.get('inputs',[]))>100:raise ValueError('Test input limit exceeded')
+        for test in tests:
             instance=self.create(iid,bid,test.get('seed',1));mid=instance['machine'];observation=instance
             try:
                 inputs=test.get('inputs',[])
