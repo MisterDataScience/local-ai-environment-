@@ -306,7 +306,7 @@ export default async function Captain({client, directory}, options) {
         const b = await origin(context); if (b.task) fail('captain only');
         return JSON.stringify(await village('status'));
       }},
-    village_manage: {description: 'Captain in Build: prepare a specialist creation, revision, retirement or starting-map proposal. Does not create/activate a resident or publish a map. Owner final review is separate in Village Commons. Reuse existing residents first. payload_json contains operation=create/revise/retire/map, spec, reason, and resident for maps. No private grants, models, tools or approval actions.',
+    village_manage: {description: 'Captain in Build: prepare a specialist creation, revision, retirement or starting-map proposal. Does not create/activate a resident or publish a map. Owner final review is separate in Village Commons. Reuse existing residents first. payload_json contains operation=create/revise/retire/map, spec, reason, and resident for maps. Create example: {"operation":"create","spec":{"id":"writer.humaniser","parent":"writer.general","role":"writer","tags":["humaniser","editing"],"instruction":"Preserve meaning while editing","status":"active"},"reason":"Recurring editing work"}. Map spec contains fast_access, glossary and preferred_sources. No private grants, models, tools or approval actions.',
       args: {payload_json: {type: 'string', maxLength: 12000}},
       async execute(args, context) {
         if (Object.keys(args).some(k => k !== 'payload_json')) fail('unknown management fields');
