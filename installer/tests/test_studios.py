@@ -113,7 +113,7 @@ class StudioTests(unittest.TestCase):
 
     def test_resident_tools_follow_the_advertised_paths_and_memory_review(self):
         lead=self.approve(self.s.prepare_staff(self.i)[0]['id'])['resident']
-        row=dict(id='fixture',institution=self.i,project=self.p['project'],settings=json.dumps(dict(actor=lead)))
+        row=dict(id='fixture',institution=self.i,project=self.p['project'],kind='work',settings=json.dumps(dict(actor=lead)))
         progress=dict(notes='')
         result,_=self.c.work_action(row,progress,dict(action='read',args=dict(path='game.c')))
         self.c.work_action(row,progress,dict(action='edit',args=dict(path='new.c',text='int new_value;',expected='')))

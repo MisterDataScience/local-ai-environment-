@@ -316,7 +316,7 @@ class Workbench:
         finding=dict(category=category,text=bounded(text,1200,'finding'),created=int(time.time()))
         for record in rows:
             record['findings']=(record.get('findings',[])+[finding])[-64:];record['updated']=int(time.time())
-            self.write_evidence(dict(institution=iid,build=record['build']),record)
+            self.write_evidence(dict(institution=iid,project=pid,build=record['build']),record)
         return dict(category=category,evidence=evidence_ids,saved=True)
 
     def recent_evidence(self,iid,pid,limit=20):
