@@ -167,6 +167,7 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
     captain = captain_settings(config)
     if captain['enabled']:
         roles = dict(roles, coordinator=captain['model_id'])
+    roles = dict(roles, essay_document=roles['document'], scaffold_document=roles['document'])
     plugin = root / 'control/opencode-team.mjs'
     if not plugin.is_file():
         raise RuntimeError('Model team policy missing. Rerun the installer.')
@@ -176,52 +177,21 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
         'ledgerPath': str(root / 'work-agent/state/team-budget.json'), 'roles': roles,
         'modeToken': (str(status['instance_id']) + ':' + str(status['epoch']) + ':' + mode) if status else None}]]
     # Task remains denied until the policy plugin successfully initializes.
-    routing = ('You coordinate a local team. Answer routine tasks directly. Use analyst for difficult '
-               'reasoning, planning and synthesis; coder for code design or proposed fixes. '
-               'Delegate only when useful, with a focused objective and relevant evidence. '
-               'At most two specialist attempts per user turn, including one retry for a concrete failure. '
-               'Wait for each result. Never send the whole chat. Use the task tool JSON handoff schema. '
-               'Preserve explicit requirements as exact source_quote/requirement pairs in the acceptance checklist. '
-               'Label derived criteria with an empty source_quote. Separate facts, assumptions and unknowns. '
-               'Include relative file paths/symbols and expected test commands. Do not weaken criteria on retry. '
-               'Read each returned full_report and check every acceptance item before claiming completion. '
-               'needs_attention, unmet, blocked or unverified items must remain explicitly unresolved. '
-               'The analyst has no tools. The coder can inspect project files; in Build it can edit and '
-               'run tests using native approval prompts. In Plan its delegation is read-only. '
-               'For coding work give the coder file references, acceptance criteria and a bounded scope; '
-               'let it inspect, implement and test instead of rewriting its code yourself. '
-               'Wait for its result before changing the same files. Never claim a proposed test was executed. '
-               'After delegation, use the result without unnecessary additional specialist review. '
-               'For explicit image/video requests, call local_image/local_video with a focused text prompt. '
-               'These use the existing serial media backend and native permission prompts. Images require Normal or Max; '
-               'videos require Max and produce short silent clips. At most two media attempts per user turn, separate '
-               'from specialist attempts. Wait for active work before generating. Never retry failed/unknown jobs '
-               'automatically. Return the exact asset links from the tool. To inspect generated pixels, transfer '
-               'the image with projectfiles_transfer_file and use projectvision_inspect_image. Claim only observed details. '
-               'Do not send media work to coder or analyst, change modes, or invent output links. '
-               'Use local_speech for explicit spoken-audio requests. Supply exact wording as prompt, voice default '
-               'unless the user names a registered voice, and language auto or the requested supported language. '
-               'Speech shares the two-media-attempt budget. The Qwen3-TTS Base model needs a registered WAV '
-               'reference and transcript via Configure Voice.command; it has no preset voices or voice-design '
-               'instructions. Never invent speaker IDs or claim to have listened to the audio.')
-    routing += (' When the explicit current user message starts with ESSAY_EDIT, call task with subagent_type document, '
-                'description Essay copyedit, prompt {}. The host supplies the exact original and permissions. '
-                'Do not edit it yourself, send it to coder, split it across new turns or relax acceptance. '
-                'Only a concrete failed attempt permits one retry with prompt {\"retry_failure\":\"reason\"}. '
-                'Return the saved original, edited and notes paths and actual review status. review_required '
-                'needs author review; needs_attention or incomplete is not a finished edit. No automatic research. '
-                'For ordinary requests do not activate essay mode. Tell the user to use Edit Essay.command or an ESSAY_EDIT text message with JSON '
-                'containing draft and optional author_request, constraints, source_material, reorder and randomiser. '
-                'Long essays need a separately scoped user continuation, not silent truncation or extra calls.')
-    routing += (' An explicit REVERSE_SCAFFOLD user message activates reverse essay scaffolding only. '
-        'For model stages call task document with prompt {} and description Reverse scaffold stage. '
-        'The host supplies the exact stage, sources and approvals. Never add stages, answers or editing. '
-        'If a synthetic host result is supplied, report it without any tool call. '
-        'Report the artifact, status and approval hash. Stop at author review; never approve an artifact yourself. '
-        'One retry may repair a concrete failure in the same stage, not process another chunk or stage. '
-        'Stage 7A produces a research plan. Source acquisition is a separately authorised client/coordinator operation. '
-        'Never claim to have searched, downloaded or checked absent source passages. '
-        'For ordinary requests do not enable this workflow; use Scaffold Essay.command or the documented explicit text request.')
+    routing = (
+        'You coordinate a local team. Answer routine tasks directly. '
+        'Use analyst for difficult reasoning, planning and synthesis; coder for code design or proposed fixes. '
+        'Delegate a bounded objective with relevant evidence and acceptance criteria using the task schema. '
+        'Never send the whole chat. Native task permits two attempts per user turn, including one concrete-failure retry. '
+        'Keep the original checklist on retry. Wait for results before touching the same files. '
+        'Analyst is tool-free; coder inspects files and may edit/test only in Build with native approval. '
+        'Use the coder result without redundant reimplementation or review. Read its full_report and check every '
+        'acceptance item before claiming completion; unresolved or unverified items stay open. '
+        'Use local_image, local_video or local_speech only for explicit media requests. Follow their schemas; '
+        'wait for active work and never retry failed or unknown media automatically. Return exact asset links. '
+        'Use projectvision_inspect_image to inspect pixels; do not claim unseen or unheard results. '
+        'ESSAY_EDIT and REVERSE_SCAFFOLD activate host-controlled document workflows only when explicitly requested. '
+        'Follow the host directive for that turn; ordinary document work uses /document. '
+        'Never enable these workflows implicitly or approve their artifacts yourself.')
     if captain['enabled']:
         routing = routing.replace(
             'Use analyst for difficult reasoning, planning and synthesis; coder for code design or proposed fixes.',
@@ -229,11 +199,13 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
     for name in ('plan', 'build'):
         settings['agent'][name].update(model=coordinator, prompt=routing,
             permission={'task': 'deny'})
-    settings['agent']['plan']['permission'].update(edit='deny', bash='ask')
+    settings['agent']['plan']['permission'].update(edit='deny', write='deny', apply_patch='deny', bash='ask')
     descriptions = {'analyst': 'Focused reasoning, planning and evidence synthesis',
                     'coder': 'Inspect project code, implement bounded fixes and run relevant tests with approval',
-                    'document': 'Read and summarise supplied text using the configured document profile'}
-    for role in ('analyst', 'coder', 'document'):
+                    'document': 'Read and summarise supplied text using the configured document profile',
+                    'essay_document': 'Copyedit an explicit ESSAY_EDIT request',
+                    'scaffold_document': 'Process one explicit reverse-scaffolding stage'}
+    for role in ('analyst', 'coder', 'document', 'essay_document', 'scaffold_document'):
         settings['agent'][role] = {
             'description': descriptions[role],
             'mode': 'all',
@@ -245,11 +217,13 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
                        'For delegated work follow the supplied return_format exactly, addressing every acceptance ID. '
                        'Keep delegated results within 10000 characters; preserve essential code and caveats.')}
     essay_prompt = (root / 'control/essay-edit-prompt.txt').read_text()
-    settings['agent']['document']['prompt'] += ('\nOnly when a delegated handoff contains essay_mode=copyedit-v1, apply the following installed instructions. '
-        'For ordinary /document requests retain the normal read/summarise behaviour.\n' + essay_prompt)
     scaffold_prompt = (root / 'control/reverse-scaffold-prompt.txt').read_text()
-    settings['agent']['document']['prompt'] += ('\nOnly for a delegated scaffold_mode=reverse-v1 handoff, use this reverse-scaffolding prompt instead of essay editing. '
-        'Normal document and essay-edit tasks must not run this workflow.\n' + scaffold_prompt)
+    document_prompt = settings['agent']['document']['prompt']
+    for name, mode_name, workflow_prompt in (
+            ('essay_document', 'ESSAY_EDIT', essay_prompt),
+            ('scaffold_document', 'REVERSE_SCAFFOLD', scaffold_prompt)):
+        settings['agent'][name].update(mode='subagent', hidden=True,
+            prompt=document_prompt + '\nMode: ' + mode_name + ' only. Follow the host-supplied contract.\n' + workflow_prompt)
     settings['agent']['coder'].update(steps=12,
         permission={'*': 'deny', 'read': {'*': 'allow', '*.env': 'deny', '*.env.*': 'deny'},
                     'glob': 'allow', 'grep': 'allow', 'edit': 'ask', 'bash': 'ask',
