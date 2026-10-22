@@ -40,6 +40,19 @@ async function fixture(t) {
   return { hooks, call, before, after, client, options, messages, session, ledgerPath, directory: root };
 }
 
+test('workflow headers use bounded agent labels without carrying session content', async t => {
+  const f = await fixture(t);
+  for (const [agent, expected] of [['plan', 'captain'], ['build', 'captain'], ['analyst', 'analyst'],
+    ['essay_document', 'essay'], ['compaction', 'compaction'], ['captain-reviewer', 'worker.reviewer'],
+    ['title', 'maintenance'], ['unknown', undefined], ['constructor', undefined]]) {
+    const output = { headers: { existing: 'retained' } };
+    await f.hooks['chat.headers']({ agent, sessionID: 'PRIVATE SESSION' }, output);
+    assert.equal(output.headers['X-Local-AI-Workflow'], expected);
+    assert.equal(output.headers.existing, 'retained');
+    assert(!JSON.stringify(output).includes('PRIVATE SESSION'));
+  }
+});
+
 test('two bounded native handoffs, literal evidence, then stop', async t => {
   const f = await fixture(t);
   const first = f.call('one'); await f.before(first);

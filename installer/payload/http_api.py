@@ -165,6 +165,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(200, self.server.engine.mode_status())
         if path == "/control/context":
             return self.json_response(200, self.server.engine.context_status())
+        if path == '/control/usage':
+            return self.json_response(200, self.server.engine.usage.summary())
         if path == "/v1/models":
             return self.json_response(200, {"object": "list", "data": [
                 {"id": identifier, "name": preset["name"], "object": "model", "created": 0,
@@ -326,6 +328,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError('The request body must be a JSON object.')
             body.pop('_streamed', None)
+            body['usage_workflow'] = self.headers.get('X-Local-AI-Workflow', body.get('usage_workflow'))
             stream = Stream() if body.get('stream') else None
             future = self.server.engine.submit(body, stream=stream) if stream else self.server.engine.submit(body)
         except (ValueError, RuntimeError, TimeoutError) as error:

@@ -81,9 +81,17 @@ def verify(root, config):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', type=Path, required=True)
+    parser.add_argument('--usage', action='store_true', help='Print recorded workflow token usage without running acceptance')
     args = parser.parse_args()
     root = args.root.expanduser().resolve()
     config = json.loads((root / 'control/config.json').read_text())
+    if args.usage:
+        from urllib.request import build_opener, ProxyHandler
+        from context_settings import NoRedirect
+        request = Request('http://127.0.0.1:8001/control/usage', headers={'Authorization': 'Bearer ' + config['api_key']})
+        with build_opener(ProxyHandler({}), NoRedirect()).open(request, timeout=5) as response:
+            print(json.dumps(json.load(response), indent=2))
+        return
     result = verify(root, config)
     (root / 'captain-acceptance-report.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))

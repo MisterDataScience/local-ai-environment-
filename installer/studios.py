@@ -426,7 +426,10 @@ class Studios:
                 with cx:cx.execute('UPDATE studio_jobs SET turns=turns+1,units=units+? WHERE id=?',(units,jid))
             guard=Turn(self.deadlines[jid]);self.guards[jid]=guard
         if image:content=[dict(type='text',text=content),dict(type='image_url',image_url=dict(url='data:image/png;base64,'+image))]
-        body=dict(model=self.engine.captain['model_id'],messages=[dict(role='system',content=system),dict(role='user',content=content)],max_tokens=2048,inference_only=True)
+        phase=settings.get('workflow_phase')
+        usage_phase=phase if phase in ('planning','middle','implementation','verification') else {
+            'manager':'management','adaptation-plan':'planning','founding':'founding','curation':'learning'}.get(row['kind'],'other')
+        body=dict(model=self.engine.captain['model_id'],messages=[dict(role='system',content=system),dict(role='user',content=content)],max_tokens=2048,inference_only=True,usage_workflow='studio.'+usage_phase)
         started=time.monotonic()
         try:
             answer=self.engine.submit(body,studio_turn=guard).result()

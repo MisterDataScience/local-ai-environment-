@@ -44,6 +44,30 @@ Recognised explicit Ollama /api/chat HTTP 400/413 context errors become HTTP 400
 
 Ollama's prompt_eval_count and eval_count become OpenAI usage fields in JSON and the final SSE chunk. done_reason=length becomes finish_reason=length. Partial text is preserved without inserting warning prose or automatically continuing the answer. Completed tool calls remain tool_calls unless the backend reports a length cutoff. Token counts alone are not treated as proof of cutoff.
 
+## Usage by workflow
+
+The authenticated `GET /control/usage` endpoint reports cumulative input and output
+counts by workflow, resource mode and text backend. On an installed system, run
+`control/.venv/bin/python control/captain_check.py --root /path/to/LocalAI --usage`
+to print the report without starting acceptance checks or inference.
+
+Ollama and llama.cpp counts are labelled measured. Missing counts on completed
+responses use a separately labelled UTF-8 JSON bytes / four heuristic, rounded up.
+This includes visible text and tool envelopes, not a tokenizer or billing figure.
+Image input and hidden reasoning are not estimated. Failed attempts without backend
+counts remain unknown. Input and output coverage are reported independently; measured,
+estimated and unknown values must not be added together as measured usage.
+
+`logs/model-usage.sqlite` stores only cumulative integer rollups under fixed labels,
+not prompts, replies, session identifiers or per-request events. Workflow labels
+from OpenCode agent headers and batch clients are caller-reported metadata, never
+permissions. Registered internal Studio, Commons and founding work is host-labelled.
+Unrecognised or absent labels become ordinary chat. Storage failures do not stop
+inference; the report exposes storage availability and requests lost since startup.
+Counts cover actual text-backend attempts, once per attempt including streaming;
+speech/media generation and rejected requests before inference are excluded.
+There are no extra model calls, and context enforcement continues to use the backend.
+
 ## Remaining limits
 
 Summaries are lossy. Important facts can disappear from the model's working context even though the stored original chat remains available. This is context reduction, not perfect persistent memory.
