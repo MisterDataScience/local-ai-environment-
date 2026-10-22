@@ -1,6 +1,6 @@
 # Required LOCAL AI capabilities
 
-Status: integrated implementation under review in draft PR #4. Not deployed or accepted on the owner's Mac. Keep this distinction when describing completion.
+Status: integrated on `main`; owner-Mac end-to-end acceptance remains pending. The code is present, but native performance, device behavior and account-bound approvals are not established by authoring tests.
 
 ## Vision
 
