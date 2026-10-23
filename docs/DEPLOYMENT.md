@@ -1,13 +1,16 @@
 # Deploy LOCAL AI
 
-Use `main` and `downloads/Mac-Local-AI-Automated-Installer.zip`. This is the only
-current installer package. It includes both formerly separate capability updates
-and the audit corrections.
+Use `main` as the source of truth. The sole package path is
+`downloads/Mac-Local-AI-Automated-Installer.zip`, but its checked-in contents are
+an older snapshot and do not include all current source changes. Merging source
+does not rebuild it. See [release validation](RELEASE-VALIDATION.md#current-source-and-package-status)
+for the manual release gates and package/source verification.
 
 ## Installation or upgrade
 
 1. Stop LOCAL AI and the Work Agent. Leave Docker open if you use VPN web access.
-2. Download the current installer ZIP from the repository and extract it.
+2. Obtain a validated installer matching the intended source revision and extract it.
+   Do not assume the checked-in ZIP includes later source fixes.
 3. Open `Install Local AI.command` inside `mac-local-ai-installer` to install
    **the MiniCPM Captain profile** automatically, or run:
 
