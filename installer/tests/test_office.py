@@ -47,11 +47,13 @@ class OfficeTests(unittest.TestCase):
             self.assertEqual(settings['mcp']['aioffice']['type'], 'local')
             self.assertIn(str(project), settings['mcp']['aioffice']['command'])
             self.assertEqual(settings['agent']['plan']['permission']['aioffice_*'], 'deny')
-            self.assertNotIn('aioffice_office_edit', settings['agent']['plan']['permission'])
+            self.assertEqual(settings['agent']['plan']['permission']['aioffice_*'], 'deny')
             self.assertEqual(settings['agent']['build']['permission']['aioffice_office_edit'], 'ask')
             for role in ('coder','analyst','document'):
                 self.assertEqual(settings['agent'][role]['permission'], {'*': 'deny'})
-            self.assertEqual(settings['agent']['build']['permission']['aioffice_office_read'], 'allow')
+            self.assertEqual(settings['agent']['plan']['permission']['aioffice_office_read'], 'ask')
+            self.assertEqual(settings['agent']['build']['permission']['aioffice_office_read'], 'ask')
+            self.assertLess(len(office.PROMPT), 200)
 
     def test_environment_drops_account_keys_and_user_engine_overrides(self):
         with patch.dict(os.environ, {'LOCAL_AI_GATEWAY_KEY':'secret','OPENAI_API_KEY':'secret',

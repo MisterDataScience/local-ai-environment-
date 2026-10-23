@@ -381,6 +381,29 @@ test('coordinator speech supplies only exact text and registered voice options',
   await assert.rejects(f.hooks.tool.local_speech.execute({ prompt: 'Hello', voice: '../file', language: 'English' }, context), /registered voice/);
 });
 
+test('speech keeps voice and language optional in the pinned legacy tool schema', async t => {
+  const f = await fixture(t);
+  const output = { jsonSchema: { type: 'object', properties: {
+    prompt: { type: 'string' }, voice: { type: 'string' }, language: { type: 'string' },
+  }, required: ['prompt', 'voice', 'language'] } };
+  await f.hooks['tool.definition']({ toolID: 'local_speech' }, output);
+  assert.deepEqual(output.jsonSchema.required, ['prompt']);
+  assert.deepEqual(Object.keys(output.jsonSchema.properties), ['prompt', 'voice', 'language']);
+});
+
+test('speech defaults work when optional voice and language are omitted', async t => {
+  const f = await fixture(t), { context } = mediaCall(f, 'speech-defaults');
+  f.messages.at(-1).parts[0].tool = 'local_speech';
+  let posted;
+  context.ask = async () => {};
+  globalThis.fetch = async (url, options) => url.endsWith('/control/mode')
+    ? { ok: true, json: async () => ({ instance_id: 'backend', epoch: 0, mode: 'normal' }) }
+    : { ok: true, json: async () => { posted = JSON.parse(options.body); return { choices: [{ message: { content: '[Speech](http://localhost/audio.wav)' } }] }; } };
+  const result = JSON.parse(await f.hooks.tool.local_speech.execute({ prompt: 'Hello there' }, context));
+  assert.deepEqual(posted.speech, {});
+  assert.equal(result.status, 'completed');
+});
+
 async function essayTurn(f,id='essay-user',draft='The result may improve by 10%.') {
   const message={info:{role:'user',id},parts:[{type:'text',text:'ESSAY_EDIT\n'+JSON.stringify({draft})}]};
   f.messages.push(message);await f.hooks['chat.message']({sessionID:'session1'},{message:message.info,parts:message.parts});

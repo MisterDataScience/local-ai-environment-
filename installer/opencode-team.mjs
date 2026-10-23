@@ -88,8 +88,8 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       async execute(args, context) {
         if (!args || Object.keys(args).some(k => !(kind === 'speak' ? ['prompt', 'voice', 'language'] : ['prompt']).includes(k)) || typeof args.prompt !== 'string' ||
             !args.prompt.trim() || args.prompt.length > limit) fail('media requires a prompt of 1–' + limit + ' characters');
-        if (kind === 'speak' && (typeof args.voice !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(args.voice) ||
-            !['auto', 'English', 'Chinese', 'Japanese', 'Korean', 'German', 'French', 'Russian', 'Portuguese', 'Spanish', 'Italian'].includes(args.language))) fail('speech requires a registered voice ID and language');
+        if (kind === 'speak' && ((args.voice !== undefined && (typeof args.voice !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(args.voice))) ||
+            (args.language !== undefined && !['auto', 'English', 'Chinese', 'Japanese', 'Korean', 'German', 'French', 'Russian', 'Portuguese', 'Spanish', 'Italian'].includes(args.language)))) fail('speech has an invalid registered voice ID or language');
         const input = { sessionID: context.sessionID, callID: context.callID };
         await identity(input);
         let status = await checkMode();
@@ -118,7 +118,10 @@ export default async function LocalTeam({ client, directory }, options = {}) {
             headers: { Authorization: 'Bearer ' + process.env.LOCAL_AI_GATEWAY_KEY, 'Content-Type': 'application/json' },
             signal: AbortSignal.any([AbortSignal.timeout(4200000), ...(context.abort ? [context.abort] : [])]),
             body: JSON.stringify({ model: roles.coordinator, stream: false, media_mode_token: modeToken,
-              ...(kind === 'speak' ? { speech: { voice: args.voice, language: args.language } } : {}),
+              ...(kind === 'speak' ? { speech: {
+                ...(args.voice === undefined ? {} : { voice: args.voice }),
+                ...(args.language === undefined ? {} : { language: args.language }),
+              } } : {}),
               messages: [{ role: 'user', content: '/' + kind + ' ' + args.prompt.trim() }] }),
           });
           const body = await response.json();
@@ -480,6 +483,12 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         localTeamReportSha256: artifact.sha256 };
     },
     async 'tool.definition'(input, output) {
+      // OpenCode v1.18.34 marks every legacy `args` property required by
+      // default. Speech has optional voice/language; only prompt is required.
+      if (input.toolID === 'local_speech' && output.jsonSchema?.properties) {
+        output.jsonSchema = { ...output.jsonSchema, required: ['prompt'] };
+        return;
+      }
       if (input.toolID !== 'task') return;
       output.description += '\nLocal team: at most two foreground attempts per user turn. Analyst or coder; document only for an explicit ESSAY_EDIT or REVERSE_SCAFFOLD user request. For document, prompt is {} or {retry_failure:concrete failure}; host supplies the preserved draft, permissions and contract. Do not construct or change its evidence. Other roles: '
         + 'prompt must be JSON with string fields objective, constraints, evidence, completed, remaining, result. '

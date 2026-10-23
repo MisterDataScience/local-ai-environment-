@@ -57,12 +57,13 @@ DESIGN_INTEGRATION_AND_PRODUCTION_PLANNING_SYSTEM=WORK_SYSTEM+'''\nYou are the t
 TESTER_SYSTEM=WORK_SYSTEM+'''\nYou are an independent, read-only Playtest Reviewer. Use workflow_read to page through every supplied test checkpoint and linked report section. Reproduce each test and implementation claim against the build; also run bounded exploratory checks. Keep Observed, Inferred and Unverified distinct. Record only reproducible issues with build identity, seed, inputs and evidence. Subjective questions remain Unverified and route to human review. In staged Review, submit the complete structured result through workflow_verify; its schema is in available_actions and it is the sole Playtest report and finding record. Do not use generic finding. Use verified only for a successful loaded build, passing supplied tests and no implementation blocker.'''
 TESTER_SYSTEM+='''\nBefore verified, use build (or select a current existing build), tests, create_machine, run_machine with positive steps, then inspect. The host must record passing authored assertions, input execution and a passing image review of the same machine and frame in this assignment. Use each cartridge test name as its report test_id and cite its returned assertion evidence ID. A stale build, invented ID, empty assertion, unavailable image or visible failure cannot satisfy acceptance. For visible failures use return_to_implementation; for missing visual capability or unresolved subjective questions use human_review_required. Inspect uses offscreen PNG rendering and needs no monitor.'''
 
-CURATION_SYSTEM='''You are the Studio Lead reviewing one submitted studio learning record.
-Check whether its lesson follows from the submitted evidence, is useful to a later project
-and is stated with appropriate uncertainty. Do not invent corroboration. Return JSON only:
-{"decision":"accept|reject","title":"...","lesson":"..."}. Use a short reason in
-lesson when rejecting. The host prevents self-review and stores accepted lessons in the
-studio archive for later resident packets.'''
+CURATION_SYSTEM='''You are the Studio Lead reviewing a small batch of submitted studio learning records.
+Review each independently: check whether its lesson follows from its submitted evidence,
+is useful to a later project and is stated with appropriate uncertainty. Do not invent
+corroboration or transfer evidence between records. Return JSON only:
+{"reviews":[{"learning_id":"exact supplied ID","decision":"accept|reject","title":"...","lesson":"..."}]}
+Return exactly one review for each supplied record. Use a short reason in lesson when
+rejecting. The host prevents self-review and stores accepted lessons in the studio archive.'''
 
 
 class GitHubRedirect(HTTPRedirectHandler):
@@ -338,12 +339,26 @@ class Studios:
                 except (RuntimeError,ValueError,PermissionError):continue
 
     def queue_curation(self,iid,pid,thread='',assignment_id=''):
-        with self.store.db() as cx:
-            lead=cx.execute("SELECT resident FROM institution_members WHERE institution=? AND title='Studio Lead'",(iid,)).fetchone()
-            pending=cx.execute("SELECT 1 FROM studio_learnings WHERE institution=? AND project=? AND state='pending' AND actor<>? LIMIT 1",(iid,pid,lead[0] if lead else '')).fetchone() if lead else None
-        if not lead or not pending:return False
-        self.start(dict(institution=iid,kind='curation',project=pid,resident=lead[0],minutes=20,turns=24,thread_id=thread,followup_assignment=assignment_id,queue=True))
-        return True
+        with self.lock:
+            with self.store.db() as cx:
+                lead=cx.execute("SELECT resident FROM institution_members WHERE institution=? AND title='Studio Lead'",(iid,)).fetchone()
+                pending=cx.execute("SELECT 1 FROM studio_learnings WHERE institution=? AND project=? AND state='pending' AND actor<>? LIMIT 1",(iid,pid,lead[0] if lead else '')).fetchone() if lead else None
+                if not lead or not pending:return False
+                queued=cx.execute("SELECT id,settings FROM studio_jobs WHERE institution=? AND project=? AND kind='curation' AND state IN ('queued','paused') ORDER BY created,rowid LIMIT 1",(iid,pid)).fetchone()
+                if queued:
+                    settings=json.loads(queued['settings'])
+                    followups=settings.get('followups')
+                    if not isinstance(followups,list):
+                        followups=[]
+                        if settings.get('thread_id') or settings.get('followup_assignment'):
+                            followups.append(dict(thread=settings.get('thread_id',''),assignment=settings.get('followup_assignment','')))
+                    followup=dict(thread=thread,assignment=assignment_id)
+                    if followup not in followups:followups.append(followup)
+                    settings['followups']=followups
+                    with cx:cx.execute('UPDATE studio_jobs SET settings=? WHERE id=? AND state IN (\'queued\',\'paused\')',(encoded(settings),queued['id']))
+                    return True
+            self.start(dict(institution=iid,kind='curation',project=pid,resident=lead[0],minutes=20,turns=24,thread_id=thread,followup_assignment=assignment_id,queue=True))
+            return True
 
     def contact(self,iid,sender,body,project=''):
         institutions=[x for x in self.store.view()['institutions'] if x['state']=='active']
@@ -933,17 +948,27 @@ class Studios:
             progress['phase']='complete'
             self.store.event(iid,row['id'],curator,'retrospective',dict(note=note,accepted=accepted,rejected=rejected,learning_ids=[x['id'] for x in accepted_lessons]))
             return progress,True
-        learning=candidates[0]
-        packet=dict(learning_id=learning['id'],project=pid,work_order=learning['work_order'],scope=learning['scope'],lesson=learning['lesson'],submitted_evidence=learning['evidence'])
+        batch=candidates[:4]
+        packet=dict(project=pid,records=[dict(learning_id=learning['id'],work_order=learning['work_order'],scope=learning['scope'],lesson=learning['lesson'],submitted_evidence=learning['evidence']) for learning in batch])
         answer=self.json_answer(self.infer(row['id'],CURATION_SYSTEM,packet))
-        if not isinstance(answer,dict) or set(answer)!={'decision','title','lesson'} or answer.get('decision') not in ('accept','reject'):
+        reviews=answer.get('reviews') if isinstance(answer,dict) and set(answer)=={'reviews'} else None
+        expected={learning['id'] for learning in batch}
+        if not isinstance(reviews,list) or len(reviews)!=len(batch) or any(
+            not isinstance(review,dict) or set(review)!={'learning_id','decision','title','lesson'} or
+            review.get('decision') not in ('accept','reject') or review.get('learning_id') not in expected
+            for review in reviews) or {review['learning_id'] for review in reviews}!=expected:
             raise ValueError('Studio Lead curation response did not match its bounded schema')
-        result=self.store.curate_learning(iid,pid,curator,learning['id'],answer['decision'],answer.get('title',''),answer.get('lesson',''))
-        progress.setdefault('processed',[]).append(learning['id'])
-        progress['accepted']=progress.get('accepted',0)+(result['state']=='accepted')
-        progress['rejected']=progress.get('rejected',0)+(result['state']=='rejected')
-        if result['state']=='accepted':progress.setdefault('accepted_lessons',[]).append(dict(id=learning['id'],title=answer['title'],lesson=answer['lesson']))
-        progress['last_result']=dict(learning_id=learning['id'],state=result['state'],artifact=result.get('artifact',''))
+        by_id={review['learning_id']:review for review in reviews}
+        results=[]
+        for learning in batch:
+            review=by_id[learning['id']]
+            result=self.store.curate_learning(iid,pid,curator,learning['id'],review['decision'],review['title'],review['lesson'])
+            progress.setdefault('processed',[]).append(learning['id'])
+            progress['accepted']=progress.get('accepted',0)+(result['state']=='accepted')
+            progress['rejected']=progress.get('rejected',0)+(result['state']=='rejected')
+            if result['state']=='accepted':progress.setdefault('accepted_lessons',[]).append(dict(id=learning['id'],title=review['title'],lesson=review['lesson']))
+            results.append(dict(learning_id=learning['id'],state=result['state'],artifact=result.get('artifact','')))
+        progress['last_result']={'reviews':results}
         return progress,False
 
     def run(self,jid):
@@ -954,7 +979,7 @@ class Studios:
                     row=dict(cx.execute('SELECT * FROM studio_jobs WHERE id=?',(jid,)).fetchone())
                 if row['state']!='running':break
                 if time.monotonic()>=self.deadlines[jid]:raise RuntimeError('Session time allowance exhausted')
-                progress=json.loads(row['progress']);waiting=False
+                progress=json.loads(row['progress']);waiting=False;result=None
                 settings=json.loads(row['settings'])
                 if row['kind']=='manager' and settings.get('conversation_id'):
                     self.store.update_message(settings['conversation_id'],state='running',job=jid)
@@ -984,18 +1009,30 @@ class Studios:
                     except (ValueError,RuntimeError,PermissionError,KeyError,TypeError,OSError) as error:
                         permitted=ROLE_ACTIONS[self.permission_profile(row)]
                         attempted=value.get('action') if isinstance(value,dict) else None
+                        arguments=value.get('args') if isinstance(value,dict) else None
+                        signature=[type(error).__name__,str(error)[:2000],attempted if isinstance(attempted,str) else None,
+                                   json.dumps(arguments,sort_keys=True,separators=(',',':'))]
+                        previous=progress.get('action_failure',{})
+                        repeated=previous.get('signature')==signature
+                        progress['action_failure']={'signature':signature,'count':previous.get('count',0)+1 if repeated else 1}
                         result,done=dict(error=str(error)[:2000],error_type=type(error).__name__,
                             attempted_action=attempted if isinstance(attempted,str) else None,
-                            allowed_actions=sorted(permitted),retryable=True,
-                            instruction='Correct the tool arguments or choose a permitted action; do not claim success.'),False
+                            allowed_actions=sorted(permitted),retryable=not repeated,
+                            instruction=('The same action, arguments and error repeated. Stop and report this blocker; do not retry.'
+                                         if repeated else 'Correct the tool arguments or choose a permitted action; do not claim success.')),False
+                        if repeated:
+                            result['repeated_failure']=True
                         self.store.event(row['institution'],jid,json.loads(row['settings'])['actor'],'tool_error',result)
+                    else:
+                        progress.pop('action_failure',None)
                     progress['last_result']=result
                     waiting=bool(isinstance(result,dict) and result.get('parent') and result.get('independent_worker'))
                 progress['elapsed']+=time.monotonic()-started
                 with self.store.db() as cx,cx:
-                    cx.execute("UPDATE studio_jobs SET progress=?,remaining=?,state=CASE WHEN state='running' THEN ? ELSE state END WHERE id=?",(encoded(progress),max(0,self.deadlines[jid]-time.monotonic()),'complete' if done else 'running',jid))
+                    halted=bool(isinstance(result,dict) and result.get('repeated_failure'))
+                    cx.execute("UPDATE studio_jobs SET progress=?,remaining=?,state=CASE WHEN state='running' THEN ? ELSE state END,reason=CASE WHEN ? THEN ? ELSE reason END WHERE id=?",(encoded(progress),max(0,self.deadlines[jid]-time.monotonic()),'error' if halted else 'complete' if done else 'running',int(halted),'Repeated identical Studio action failure; durable blocker saved in job progress.',jid))
                     if waiting:cx.execute("UPDATE studio_jobs SET state='waiting',reason='Waiting for the current specialist report' WHERE id=? AND state='running'",(jid,))
-                if done or waiting:break
+                if done or waiting or halted:break
         except Exception as error:
             with self.store.db() as cx,cx:cx.execute("UPDATE studio_jobs SET state=CASE WHEN state='running' THEN 'error' ELSE state END,reason=?,remaining=? WHERE id=?",(str(error)[:1000],max(0,self.deadlines.get(jid,time.monotonic())-time.monotonic()),jid))
         finally:
@@ -1019,12 +1056,17 @@ class Studios:
                             self.enqueue_thread_update(final['institution'],final['project'],thread,label+assignment_id+' '+(report['state'] if report else state)+'. Report: '+(report['result'] if report else final['reason']))
                 elif final['kind'] in ('work','manager') and state=='complete' and final['project']:
                     self.queue_curation(final['institution'],final['project'],settings.get('thread_id',''))
-                if final['kind']=='curation' and state=='complete' and settings.get('thread_id'):
-                    assignment_id=settings.get('followup_assignment','')
-                    with self.store.db() as cx:
-                        report=cx.execute('SELECT result FROM studio_delegations WHERE id=?',(assignment_id,)).fetchone() if assignment_id else None
-                    prefix=('Assignment '+assignment_id+' completed. Report: '+(report[0] if report else 'No report recorded.')+'\n') if assignment_id else ''
-                    self.enqueue_thread_update(final['institution'],final['project'],settings['thread_id'],prefix+'Studio Lead curation: '+progress.get('notes','')[-2500:])
+                if final['kind']=='curation' and state=='complete':
+                    followups=settings.get('followups')
+                    if not isinstance(followups,list):
+                        followups=[dict(thread=settings.get('thread_id',''),assignment=settings.get('followup_assignment',''))]
+                    for followup in followups:
+                        thread=followup.get('thread','');assignment_id=followup.get('assignment','')
+                        if not thread:continue
+                        with self.store.db() as cx:
+                            report=cx.execute('SELECT result FROM studio_delegations WHERE id=?',(assignment_id,)).fetchone() if assignment_id else None
+                        prefix=('Assignment '+assignment_id+' completed. Report: '+(report[0] if report else 'No report recorded.')+'\n') if assignment_id else ''
+                        self.enqueue_thread_update(final['institution'],final['project'],thread,prefix+'Studio Lead curation: '+progress.get('notes','')[-2500:])
             except (ValueError,RuntimeError,PermissionError,KeyError,TypeError):
                 pass
             with self.lock:self.jobs.pop(jid,None);self.guards.pop(jid,None);self.deadlines.pop(jid,None)
