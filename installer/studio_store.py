@@ -709,7 +709,7 @@ class Store:
                 if not live:raise PermissionError('Session paused or stopped before recording execution')
             delegation=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND assignee=? AND workflow=? AND phase='verification' AND mode='test' AND state='running'",(assignment,iid,actor,ref)).fetchone()
             wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND phase='verification' AND state='running'",(ref,iid)).fetchone()
-            if not delegation or not wf or delegation['project']!=wf['project']:raise PermissionError('Execution receipt needs the active independent Playtest assignment')
+            if not delegation or not wf or delegation['project']!=wf['project']:raise PermissionError('Execution receipt needs the active Playtest Department assignment')
             artifacts=json.loads(wf['artifacts']);acceptance=artifacts.get('acceptance',{})
             if acceptance.get('assignment')!=assignment:acceptance=dict(assignment=assignment)
             if kind=='build':acceptance=dict(assignment=assignment,build=payload)
@@ -725,7 +725,7 @@ class Store:
 
     def workflow_acceptance_missing(self,cx,wf,assignment):
         acceptance=json.loads(wf['artifacts']).get('acceptance',{})
-        if acceptance.get('assignment')!=assignment:return ['host-recorded execution by this independent Playtest assignment']
+        if acceptance.get('assignment')!=assignment:return ['host-recorded execution by this Playtest Department assignment']
         missing=[];build=acceptance.get('build') or {};tests=acceptance.get('tests') or {}
         row=cx.execute("SELECT * FROM studio_builds WHERE id=? AND project=? AND kind='cartridge' AND state='passed'",(build.get('id',''),wf['project'])).fetchone()
         current=sha(archive(files(self.path(wf['project']))))
@@ -781,7 +781,7 @@ class Store:
         with self.db() as cx,cx:
             delegation=cx.execute("SELECT * FROM studio_delegations WHERE id=? AND institution=? AND project=(SELECT project FROM studio_workflows WHERE id=? AND institution=?) AND assignee=? AND workflow=? AND phase='verification' AND mode='test' AND state='running'",(assignment,iid,ref,iid,actor,ref)).fetchone()
             wf=cx.execute("SELECT * FROM studio_workflows WHERE id=? AND institution=? AND project=? AND phase='verification' AND state='running'",(ref,iid,delegation['project'] if delegation else '')).fetchone()
-            if not delegation or not wf:raise PermissionError('Only the assigned independent Playtest Reviewer can record the active verification report')
+            if not delegation or not wf:raise PermissionError('Only the assigned Playtest Department reviewer can record the active verification report')
             if verdict=='verified':
                 missing=self.workflow_acceptance_missing(cx,wf,assignment)
                 if missing:raise ValueError('Verification requires '+ '; '.join(missing))
@@ -811,7 +811,7 @@ class Store:
             if not wf:raise PermissionError('No active Planning Department or Design Integration and Production Planning Department workflow step')
             if not cx.execute("SELECT 1 FROM studio_delegations WHERE workflow=? AND phase=? AND assignee=? AND state='running'",(ref,wf['phase'],actor)).fetchone():raise PermissionError('Only the assigned department resident can checkpoint this workflow')
             artifacts=json.loads(wf['artifacts']);required_review=artifacts.get('required_review_checkpoint','')
-            if wf['phase']=='middle' and required_review and review_id!=required_review:raise PermissionError('Revised Design Integration and Production Planning checkpoints must link the failed Playtest review')
+            if wf['phase']=='middle' and required_review and review_id!=required_review:raise PermissionError('Revised Design Integration and Production Planning Department checkpoints must link the failed Playtest review')
             if review_id and not any(r.get('id')==review_id and r.get('verdict') in ('return_to_middle','return_to_planning') for r in artifacts.get('verification_reports',[])):raise ValueError('Review link must name a retained return-to-planning or return-to-middle verification report')
             count=cx.execute('SELECT count(*) FROM studio_workflow_steps WHERE workflow=?',(ref,)).fetchone()[0]
             if count>=64:raise ValueError('Workflow checkpoint limit reached')
