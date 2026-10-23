@@ -1,5 +1,26 @@
 # Integrated release validation
 
+## Current source and package status
+
+The checked-in installer ZIP is an older release snapshot. Source bundles merged
+after it, including the reconciled Studio Lead workflow, smaller active prompts,
+incremental context and workflow usage counters, have not rebuilt that archive.
+The dated validation sections below describe their own snapshots, not current
+source or owner-Mac acceptance.
+
+The release workflow is manual-only. It publishes a replacement ZIP from `main`
+only when explicitly requested and after its Linux checks, native Captain runtime
+build and Apple PDF gates succeed. Hosted runner budget requires owner approval;
+a source merge does not dispatch the workflow. Earlier pull requests do not
+automatically have matching workflow artifacts. This documentation cleanup does
+not dispatch CI, rebuild a ZIP or establish native acceptance.
+
+`python3 scripts/build_installer.py --check` compares the existing archive's
+contents, permissions and manifest with the checked-out source. Failure on a stale
+archive is expected and must not be bypassed. A local build can verify package
+construction, but does not replace the native release gates. Consult the ZIP's
+per-file hashes, not just its historical release identifier or input revisions.
+
 ## C studio release, 20 October 2026
 
 Release `2026-10-20-village-studios-1` adds integrated institutions, private studio
