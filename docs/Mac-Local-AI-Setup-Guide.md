@@ -1,6 +1,13 @@
 # Local text, image and video AI on a 32GB Apple Silicon Mac
 
-Prepared 5 October 2026. Follow the numbered steps in order. This is a single-user setup for an Apple M-series Mac with **32GB total unified memory**. It is not a guide for an Intel Mac or a Mac with a separate 32GB graphics card.
+Historical manual baseline, prepared 5 October 2026. These steps describe the
+original Qwen3/serial-gateway system, not the current Captain installer. For a
+new installation or upgrade use [deployment](DEPLOYMENT.md) and check its package
+status first. Keep the instructions below as historical reference; do not apply
+them over an automated installation.
+
+This baseline targets a single-user Apple M-series Mac with **32GB total unified
+memory**, not an Intel Mac or a separate 32GB graphics card.
 
 ## Software chosen for you
 
