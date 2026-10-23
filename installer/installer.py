@@ -736,6 +736,9 @@ def main():
         logging.info("Stage 4/8: verified image/video model downloads")
         for relative, url, checksum in MODELS:
             download(url, root / "ComfyUI/models" / relative, checksum)
+        from pixelart_setup import install_if_selected as install_pixelart_models
+        if install_pixelart_models(root):
+            checkpoint(state, "pixelart-models-installed")
         logging.info("Stage 5/8: gateway and automatically configured chat UI")
         configuration = install_environments(root, args.uv, state)
         from workspace_setup import install_cryptomator, save_config
