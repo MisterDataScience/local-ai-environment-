@@ -68,6 +68,7 @@ class StudioTests(unittest.TestCase):
         engine=residents['Systems designer']
         workflow=self.s.start_workflow(self.i,self.p['project'],lead,'Adapt counter game','Extract one small portable-C experiment')
         ref=workflow['id'];project=self.p['project']
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase_label'],'Planning Department')
         with self.assertRaises(PermissionError):
             self.s.delegate(self.i,project,lead,developer,'Skip stages','',mode='delivery')
         plan=self.s.delegate(self.i,project,lead,designer,'Reverse scaffold','Map source architecture',mode='design',workflow=ref,phase='planning')
@@ -78,7 +79,7 @@ class StudioTests(unittest.TestCase):
         self.s.review_workflow_stage(self.i,ref,lead,'accept','Reviewed the durable department report.')
         workflow_view=self.s.workflow_view(self.i,ref)
         self.assertEqual(workflow_view['phase'],'middle')
-        self.assertEqual(workflow_view['phase_label'],'Design Integration and Production Planning')
+        self.assertEqual(workflow_view['phase_label'],'Design Integration and Production Planning Department')
         with self.assertRaises(PermissionError):
             self.s.delegate(self.i,project,lead,developer,'Skip test plan','',mode='delivery',workflow=ref,phase='implementation')
         test_plan_assignment=self.s.delegate(self.i,project,lead,test_planner,'Test plan','Define deterministic assertions.',mode='test-plan',workflow=ref,phase='middle')
@@ -86,6 +87,7 @@ class StudioTests(unittest.TestCase):
         self.s.finish_delegation(test_plan_assignment['id'],'complete','Test plan saved.')
         self.s.review_workflow_stage(self.i,ref,lead,'accept','Reviewed the durable department report.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'implementation')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase_label'],'Implementation Department')
         build=self.s.delegate(self.i,project,lead,developer,'Implement experiment','',mode='delivery',workflow=ref,phase='implementation')
         with self.assertRaises(PermissionError):
             self.s.delegate(self.i,project,developer,engine,'Unlinked implementation task','',mode='implementation')
@@ -121,6 +123,7 @@ class StudioTests(unittest.TestCase):
         self.s.finish_delegation(build['id'],'complete','Implementation report.')
         self.s.review_workflow_stage(self.i,ref,lead,'accept','Reviewed the durable department report.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'verification')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase_label'],'Playtest Department')
         implementation=self.s.workflow_view(self.i,ref)['artifacts']['implementation'][0]
         child_states={child['state'] for child in implementation['children']}
         self.assertEqual(child_states,{'complete','blocked'})
