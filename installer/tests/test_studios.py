@@ -95,7 +95,7 @@ class StudioTests(unittest.TestCase):
         original_start=self.c.start;started=[]
         self.c.start=lambda request:(started.append(request) or dict(id='queued-child-job'))
         try:
-            child_result,_=self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='delegate',args=dict(resident=engine,title='Implement one bounded update-loop change',notes='Follow the Design Integration and Production Planning checkpoints.',mode='implementation')))
+            child_result,_=self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='delegate',args=dict(resident=engine,title='Implement one bounded update-loop change',notes='Follow the Design Integration and Production Planning Department checkpoints.',mode='implementation')))
         finally:self.c.start=original_start
         child=self.s.team_status(self.i,project,developer,build['id'])['children'][0]
         self.assertEqual(child['id'],child_result['id']);self.assertEqual(child['mode'],'implementation')
@@ -162,7 +162,7 @@ class StudioTests(unittest.TestCase):
         self.s.save_workflow_step(self.i,workflow,project,designer,'Planning fixture','Saved scaffold for the blocked-child routing test.',[])
         self.s.finish_delegation(planning['id'],'complete','Scaffold saved.')
         self.s.review_workflow_stage(self.i,workflow,lead,'accept','Reviewed the durable department report.')
-        test_plan=self.s.delegate(self.i,project,lead,test_planner,'Design Integration and Production Planning test plan','Define observable acceptance checks.',mode='test-plan',workflow=workflow,phase='middle')
+        test_plan=self.s.delegate(self.i,project,lead,test_planner,'Design Integration and Production Planning Department test plan','Define observable acceptance checks.',mode='test-plan',workflow=workflow,phase='middle')
         self.s.save_workflow_step(self.i,workflow,project,test_planner,'Test-plan fixture','Saved checks for the blocked-child routing test.',[])
         self.s.finish_delegation(test_plan['id'],'complete','Test plan saved.')
         self.s.review_workflow_stage(self.i,workflow,lead,'accept','Reviewed the durable department report.')
