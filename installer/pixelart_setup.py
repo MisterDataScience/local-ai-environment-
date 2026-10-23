@@ -175,6 +175,8 @@ def install_repositories(root: Path, token: str, *, metadata_fetch=fetch_reposit
                          file_download=_download_file, free_bytes=None) -> dict:
     root = Path(root)
     model_root = root / "models" / "pixelart"
+    if root.is_symlink() or (root / "models").is_symlink() or model_root.is_symlink():
+        raise PixelArtSetupError("Refusing a symbolic link in the model installation root.")
     model_root.mkdir(parents=True, exist_ok=True)
     repositories = (BASE_REPOSITORY, LORA_REPOSITORY)
     metadata = {name: metadata_fetch(name, token) for name in repositories}
@@ -215,6 +217,15 @@ def install_repositories(root: Path, token: str, *, metadata_fetch=fetch_reposit
 
 def install_if_selected(root: Path, *, input_fn=input, secret_fn=getpass.getpass, output=print,
                         metadata_fetch=fetch_repository_metadata) -> bool:
+    manifest_path = Path(root) / "models/pixelart/model-manifest.json"
+    if manifest_path.is_file() and not manifest_path.is_symlink():
+        try:
+            existing = json.loads(manifest_path.read_text())
+        except (OSError, ValueError):
+            existing = {}
+        if existing.get("weights_verified") is True:
+            output("Krea 2 Turbo and its pixel-art LoRA are already installed and verified.")
+            return True
     output("\nOptional model component: Krea 2 Turbo + Pixel-art LoRA")
     output("The model produces 32x32 icons. The two Hugging Face repositories are gated.")
     selected = input_fn("Install this model component now? [y/N] ").strip().lower()
