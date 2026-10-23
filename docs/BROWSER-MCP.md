@@ -1,15 +1,19 @@
 # VPN-only Playwright browser MCP
 
-This is an **opt-in** addition to the existing SearxNG + reader stack. It uses Microsoft's official headless Chromium MCP container and **shares Gluetun's network namespace**. It never opens a host-side Chromium connection to the public Internet, and does not replace the SearxNG search and lightweight reader operations.
+The standard Captain installation provisions the Playwright browser alongside the SearXNG search and reader stack. Browser use remains opt-in in ordinary chats: select the integration only when a task needs a dynamic site or browser interaction. Playwright uses Microsoft's official headless Chromium MCP container and shares Gluetun's VPN network namespace. It never opens a host-side Chromium connection to the public Internet.
 
 ## Install / activation on the Mac
 
-1. Update your local installer source from main and rerun the normal installation so the new helper files are copied into `~/LocalAI-Automated/control`. The project is **not** deployed to the Mac merely by committing GitHub code.
-2. Stop Local AI, keep Docker Desktop running, and make sure VPN web access is enabled via `Enable Web Access.command`. Proton WireGuard credentials remain local.
-3. Run `~/LocalAI-Automated/Enable Browser.command`. The helper downloads Microsoft's official MCP container, records its immutable digest alongside existing Docker image locks, adds the browser to the VPN Compose configuration, starts the services and verifies a JSON-RPC MCP initialize exchange.
-4. Restart LOCAL AI. Enable **Playwright browser** in the chat's Integrations menu. For the Work Agent, use `Start Work Agent.command`; the tool is included in its MCP connections when both VPN web and browser are enabled.
-5. Run `Check Browser.command` to verify the MCP handshake. Then test navigation to a simple public page, a JavaScript-rendered page, and a download under `~/LocalAI-Automated/web/browser-outputs`. Verify public outbound traffic exits the Proton tunnel before trusting the setup. Test tunnel failure to ensure browser access stops. These live acceptance tests have not been performed.
-6. Stop LOCAL AI and run `Disable Browser.command` to remove the optional browser container without erasing the saved browser profile or downloads.
+### Standard Captain installation
+
+1. Run **Install Local AI.command** for a new installation. It invokes the Captain setup, installs and verifies Docker Desktop, configures VPN-only search and page reading, then pulls the pinned Playwright MCP image and verifies its JSON-RPC connection. Docker approval/licence acceptance and a Proton Free WireGuard private key are required during setup.
+2. For an existing installation, update the installer source from `main` and rerun **Install Local AI.command**. A GitHub commit alone does not deploy the changed installer files to the Mac.
+3. Restart LOCAL AI after installation. In an ordinary Open WebUI chat, select **Playwright browser** from the chat's Integrations menu. Search and page reading use the separate **Local AI VPN retrieval** integration. The Work Agent receives Playwright when both VPN web and browser are configured; launch it with **Start Work Agent.command**.
+4. Run **Check Browser.command** to verify the MCP handshake. Then test navigation to a simple public page, a JavaScript-rendered page, and a download under `~/LocalAI-Automated/web/browser-outputs`. Verify public outbound traffic exits the Proton tunnel before trusting the setup. Test tunnel failure to ensure browser access stops. These live acceptance tests have not been performed.
+
+### Existing partial or non-Captain installations
+
+The helper commands remain available for installations that have VPN web access but have not provisioned the browser. Stop LOCAL AI, keep Docker Desktop running, and enable VPN web access first. Then run `~/LocalAI-Automated/Enable Browser.command`. It downloads the pinned MCP image, adds the browser to the VPN Compose configuration, starts the services and verifies the MCP handshake. Restart LOCAL AI and select **Playwright browser** in the chat Integrations menu. Run **Disable Browser.command** to remove the optional browser container while retaining the saved profile and downloads.
 
 The companion browser service publishes only `127.0.0.1:8931` on the Mac via Gluetun. No port is opened to Tailscale or the LAN. The Compose service is pinned by immutable image digest, runs with a memory limit of 768 MiB, one CPU, headless Chromium, no extra capabilities and a limited output directory. Browser pages still load external scripts and resources through the VPN. Network isolation is not the same as browser safety: Playwright MCP is **not a security boundary**.
 
