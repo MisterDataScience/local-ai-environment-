@@ -31,7 +31,7 @@ class Engine:
         elif 'assignment' in packet:
             if packet.get('last_result',{}).get('saved'):f.set_result(json.dumps(dict(action='done',args=dict(summary='Independent worker completed with bounded evidence.'),note='Return the saved work order.')))
             else:f.set_result(json.dumps(dict(action='learning_none',args=dict(reason='No additional reusable learning.'),note='Close the independent assignment.')))
-        elif 'learning_id' in packet:f.set_result(json.dumps(dict(decision='accept',title='Evidence-backed lesson',lesson=packet['lesson'])))
+        elif 'records' in packet:f.set_result(json.dumps(dict(reviews=[dict(learning_id=r['learning_id'],decision='accept',title='Evidence-backed lesson',lesson=r['lesson']) for r in packet['records']])))
         elif packet.get('last_result',{}).get('saved'):f.set_result(json.dumps(dict(action='done',args=dict(summary='No unverified claims.'),note='Keep this project note.')))
         else:f.set_result(json.dumps(dict(action='learning_none',args=dict(reason='No reusable learning in this fixture turn.'),note='Keep this project note.')))
         return f
@@ -468,6 +468,52 @@ class StudioTests(unittest.TestCase):
         packet=self.c.work_packet(row,dict(notes='',last_result={}))
         self.assertEqual(packet['accepted_learning'][0]['id'],lesson['id'])
         self.assertIn('RETROSPECTIVE:',result['progress'])
+
+    def test_curation_batches_four_compatible_reviews_in_one_inference(self):
+        staff=self.staff();author=staff['Lead Designer'];curator=staff['Studio Lead']
+        lessons=[self.s.learn(self.i,self.p['project'],'studio-task:batch',author,'project',
+                 'Evidence-backed lesson '+str(index)+'.','Observed in independent test '+str(index)+'.') for index in range(4)]
+        before=len(self.engine.calls)
+        job=self.c.start(dict(institution=self.i,kind='curation',project=self.p['project'],resident=curator,turns=5))['id']
+        result=self.wait(job)
+        self.assertEqual(result['state'],'complete',result['reason'])
+        curation_calls=[call for call in self.engine.calls[before:] if '"records"' in call['messages'][-1]['content']]
+        self.assertEqual(len(curation_calls),1)
+        packet=json.loads(curation_calls[0]['messages'][-1]['content'])
+        self.assertEqual({r['learning_id'] for r in packet['records']},{x['id'] for x in lessons})
+        with self.s.db() as cx:
+            states=[r[0] for r in cx.execute("SELECT state FROM studio_learnings WHERE work_order='studio-task:batch'")]
+        self.assertEqual(states,['accepted']*4)
+
+    def test_queued_curation_coalesces_without_losing_assignment_threads(self):
+        staff=self.staff();author=staff['Lead Designer']
+        self.s.learn(self.i,self.p['project'],'studio-task:queued-a',author,'project','Lesson A','Evidence A')
+        self.c.pause()
+        self.assertTrue(self.c.queue_curation(self.i,self.p['project'],'thread-a','assignment-a'))
+        self.assertTrue(self.c.queue_curation(self.i,self.p['project'],'thread-b','assignment-b'))
+        with self.s.db() as cx:
+            rows=[dict(r) for r in cx.execute("SELECT id,settings FROM studio_jobs WHERE kind='curation' AND project=?",(self.p['project'],))]
+        self.assertEqual(len(rows),1)
+        settings=json.loads(rows[0]['settings'])
+        self.assertEqual(settings['followups'],[
+            dict(thread='thread-a',assignment='assignment-a'),
+            dict(thread='thread-b',assignment='assignment-b')])
+
+    def test_repeated_identical_action_failure_stops_with_durable_blocker(self):
+        staff=self.staff();lead=staff['Lead Developer'];specialist=staff['Systems designer']
+        assignment=self.s.delegate(self.i,self.p['project'],staff['Studio Lead'],lead,'Inspect the project','',mode='delivery')
+        child=self.s.delegate(self.i,self.p['project'],lead,specialist,'Check one bounded source path','',mode='analysis',parent=assignment['id'])
+        failure=json.dumps(dict(action='not_an_action',args={},note=''))
+        self.engine.responses=[failure,failure]
+        queued=self.c.start(dict(institution=self.i,project=self.p['project'],kind='assignment',assignment_id=child['id']))
+        job=self.wait(queued['id'])
+        self.assertEqual(job['state'],'error')
+        self.assertIn('Repeated identical Studio action failure',job['reason'])
+        progress=json.loads(job['progress'])
+        self.assertEqual(progress['action_failure']['count'],2)
+        self.assertTrue(progress['last_result']['repeated_failure'])
+        with self.s.db() as cx:
+            self.assertEqual(cx.execute('SELECT state FROM studio_delegations WHERE id=?',(child['id'],)).fetchone()[0],'blocked')
 
 
 if __name__=='__main__':unittest.main()

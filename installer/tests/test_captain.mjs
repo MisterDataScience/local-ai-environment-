@@ -96,6 +96,21 @@ test('native workers overlap, retain source packets, publish messages and preser
   assert(JSON.parse(await readFile(result.tasks[0].report)).output);
 });
 
+test('team_run bounds combined cohort previews and requires reports for clipped or unresolved evidence', async t => {
+  const f = await fixture(t, {output: 'Evidence '.repeat(700)});
+  const tasks = Array.from({length: 5}, (_, i) => ({...task('bounded-' + i),
+    objective: ('Investigate detailed question ' + i + ' ').repeat(16)}));
+  const resultText = await f.hooks.tool.team_run.execute({tasks}, f.context('bounded-run'));
+  const result = JSON.parse(resultText);
+  assert(resultText.length <= 6000);
+  assert.equal(result.tasks.length, 5);
+  assert(result.tasks.every(item => item.truncated && item.full_report_required && item.report));
+  assert(result.instruction.includes('disputed, unresolved'));
+  const full = JSON.parse(await readFile(result.tasks[0].report));
+  assert.equal(full.output.length, 6300);
+  assert.equal(full.task.objective, tasks[0].objective);
+});
+
 test('duplicate work, invalid profiles, excess workers and overlapping writers fail before dispatch', () => {
   assert.throws(() => validateTasks([task('a'), {...task('b'), objective: 'Investigate a'}]), /duplicate objective/);
   assert.throws(() => validateTasks([task('a', 'coder'), task('b', 'coder')]), /one editing/);

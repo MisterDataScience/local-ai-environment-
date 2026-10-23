@@ -47,11 +47,13 @@ class OfficeTests(unittest.TestCase):
             self.assertEqual(settings['mcp']['aioffice']['type'], 'local')
             self.assertIn(str(project), settings['mcp']['aioffice']['command'])
             self.assertEqual(settings['agent']['plan']['permission']['aioffice_*'], 'deny')
-            self.assertNotIn('aioffice_office_edit', settings['agent']['plan']['permission'])
+            self.assertEqual(settings['agent']['plan']['permission']['aioffice_*'], 'deny')
             self.assertEqual(settings['agent']['build']['permission']['aioffice_office_edit'], 'ask')
             for role in ('coder','analyst','document'):
                 self.assertEqual(settings['agent'][role]['permission'], {'*': 'deny'})
-            self.assertEqual(settings['agent']['build']['permission']['aioffice_office_read'], 'allow')
+            self.assertEqual(settings['agent']['plan']['permission']['aioffice_office_read'], 'ask')
+            self.assertEqual(settings['agent']['build']['permission']['aioffice_office_read'], 'ask')
+            self.assertLess(len(office.PROMPT), 200)
 
     def test_environment_drops_account_keys_and_user_engine_overrides(self):
         with patch.dict(os.environ, {'LOCAL_AI_GATEWAY_KEY':'secret','OPENAI_API_KEY':'secret',
@@ -79,6 +81,22 @@ class OfficeTests(unittest.TestCase):
         self.assertEqual([t['name'] for t in result['result']['tools']], ['office_create'])
         error = {'jsonrpc':'2.0','id':2,'error':{'code':-1,'message':'test'}}
         self.assertEqual(json.loads(compact_response(json.dumps(error))), error)
+
+    def test_compact_schema_preserves_instance_values_inside_schema_keywords(self):
+        literal = {'title': 'literal title', 'description': 'literal description', 'examples': ['data']}
+        schema = {'type': 'object', 'properties': {
+            'choice': {'const': literal, 'default': literal, 'enum': [literal],
+                       'description': 'schema annotation',
+                       'items': {'type': 'object', 'properties': {
+                           'field': {'type': 'string', 'title': 'nested annotation'}}}}}}
+
+        compact = compact_schema(schema)
+
+        self.assertEqual(compact['properties']['choice']['const'], literal)
+        self.assertEqual(compact['properties']['choice']['default'], literal)
+        self.assertEqual(compact['properties']['choice']['enum'], [literal])
+        self.assertNotIn('description', compact['properties']['choice'])
+        self.assertNotIn('title', compact['properties']['choice']['items']['properties']['field'])
 
     def test_network_sandbox_is_required(self):
         with patch.object(office.sys, 'platform', 'linux'):

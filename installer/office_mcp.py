@@ -25,13 +25,39 @@ DESCRIPTIONS = {
 
 
 def compact_schema(value):
-    if isinstance(value, list):
-        return [compact_schema(v) for v in value]
-    if isinstance(value, dict):
-        return {k: ({name: compact_schema(schema) for name, schema in v.items()}
-                    if k in ('properties', '$defs', 'definitions', 'patternProperties') else compact_schema(v))
-                for k, v in value.items() if k not in ('description', 'title', 'examples')}
-    return value
+    """Drop verbose annotations only where values are themselves schemas.
+
+    Keywords such as ``const``, ``enum`` and ``default`` contain instance data,
+    which may happen to use words like ``title`` or ``description`` as keys.
+    Walking those values as schemas changes validation, so recurse only through
+    the JSON Schema keywords whose values contain subschemas.
+    """
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, dict):
+        return value
+
+    map_keywords = {'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'}
+    single_keywords = {'additionalProperties', 'unevaluatedProperties', 'items', 'contains',
+                       'propertyNames', 'not', 'if', 'then', 'else', 'unevaluatedItems',
+                       'contentSchema'}
+    list_keywords = {'allOf', 'anyOf', 'oneOf', 'prefixItems'}
+    compact = {}
+    for key, item in value.items():
+        if key in ('description', 'title', 'examples'):
+            continue
+        if key in map_keywords and isinstance(item, dict):
+            compact[key] = {name: compact_schema(schema) for name, schema in item.items()}
+        elif key in single_keywords:
+            if key == 'items' and isinstance(item, list):
+                compact[key] = [compact_schema(schema) for schema in item]
+            else:
+                compact[key] = compact_schema(item)
+        elif key in list_keywords and isinstance(item, list):
+            compact[key] = [compact_schema(schema) for schema in item]
+        else:
+            compact[key] = item
+    return compact
 
 
 def compact_response(line):
