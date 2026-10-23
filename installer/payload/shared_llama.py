@@ -1,10 +1,14 @@
 """Gateway-owned local GGUF server with one model and multiple decode slots."""
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
+import queue
 import subprocess
+import threading
 import time
+from urllib.parse import urlsplit
 from urllib.error import URLError
 from backend_http import api, port_open
 from tool_protocol import tools_for_ollama, assistant_for_openai, messages_for_ollama
@@ -150,12 +154,15 @@ class SharedLlama:
     def chat(self, body, limit, messages=None, transport=None):
         tools = tools_for_ollama(body)
         cleaned = messages if messages is not None else messages_for_ollama(body['messages'])
-        payload = {'model': 'local-ai-captain', 'messages': openai_messages(body['messages'], cleaned), 'stream': False,
+        stream = body.get('_stream')
+        payload = {'model': 'local-ai-captain', 'messages': openai_messages(body['messages'], cleaned), 'stream': bool(stream),
                    'max_tokens': limit, 'cache_prompt': True}
         if tools:
             payload['tools'] = tools
         if isinstance(body.get('temperature'), (int, float)):
             payload['temperature'] = body['temperature']
+        if stream is not None:
+            return self._stream_chat(payload, body, tools, stream)
         response = (transport or api)(self.base, '/v1/chat/completions', payload, timeout=1800)
         usage = response.get('usage') if isinstance(response.get('usage'), dict) else {}
         body['_accounting_usage'] = {k: usage.get(k) for k in ('prompt_tokens', 'completion_tokens')}
@@ -180,3 +187,147 @@ class SharedLlama:
             body['_usage'] = {'prompt_tokens': usage['prompt_tokens'], 'completion_tokens': usage['completion_tokens'],
                               'total_tokens': usage['prompt_tokens'] + usage['completion_tokens']}
         return result
+
+    def _stream_chat(self, payload, body, tools, stream):
+        """Read OpenAI SSE while watching disconnects, including during model prefill."""
+        target = urlsplit(self.base)
+        if target.scheme != 'http' or not target.hostname or not target.port:
+            raise RuntimeError('Streaming requires the local HTTP backend')
+        connection = http.client.HTTPConnection(target.hostname, target.port, timeout=1800)
+        message = {'role': 'assistant', 'content': '', 'thinking': '', 'tool_calls': []}
+        calls, usage, finish, complete = {}, {}, None, False
+        events = queue.Queue(maxsize=8)
+        reader_stop = threading.Event()
+        reader = None
+        body['_accounting_usage'] = {'prompt_tokens': None, 'completion_tokens': None}
+
+        def consume(line):
+            nonlocal usage, finish, complete
+            line = line.decode('utf-8', errors='replace').strip()
+            if not line.startswith('data:'):
+                return
+            data = line[5:].strip()
+            if data == '[DONE]':
+                complete = True
+                return
+            try:
+                event = json.loads(data)
+            except (TypeError, ValueError):
+                raise RuntimeError('Invalid shared GGUF streaming response') from None
+            if isinstance(event.get('usage'), dict):
+                usage = event['usage']
+                body['_accounting_usage'] = {k: usage.get(k) for k in ('prompt_tokens', 'completion_tokens')}
+            choices = event.get('choices', [])
+            if not isinstance(choices, list):
+                raise RuntimeError('Invalid shared GGUF streaming choices')
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    raise RuntimeError('Invalid shared GGUF streaming choice')
+                if choice.get('finish_reason') is not None:
+                    finish = choice['finish_reason']
+                delta = choice.get('delta') or {}
+                if not isinstance(delta, dict):
+                    raise RuntimeError('Invalid shared GGUF streaming delta')
+                for source, dest in (('content', 'content'), ('reasoning_content', 'thinking')):
+                    part = delta.get(source, '')
+                    if part:
+                        if not isinstance(part, str):
+                            raise RuntimeError('Invalid shared GGUF streamed text')
+                        message[dest] += part
+                        if source == 'content':
+                            stream.send({'content': part})
+                fragments = delta.get('tool_calls', [])
+                if not isinstance(fragments, list):
+                    raise RuntimeError('Invalid shared GGUF tool calls')
+                for fragment in fragments:
+                    index = fragment.get('index')
+                    if type(index) is not int or not 0 <= index < 32:
+                        raise RuntimeError('Invalid shared GGUF tool call index')
+                    call = calls.setdefault(index, {'id': '', 'type': 'function',
+                                                    'function': {'name': '', 'arguments': ''}})
+                    if fragment.get('id'):
+                        call['id'] = fragment['id']
+                    fn = fragment.get('function') or {}
+                    if fn.get('name'):
+                        call['function']['name'] += fn['name']
+                    if fn.get('arguments'):
+                        call['function']['arguments'] += fn['arguments']
+
+        try:
+            connection.request('POST', '/v1/chat/completions', body=json.dumps(payload).encode(),
+                               headers={'Content-Type': 'application/json'})
+            response = connection.getresponse()
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError('Shared GGUF backend rejected streaming request: ' + str(response.status))
+            def read_response():
+                try:
+                    while True:
+                        line = response.readline()
+                        if not line:
+                            break
+                        while not stream.cancelled.is_set() and not reader_stop.is_set():
+                            try:
+                                events.put(('line', line), timeout=0.1)
+                                break
+                            except queue.Full:
+                                pass
+                    events.put(('eof', None))
+                except Exception as error:
+                    if reader_stop.is_set() or stream.cancelled.is_set():
+                        return
+                    while not stream.cancelled.is_set() and not reader_stop.is_set():
+                        try:
+                            events.put(('error', error), timeout=0.1)
+                            break
+                        except queue.Full:
+                            pass
+            reader = threading.Thread(target=read_response, name='llama-stream-reader', daemon=True)
+            reader.start()
+            while True:
+                if stream.cancelled.is_set():
+                    raise RuntimeError('Response cancelled')
+                try:
+                    kind, line = events.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                if kind == 'error':
+                    raise RuntimeError('Shared GGUF stream read failed') from line
+                if kind == 'eof':
+                    break
+                consume(line)
+                if complete:
+                    break
+            if not complete and finish is None:
+                raise RuntimeError('Shared GGUF stream ended without a completion marker')
+            message['tool_calls'] = [calls[index] for index in sorted(calls)]
+            result = assistant_for_openai(message, tools)
+            if isinstance(result, dict) and result.get('tool_calls'):
+                seen = set()
+                for call, native in zip(result['tool_calls'], message['tool_calls']):
+                    identifier = native.get('id')
+                    if not isinstance(identifier, str) or not 1 <= len(identifier) <= 200 or identifier in seen:
+                        raise RuntimeError('Local GGUF server returned invalid or duplicate tool call IDs')
+                    seen.add(identifier)
+                    call['id'] = identifier
+                delta = {'tool_calls': [dict(call, index=i) for i, call in enumerate(result['tool_calls'])]}
+                if result.get('reasoning_content'):
+                    delta['reasoning_content'] = result['reasoning_content']
+                stream.send(delta)
+            body['_streamed'] = True
+            body['_finish_reason'] = finish or ('tool_calls' if isinstance(result, dict) else 'stop')
+            if all(type(usage.get(k)) is int and usage[k] >= 0 for k in ('prompt_tokens', 'completion_tokens')):
+                body['_usage'] = {'prompt_tokens': usage['prompt_tokens'], 'completion_tokens': usage['completion_tokens'],
+                                  'total_tokens': usage['prompt_tokens'] + usage['completion_tokens']}
+            return result
+        finally:
+            # Closing the client socket tells llama-server to cancel this slot.
+            # The inference lease is held until this method unwinds.
+            reader_stop.set()
+            if connection.sock is not None:
+                try:
+                    connection.sock.shutdown(2)
+                except OSError:
+                    pass
+            connection.close()
+            if reader is not None:
+                reader.join()
