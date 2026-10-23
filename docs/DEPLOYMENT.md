@@ -66,6 +66,25 @@ Apple Silicon, macOS 15+, 32 GB unified memory and at least 100 GB free space ar
 required. Installation needs Internet access for initial dependencies and models.
 No model weights, personal files or account credentials are included in the ZIP.
 
+
+## Optional Krea pixel-art model files
+
+During Stage 4 the installer offers the Krea 2 Turbo base model and
+`azyg0s/Krea-2-pixelart-lora` as an optional model component. Selecting it
+downloads both gated Hugging Face repositories to
+`models/pixelart/`; the large weights are not placed in the installer ZIP.
+Before installing, review and accept each repository's current access terms on
+Hugging Face. The installer then asks for a read token using a hidden prompt,
+uses it only for those downloads, verifies each file against Hugging Face
+metadata, and records the resolved repository revisions. It does not save the
+token. The Krea 2 Community License and Acceptable Use Policy apply; review the
+model card's revenue and deployment-filter requirements.
+
+The model card's generation settings are 512×512, four steps and guidance 0,
+followed by 32×32 sprite extraction. This installer stage prepares the model
+files only. It does not yet add a studio workflow or claim native pixel-art
+generation acceptance on the owner's Mac.
+
 ## Prepare personalised knowledge
 
 After the installer completes, open `Village Commons.command` and use
