@@ -80,6 +80,22 @@ class OfficeTests(unittest.TestCase):
         error = {'jsonrpc':'2.0','id':2,'error':{'code':-1,'message':'test'}}
         self.assertEqual(json.loads(compact_response(json.dumps(error))), error)
 
+    def test_compact_schema_preserves_instance_values_inside_schema_keywords(self):
+        literal = {'title': 'literal title', 'description': 'literal description', 'examples': ['data']}
+        schema = {'type': 'object', 'properties': {
+            'choice': {'const': literal, 'default': literal, 'enum': [literal],
+                       'description': 'schema annotation',
+                       'items': {'type': 'object', 'properties': {
+                           'field': {'type': 'string', 'title': 'nested annotation'}}}}}}
+
+        compact = compact_schema(schema)
+
+        self.assertEqual(compact['properties']['choice']['const'], literal)
+        self.assertEqual(compact['properties']['choice']['default'], literal)
+        self.assertEqual(compact['properties']['choice']['enum'], [literal])
+        self.assertNotIn('description', compact['properties']['choice'])
+        self.assertNotIn('title', compact['properties']['choice']['items']['properties']['field'])
+
     def test_network_sandbox_is_required(self):
         with patch.object(office.sys, 'platform', 'linux'):
             with self.assertRaises(RuntimeError): office.engine_command(Path('/binary'), Path('/workspace'))

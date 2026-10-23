@@ -28,6 +28,30 @@ const text = (value, limit, label) => {
   return value;
 };
 const touch = (turn, task) => {task.update_seq = ++turn.sequence;};
+const COHORT_RESULT_LIMIT = 6000;
+function cohortSnapshot(cohort, tasks) {
+  let objectiveLimit = 180, summaryLimit = 420, errorLimit = 180;
+  const rows = () => tasks.map(task => {
+    const objective = task.objective ?? '';
+    const summary = task.summary ?? '';
+    const error = task.error ?? '';
+    const clipped = objective.length > objectiveLimit || summary.length > summaryLimit || error.length > errorLimit || task.truncated;
+    const reviewRequired = task.status !== 'completed' || /disput|contradict|unresolv|uncertain|unverified|blocked/i.test(summary + '\n' + error);
+    return {id: task.id, role: task.role, status: task.status,
+      objective: objective.slice(0, objectiveLimit), objective_truncated: objective.length > objectiveLimit,
+      summary: summary.slice(0, summaryLimit), truncated: clipped,
+      report: task.report, ...(error ? {error: error.slice(0, errorLimit)} : {}),
+      review_required: reviewRequired, full_report_required: clipped || reviewRequired};
+  });
+  while (true) {
+    const result = {cohort, tasks: rows(), instruction: 'Read each full_report_required report before relying on it; inspect reports for clipped, disputed, unresolved or incomplete evidence. Resolve contradictions, retire completed workers, and synthesise one response.'};
+    if (JSON.stringify(result).length <= COHORT_RESULT_LIMIT) return result;
+    if (summaryLimit > 0) summaryLimit = Math.max(0, Math.floor(summaryLimit / 2));
+    else if (objectiveLimit > 0) objectiveLimit = Math.max(0, Math.floor(objectiveLimit / 2));
+    else if (errorLimit > 0) errorLimit = Math.max(0, Math.floor(errorLimit / 2));
+    else fail('cohort report pointers exceed the result limit');
+  }
+}
 export function validateTasks(tasks, maxWorkers = 5) {
   if (!Array.isArray(tasks) || tasks.length < 1 || tasks.length > maxWorkers) fail('submit 1–' + maxWorkers + ' tasks');
   const objectives = new Set(), names = new Set();
@@ -342,8 +366,7 @@ export default async function Captain({client, directory}, options) {
         try {
           const assigned = binding.turn.tasks.filter(t => t.cohort === cohort);
           await Promise.allSettled(assigned.map(task => runWorker(task, binding, context)));
-          return JSON.stringify({cohort, tasks: snapshot(binding.turn).tasks.filter(t => assigned.some(a => a.id === t.id)),
-            instruction: 'Read full reports where needed, resolve contradictions, retire completed workers, and synthesize one response.'});
+          return JSON.stringify(cohortSnapshot(cohort, binding.turn.tasks.filter(t => assigned.some(a => a.id === t.id))));
         } finally {activeParents.delete(binding.parentID); activeCaptains.delete(binding.parentID);}
       }},
     team_board: {description: 'Read only changed task previews and unread messages for you. Bounded pages; has_more means another page remains. Omit after to use your saved cursor; after=0 replays history. task_id explicitly reads one stored task summary without consuming messages. Full reports remain at report paths.',
