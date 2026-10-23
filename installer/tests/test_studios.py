@@ -68,6 +68,7 @@ class StudioTests(unittest.TestCase):
         engine=residents['Systems designer']
         workflow=self.s.start_workflow(self.i,self.p['project'],lead,'Adapt counter game','Extract one small portable-C experiment')
         ref=workflow['id'];project=self.p['project']
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase_label'],'Planning Department')
         with self.assertRaises(PermissionError):
             self.s.delegate(self.i,project,lead,developer,'Skip stages','',mode='delivery')
         plan=self.s.delegate(self.i,project,lead,designer,'Reverse scaffold','Map source architecture',mode='design',workflow=ref,phase='planning')
@@ -78,7 +79,7 @@ class StudioTests(unittest.TestCase):
         self.s.review_workflow_stage(self.i,ref,lead,'accept','Reviewed the durable department report.')
         workflow_view=self.s.workflow_view(self.i,ref)
         self.assertEqual(workflow_view['phase'],'middle')
-        self.assertEqual(workflow_view['phase_label'],'Design Integration and Production Planning')
+        self.assertEqual(workflow_view['phase_label'],'Design Integration and Production Planning Department')
         with self.assertRaises(PermissionError):
             self.s.delegate(self.i,project,lead,developer,'Skip test plan','',mode='delivery',workflow=ref,phase='implementation')
         test_plan_assignment=self.s.delegate(self.i,project,lead,test_planner,'Test plan','Define deterministic assertions.',mode='test-plan',workflow=ref,phase='middle')
@@ -86,6 +87,7 @@ class StudioTests(unittest.TestCase):
         self.s.finish_delegation(test_plan_assignment['id'],'complete','Test plan saved.')
         self.s.review_workflow_stage(self.i,ref,lead,'accept','Reviewed the durable department report.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'implementation')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase_label'],'Implementation Department')
         build=self.s.delegate(self.i,project,lead,developer,'Implement experiment','',mode='delivery',workflow=ref,phase='implementation')
         with self.assertRaises(PermissionError):
             self.s.delegate(self.i,project,developer,engine,'Unlinked implementation task','',mode='implementation')
@@ -93,7 +95,7 @@ class StudioTests(unittest.TestCase):
         original_start=self.c.start;started=[]
         self.c.start=lambda request:(started.append(request) or dict(id='queued-child-job'))
         try:
-            child_result,_=self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='delegate',args=dict(resident=engine,title='Implement one bounded update-loop change',notes='Follow the Design Integration and Production Planning checkpoints.',mode='implementation')))
+            child_result,_=self.c.work_action(worker_row,dict(notes='',last_result={}),dict(action='delegate',args=dict(resident=engine,title='Implement one bounded update-loop change',notes='Follow the Design Integration and Production Planning Department checkpoints.',mode='implementation')))
         finally:self.c.start=original_start
         child=self.s.team_status(self.i,project,developer,build['id'])['children'][0]
         self.assertEqual(child['id'],child_result['id']);self.assertEqual(child['mode'],'implementation')
@@ -121,6 +123,7 @@ class StudioTests(unittest.TestCase):
         self.s.finish_delegation(build['id'],'complete','Implementation report.')
         self.s.review_workflow_stage(self.i,ref,lead,'accept','Reviewed the durable department report.')
         self.assertEqual(self.s.workflow_view(self.i,ref)['phase'],'verification')
+        self.assertEqual(self.s.workflow_view(self.i,ref)['phase_label'],'Playtest Department')
         implementation=self.s.workflow_view(self.i,ref)['artifacts']['implementation'][0]
         child_states={child['state'] for child in implementation['children']}
         self.assertEqual(child_states,{'complete','blocked'})
@@ -159,7 +162,7 @@ class StudioTests(unittest.TestCase):
         self.s.save_workflow_step(self.i,workflow,project,designer,'Planning fixture','Saved scaffold for the blocked-child routing test.',[])
         self.s.finish_delegation(planning['id'],'complete','Scaffold saved.')
         self.s.review_workflow_stage(self.i,workflow,lead,'accept','Reviewed the durable department report.')
-        test_plan=self.s.delegate(self.i,project,lead,test_planner,'Design Integration and Production Planning test plan','Define observable acceptance checks.',mode='test-plan',workflow=workflow,phase='middle')
+        test_plan=self.s.delegate(self.i,project,lead,test_planner,'Design Integration and Production Planning Department test plan','Define observable acceptance checks.',mode='test-plan',workflow=workflow,phase='middle')
         self.s.save_workflow_step(self.i,workflow,project,test_planner,'Test-plan fixture','Saved checks for the blocked-child routing test.',[])
         self.s.finish_delegation(test_plan['id'],'complete','Test plan saved.')
         self.s.review_workflow_stage(self.i,workflow,lead,'accept','Reviewed the durable department report.')
