@@ -9,7 +9,7 @@ This checklist records the agreed scope. It is not a claim of completion.
 - Explicit Studio Lead acceptance or revision is required between departments; blocked and paused games retain the studio production slot.
 - Host permissions validate saved assignment identity, project and current department for every action; The Planning Department and Playtest Department cannot modify implementation.
 - Recoverable tool errors return to the same department with permitted actions and remain subject to its finite budget.
-- Verified production requires matching host build/test/input/visual receipts from independent Playtest; final closeout rejects stale source revisions and unavailable visual acceptance.
+- Verified production requires matching host build/test/input/visual receipts from the independent Playtest Department; final closeout rejects stale source revisions and unavailable visual acceptance.
 - Lead Developer specialist jobs run serially and wake their saved parent assignment after reporting.
 - Studio role definitions are included in the installed runtime and checked through isolated imports.
 - Preserve both supplied C projects as immutable source snapshots; never discard originals.
