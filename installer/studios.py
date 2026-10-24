@@ -75,8 +75,29 @@ class GitHubRedirect(HTTPRedirectHandler):
 
 
 class Studios:
+    PIXELART_STUDIO_NAME='Pixel Art Studio'
+    PIXELART_LEAD='reviewer.general'
+
+    def ensure_pixelart_studio(self):
+        """Provision a ready-to-use pixel-art inbox without running founding."""
+        with self.store.db() as cx:
+            rows=cx.execute("SELECT id FROM institutions WHERE name=? AND state='active'",(self.PIXELART_STUDIO_NAME,)).fetchall()
+        if rows:
+            iid=rows[0]['id']
+        else:
+            iid=self.store.create(self.PIXELART_STUDIO_NAME,
+                'Pixel-art production. The Studio Lead routes briefs to the Designer, Pixel Artist and Review Agent. No founding event is required.')['id']
+        with self.store.db() as cx,cx:
+            self.store.institution(cx,iid)
+            cx.execute("INSERT OR IGNORE INTO institution_members(institution,resident,title) VALUES(?,?,?)",
+                       (iid,self.PIXELART_LEAD,'Studio Lead'))
+            collection=cx.execute('SELECT collection FROM institutions WHERE id=?',(iid,)).fetchone()[0]
+            cx.execute("INSERT OR IGNORE INTO grants(specialist_id,collection) VALUES(?,?)",(self.PIXELART_LEAD,collection))
+        self.pixelart_institution=iid
+        return iid
     def __init__(self,engine,connector=village.connect,workbench=None):
         self.engine=engine;self.store=Store(engine.root.parent/'village',connector)
+        self.ensure_pixelart_studio()
         self.workbench=workbench or Workbench(self.store);self.lock=threading.RLock()
         self.pool=ThreadPoolExecutor(max_workers=4,thread_name_prefix='studio');self.jobs={};self.guards={};self.deadlines={}
         self.dispatch_wakeup=threading.Event();self.stopping=threading.Event();self.dispatch_paused=False
@@ -1076,6 +1097,8 @@ class Studios:
         if not isinstance(r,dict):raise ValueError('Owner operation must be an object')
         op=r.get('operation');iid=r.get('institution')
         if op=='view':return dict(**self.store.view(iid,r.get('proposal_offset',0)),workbench=self.workbench.status(),active_jobs=list(self.jobs))
+        if op=='pixelart_captain_message':
+            return self.contact(self.pixelart_institution,'captain',r.get('message',''),r.get('project',''))
         if op=='studios_directory':
             return [dict(id=x['id'],name=x['name'],purpose=x['purpose']) for x in self.store.view()['institutions'] if x['state']=='active']
         if op in ('studio_message','captain_studio_message'):
