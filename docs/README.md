@@ -13,5 +13,6 @@ Start here:
 - [Agent Village](AGENT-VILLAGE.md): resident agents and memory.
 - [Village Commons](VILLAGE-COMMONS.md): finite social and creative sessions.
 - [Institutions and studios](INSTITUTIONS-AND-STUDIOS.md): studios, founding and portable computers.
+- [The Synod](THE-SYNOD.md): studio construction, repair commissions and institutional archives.
 
 Older implementation plans and dated validation snapshots are retained under [archive](archive/).

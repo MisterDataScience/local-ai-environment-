@@ -13,7 +13,7 @@ MIN_OLLAMA_VERSION = (0, 40, 0)
 CLIENT_WORKFLOWS = frozenset({'captain', 'analyst', 'coder', 'document', 'essay', 'scaffold',
     'compaction', 'maintenance', 'batch', *('worker.' + role for role in ('researcher', 'analyst', 'coder', 'writer', 'reviewer'))})
 STUDIO_WORKFLOWS = frozenset('studio.' + phase for phase in
-    ('management', 'planning', 'middle', 'implementation', 'verification', 'founding', 'learning', 'other'))
+    ('management', 'planning', 'middle', 'implementation', 'verification', 'founding', 'learning', 'synod', 'commissioned', 'other'))
 
 
 def usage_label(body):

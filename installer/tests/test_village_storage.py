@@ -44,6 +44,34 @@ class VillageStorageTests(backup_tests.BackupTests):
         self.assertEqual((self.root/'village/archive'/(self.receipt['sha']+'.json')).read_bytes(),self.source.read_bytes())
         self.assertTrue(list(self.root.glob('village.before-restore-*')))
 
+    def synod_fixture(self):
+        from studio_store import Store
+        from synod_store import Archive,SYNOD_ID
+        store=Store(self.root/'village');archive=Archive(store)
+        message=store.add_message(SYNOD_ID,'owner','PRIVATE SYNOD COMMISSION')
+        commission=archive.create_commission(store.message(message['id']))
+        return store,archive,commission
+
+    def test_synod_snapshot_restores_immutable_records_and_current_specification(self):
+        from synod_store import Archive
+        store,archive,commission=self.synod_fixture()
+        before=archive.verify(commission['studio'])
+        saved=backup.snapshot(self.root,self.config)
+        with store.db() as cx,cx:archive.append(cx,commission['studio'],commission['id'],'decision','observed','host',dict(note='Later fixture record'))
+        backup.restore(self.root,self.config,saved)
+        restored=Archive(store)
+        self.assertEqual(restored.verify(commission['studio']),before)
+        self.assertEqual(restored.view()['commissions'][0]['brief'],'PRIVATE SYNOD COMMISSION')
+
+    def test_whole_village_reset_erases_synod_archive_and_inbox(self):
+        store,archive,commission=self.synod_fixture()
+        plan=storage.deletion_plan(self.root,self.config,self.receipt['sha'])
+        storage.erase(self.root,self.config,self.receipt['sha'],plan['digest'])
+        with store.db() as cx:
+            self.assertFalse(cx.execute("SELECT name FROM sqlite_master WHERE name='synod_records'").fetchone())
+            self.assertEqual(cx.execute('SELECT count(*) FROM studio_messages').fetchone()[0],0)
+            self.assertEqual(len(village.status(cx)),5)
+
     def test_erase_removes_managed_source_derivatives_and_backup_then_blocks_reimport_and_restore(self):
         saved=backup.snapshot(self.root,self.config)
         external=self.root/'external-copy.zip';shutil.copyfile(self.vault/saved,external)

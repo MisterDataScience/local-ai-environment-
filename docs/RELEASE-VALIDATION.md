@@ -349,3 +349,19 @@ python3 -m unittest discover -s scripts -p 'test_*.py' -v
 Commit the source and rebuilt ZIP together. `RELEASE.json` inside the package
 binds its contents by SHA-256; it is an integrity/provenance record, not a digital
 signature or a claim of native acceptance.
+
+## Synod construction and archive, 24 October 2026
+
+The Synod is included without founding and uses the existing local studio dispatcher.
+The construction contract, adapter limits and archive schema are described in
+[The Synod](THE-SYNOD.md). The initial executable adapter is limited to text studios;
+custom runtime repairs and new tool capabilities remain explicit construction blockers.
+
+Authoring checks: 11 Synod controller tests, 83 existing studio tests (11 native/runtime
+cases skipped), 25 Captain JavaScript tests, 29 installer tests, 9 Village recovery/privacy
+tests, 7 context policy tests and the deterministic installer packaging test. These use
+scripted model responses and real local queues/storage, not real-model quality claims.
+Python compilation, JavaScript syntax, HTML control IDs and installer/source verification
+also pass. The full installer suite has environment import blockers because `requests`
+is unavailable. Browser rendering could not run because the Playwright Chromium binary
+is absent. Native Mac/model acceptance remains unrun. No hosted CI was triggered.

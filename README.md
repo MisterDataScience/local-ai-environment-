@@ -44,6 +44,7 @@ Cryptomator vault unlocking remains an owner action after reboot.
 | Captain delegation, shared findings and worker retirement | [Captain and workers](docs/CAPTAIN-AND-WORKERS.md) |
 | Personal knowledge, resident preparation and exact owner review | [Founding and recovery](docs/FOUNDING-AND-RECOVERY.md), [resident memory](docs/RESIDENT-MEMORY.md) |
 | Studio Lead and the saved planning-to-playtest workflow | [Institutions and studios](docs/INSTITUTIONS-AND-STUDIOS.md) |
+| Studio construction, repairs and institutional archives | [The Synod](docs/THE-SYNOD.md) |
 | Finite social/creative sessions | [Village Commons](docs/VILLAGE-COMMONS.md) |
 | Workshop, project notices and practice cases | [Village infrastructure](docs/VILLAGE-INFRASTRUCTURE.md) |
 | DOCX, XLSX and PPTX | [Office tools](docs/OFFICE-TOOLS.md) |
@@ -55,7 +56,7 @@ Cryptomator vault unlocking remains an owner action after reboot.
 For personalisation, open `Village Commons.command` and select **Prepare the
 Village from your conversation history**. The host prepares baseline residents
 and cited proposals. Lasting knowledge, access and membership changes retain
-their owner review. Studios keep one persistent game production lane per studio;
+their owner review. C studios keep one persistent game production lane per studio;
 the Studio Lead manages saved department handoffs.
 
 ## Verification and limits
