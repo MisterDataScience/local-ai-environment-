@@ -1,5 +1,7 @@
 # Establishing a studio in the Village
 
+[The Synod](THE-SYNOD.md) is the built-in studio for constructing and repairing studios. It requires no founding event and retains a private dossier for every commission. Its initial executable adapter supports text workflows; unsupported tools and repairs to custom runtimes remain explicit blockers. The C workflow below keeps its existing controller.
+
 The studio is part of the main installation. It has its own **Lead Designer**, approved staff, private Library and Archive, working projects and tiny computers. Other institutions can use the same membership, collection and review foundation; the specialised workbench supplied here is for C studios.
 
 The system prepares the residents and their navigation maps. You provide the source projects and creative direction, review lasting changes, and choose how long it may work. You do not need to write individual prompts, manually index your games or run benchmarks.

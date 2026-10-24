@@ -317,7 +317,7 @@ export default async function Captain({client, directory}, options) {
     }
   }
   const tools = {
-    studio_contact: {description: 'Contact the autonomous Studio Lead directly as Village Captain. Use with an institution name or ID and a message; optionally specify an active project ID or exact title. If omitted, the Lead selects it when there is only one active project, or chooses among projects in its inbox. Use a thread ID to read the conversation, or omit both message and thread to list studios. The Captain can talk to the Lead but cannot approve membership, permanent knowledge or temporary appointments.',
+    studio_contact: {description: 'Contact the autonomous Studio Lead directly as Village Captain. Route studio creation and repair to The Synod, which requires no founding. Use an institution name or ID and a message; optionally specify a C project ID or exact title. A thread ID alone reads the conversation; message plus thread sends a follow-up to the same Lead. Omit message and thread to list studios. The Captain cannot approve Synod designs, membership, permanent knowledge or temporary appointments.',
       args: {institution: {type: 'string', maxLength: 100}, message: {type: 'string', maxLength: 4000}, thread: {type: 'string', maxLength: 100}, project: {type: 'string', maxLength: 120}},
       async execute(args, context) {
         if (Object.keys(args).some(k => !['institution', 'message', 'thread', 'project'].includes(k))) fail('unknown Studio Lead contact fields');
@@ -325,9 +325,9 @@ export default async function Captain({client, directory}, options) {
         if (binding.task || !['plan', 'build'].includes(binding.parentAgent)) fail('only the Village Captain can contact the Studio Lead');
         const gatewayKey = process.env.LOCAL_AI_GATEWAY_KEY;
         if (!gatewayKey) fail('Captain gateway credential is unavailable');
-        const operation = args.thread ? 'studio_conversation' : args.message ? 'captain_studio_message' : 'studios_directory';
-        const payload = args.thread ? {operation, institution: args.institution, thread: args.thread} :
-          args.message ? {operation, institution: args.institution, message: text(args.message, 4000, 'message'), ...(args.project ? {project: text(args.project, 120, 'project')} : {})} : {operation};
+        const operation = args.message ? 'captain_studio_message' : args.thread ? 'studio_conversation' : 'studios_directory';
+        const payload = args.message ? {operation, institution: args.institution, message: text(args.message, 4000, 'message'), ...(args.thread ? {thread: text(args.thread, 100, 'thread')} : {}), ...(args.project ? {project: text(args.project, 120, 'project')} : {})} :
+          args.thread ? {operation, institution: args.institution, thread: args.thread} : {operation};
         const response = await fetch('http://127.0.0.1:8001/control/studios', {method: 'POST',
           headers: {Authorization: 'Bearer ' + gatewayKey, 'Content-Type': 'application/json'},
           body: JSON.stringify(payload), redirect: 'error', signal: context.abort});

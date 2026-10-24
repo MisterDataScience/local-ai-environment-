@@ -193,7 +193,7 @@ class StudioTests(unittest.TestCase):
             with self.assertRaises(ValueError):unpack(b.getvalue())
     def test_staff_approval_and_private_library_never_enter_general(self):
         staff=self.s.prepare_staff(self.i)
-        with self.s.db() as cx:self.assertEqual(len(village.status(cx)),5)
+        with self.s.db() as cx:self.assertEqual(len(village.status(cx)),11)
         lead=self.approve(staff[0]['id'])['resident']
         with self.s.db() as cx:
             self.assertEqual(self.s.member(cx,self.i,lead),'Lead Designer')
@@ -222,7 +222,7 @@ class StudioTests(unittest.TestCase):
         job=self.c.start(dict(institution=self.i,kind='founding',turns=10))['id'];row=self.wait(job)
         self.assertEqual(row['state'],'complete',row['reason'])
         proposals=self.s.view(self.i)['proposals'];self.assertTrue(any(p['kind']=='library' for p in proposals));self.assertEqual(sum(p['kind']=='staff' for p in proposals),5)
-        with self.s.db() as cx:self.assertEqual(len(village.status(cx)),5)
+        with self.s.db() as cx:self.assertEqual(len(village.status(cx)),11)
         self.assertTrue(all(p['state']=='pending' for p in proposals))
     def test_legacy_work_requests_enter_the_governed_production_lane(self):
         self.staff();self.c.pause()

@@ -1,5 +1,10 @@
 # LOCAL AI installer
 
+**The Synod** is included automatically in the studio runtime and appears in
+**Village Institutions.command** without a founding event. It handles studio
+creation and repair commissions, exact design review and private institutional
+archives. See [The Synod](docs/THE-SYNOD.md) for its current adapter limits.
+
 After installation, open `Village Commons.command` for **Prepare the Village from
 your conversation history**. The system creates baseline residents and prepares
 knowledge, memories, specialists and maps for final owner approval. Encrypted

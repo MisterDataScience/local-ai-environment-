@@ -212,7 +212,7 @@ class ReliabilityTests(unittest.TestCase):
         fixture=self.seed(row,task)
         self.s.finish_delegation(task['id'],'blocked','Start another independent review.')
         replacement,new_task=self.assignment('verification')
-        with self.assertRaisesRegex(ValueError,'this independent Playtest assignment'):
+        with self.assertRaisesRegex(ValueError,'host-recorded execution by this Playtest Department assignment'):
             self.action(replacement,'workflow_verify',**fixture['report'])
 
     def test_zero_input_and_unverified_questions_cannot_be_declared_verified(self):

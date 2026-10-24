@@ -229,9 +229,13 @@ def _erase(root,config,source_sha,digest):
         cx.execute('PRAGMA secure_delete=ON')
         with cx:
             tables={r[0] for r in cx.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            # The explicit whole-Village privacy reset also erases Synod history.
+            # Drop these tables in dependency order; ordinary archive writes stay append-only.
+            for table in ('synod_packages','synod_records','synod_commissions','synod_dossiers','synod_schema'):
+                if table in tables:cx.execute('DROP TABLE '+table)
             # Institution project copies and directions can contain uncited conversation
             # material. The owner's explicit broad privacy reset includes institutions.
-            for table in ('studio_artifacts','studio_events','studio_jobs','studio_tasks','studio_builds','studio_proposals','studio_files','studio_sources','studio_projects','institution_members','institutions'):
+            for table in ('studio_messages','studio_workflow_steps','studio_workflows','studio_delegations','studio_appointments','studio_learnings','studio_artifacts','studio_events','studio_jobs','studio_tasks','studio_builds','studio_proposals','studio_files','studio_sources','studio_projects','institution_members','institutions'):
                 if table in tables:cx.execute('DELETE FROM '+table)
             # All derived records are conservatively invalidated; raw unrelated imports remain.
             for table in ('practice_projects','practice_results','practice_cases','facility_entries','workshop_revisions','workshop_items','facility_receipts','resident_changes','resident_change_decisions','resident_starting_map_revisions','resident_starting_maps','resident_memory_revisions','resident_pointers','resident_memories','library_documents','commons_approvals','lessons','proposals','navigation','founding_items','founding_chunks','founding_jobs'):

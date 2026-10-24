@@ -262,6 +262,11 @@ test('Captain can contact the autonomous Studio Lead and workers cannot imperson
   assert.equal(requests.at(-1).init.headers.Authorization, 'Bearer test-studio-key');
   assert.equal(payload.operation, 'captain_studio_message');
   assert.equal(payload.institution, 'Game studio');
+  await f.hooks.tool.studio_contact.execute({institution: 'The Synod', message: 'Revise that design.', thread: 'thread:1'}, f.context('synod-followup', 'build'));
+  const followup = JSON.parse(requests.at(-1).init.body);
+  assert.equal(followup.operation, 'captain_studio_message');
+  assert.equal(followup.institution, 'The Synod');
+  assert.equal(followup.thread, 'thread:1');
   const thread = JSON.parse(await f.hooks.tool.studio_contact.execute({institution: 'studio:1', thread: 'thread:1'}, f.context('studio-thread', 'plan')));
   assert.equal(thread[1].response, 'Ready');
 
