@@ -44,6 +44,8 @@ Use the supplied C SDK and bounded workbench only. Metrics are program-reported,
 Never claim to inspect screenshots unless an image was supplied. Publications and lasting memory need owner approval.
 Finish work with learn or learning_none, then done.'''
 
+PIXELART_MANAGER_SYSTEM=WORK_SYSTEM+'''\nYou are the Studio Lead for the ready-to-use Pixel Art Studio. You own its inbox and respond to the owner's pixel-art brief. Do not start a founding event or route work into the C-game production workflow. Record the request clearly, identify whether it needs design direction, sprite generation or human visual review, and state what the studio can currently do. Do not claim model generation or review delivery is available unless the runtime confirms it. Use the durable studio conversation for the response.'''
+
 MANAGER_SYSTEM=WORK_SYSTEM+'''\nYou are the Studio Lead and own the single game production lane. The saved workflow is the only production controller. Start a workflow, use workflow_assign for its current department, and wait for its durable report. When state is awaiting_review, read the checkpoints and pending_handoff, then use workflow_review with accept or revise and a concrete evidence-based reason. Acceptance advances the Planning Department, Design Integration and Production Planning Department, Implementation Department, then the independent Playtest Department. Revision keeps the same department and supplies feedback. A Playtest Department return verdict proposes the appropriate earlier department. When ready_to_close, perform the final studio review and use workflow_close or workflow_return. Do not finish while an assignment, stage review or final review is ready for your action. Never implement or test a project yourself. Permanent changes remain owner-reviewed. Select an explicit project when the inbox lists several.'''
 
 LEAD_DESIGNER_SYSTEM=WORK_SYSTEM+'''\nYou are the Lead Designer. In Planning, inspect only the workflow's immutable archive source and create a cited reverse scaffold with source contents, major control/data structures, reusable behaviour, dependencies, unknowns and one small portable-C experiment. Page through additional checkpoints with workflow_read when needed. Do not inspect or change the working copy, build or test. Outside a staged workflow, prepare the requested design brief.'''
@@ -401,7 +403,7 @@ class Studios:
             elif len(projects)==1:project=projects[0]['id']
         message=self.store.add_message(iid,sender,body,project)
         try:
-            started=self.start(dict(institution=iid,kind='manager',message_id=message['id']))
+            started=self.start(dict(institution=iid,kind='manager',message_id=message['id'],pixelart_studio=iid==getattr(self,'pixelart_institution','')))
             return dict(**message,job=started['id'])
         except (RuntimeError,ValueError,PermissionError) as error:
             self.store.event(iid,'',sender,'inbox_queued',dict(message=message['id'],reason=str(error)[:300]))
@@ -1014,6 +1016,7 @@ class Studios:
                         packet['adaptation']=dict(source=adaptation['source'],material=adaptation['material'],experiment=adaptation['experiment'])
                     assignment_mode=settings.get('assignment_mode')
                     system=(ADAPTATION_PLAN_SYSTEM if row['kind']=='adaptation-plan' else
+                            PIXELART_MANAGER_SYSTEM if settings.get('pixelart_studio') else
                             MANAGER_SYSTEM if settings.get('actor_title')=='Studio Lead' else
                             LEAD_DESIGNER_SYSTEM if assignment_mode=='design' else
                             DESIGN_INTEGRATION_AND_PRODUCTION_PLANNING_SYSTEM if assignment_mode=='test-plan' else
