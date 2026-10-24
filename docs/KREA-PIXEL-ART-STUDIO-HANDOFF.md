@@ -28,7 +28,7 @@ A chat reply such as “keep 12, 19 and 23; revise 31” is a valid review decis
 
 ## Required durable records
 
-A batch record needs a stable ID, institution/project, brief revision, state, timestamps, generation settings, count, and links to its review manifest and conversation thread. Each sprite record needs a stable ID, safe relative asset path, content hash, prompt, seed, generation settings and review state. Owner decisions must be append-only events with actor, timestamp, selected IDs and note. A retry creates new sprite IDs and preserves previous outputs and decisions.
+A batch record needs a stable ID, institution/project, brief revision, state, timestamps, generation settings, count, and links to its review manifest and conversation thread. Each sprite record needs a stable ID, safe relative asset path, content hash, prompt, a 3–8 item lowercase hyphenated tag list, seed, generation settings and review state. Tags cover subject, asset type, visual style and intended use, use consistent vocabulary, and remain searchable with the prompt. Owner decisions must be append-only events with actor, timestamp, selected IDs and note. A retry creates new sprite IDs and preserves previous outputs and decisions.
 
 The page must not trust filenames, browser-provided paths or model-generated markup. Serve images through an authenticated local route, enforce institution/batch scope, and validate every submitted sprite ID against that batch. Keep selections server-side as soon as the user changes them, and show saved/pending status. Export only owner-kept files with a manifest.
 
@@ -45,7 +45,7 @@ The studio integration is not complete until all of these work in the installed 
 - The generation runner uses the installed model and LoRA, records model revisions/settings, and can resume or safely mark an interrupted batch.
 - A batch of 1,000 sprites can be reviewed in one continuous page. Only nearby previews need to be decoded/rendered at once; selection state survives scrolling, refresh and restart.
 - Keeping/rejecting assets in the page and replying in Captain chat produce equivalent durable decisions.
-- The Review Agent reports only reproducible checks and packages exact assets; it does not make the final visual choice.
+- The Review Agent reports only reproducible checks and packages exact assets; it does not make the final visual choice. Every prompt remains paired with its searchable tags through generation, review and export.
 - Studio Lead routes revision notes to Designer or Pixel Artist and closes a batch only after the owner's selection.
 - Authentication, path scoping, request limits, storage quotas and export hashes are tested.
 - Native Mac generation speed, memory use and a representative 1,000-image review are measured before claiming capacity or overnight completion.
