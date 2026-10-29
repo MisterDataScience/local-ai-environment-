@@ -45,6 +45,21 @@ while the installer downloads dependencies/models and performs native acceptance
 Installation lives under `~/LocalAI-Automated`. Existing local configuration and
 credentials are retained. No credentials or model weights are packaged here.
 
+## Optional Krea pixel-art models
+
+The installer offers an optional download of Krea 2 Turbo and
+`azyg0s/Krea-2-pixelart-lora`. Both Hugging Face repositories are gated. To
+install them, first review and accept their current access terms on Hugging Face,
+then provide a read token in the installer's hidden prompt. The token is used
+for the downloads and is not saved. The installer verifies downloaded files
+and records the resolved model revisions. Model weights are downloaded during
+installation rather than included in the ZIP.
+
+This prepares the model files only. The model card specifies four-step
+generation and 32×32 sprite extraction; a studio workflow and native generation
+acceptance are later work. Read the model card and Krea 2 Community License
+before enabling this component.
+
 ## First-run Captain
 
 During installation, Cryptomator opens so the owner can create or unlock the
