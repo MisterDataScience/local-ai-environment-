@@ -40,6 +40,8 @@ class Review:
         directory = self.root / batch
         if directory.is_symlink() or not (directory / "batch.json").is_file():
             raise ValueError("Unknown batch")
+        if (directory / "records").is_symlink() or (directory / "sprites").is_symlink():
+            raise PermissionError("Review assets cannot use symlinked directories")
         if sprite is None:
             return directory
         if not isinstance(sprite, str) or not ID.fullmatch(sprite):
