@@ -45,7 +45,7 @@ GATEWAY_FILES += ('token_stream.py', 'conversation_audio.py', 'conversation_work
 GATEWAY_FILES += ('capability_discovery.py',)
 GATEWAY_FILES += ('inference_scheduler.py', 'captain_config.py', 'shared_llama.py')
 GATEWAY_FILES += ('commons_transport.py', 'commons.html')
-GATEWAY_FILES += ('institutions.html',)
+GATEWAY_FILES += ('institutions.html', 'pixelart-review.html')
 TEAM_FILES = ('work_agent.py', 'opencode-team.mjs', 'handoff-contract.mjs', 'team_setup.py', 'voice_setup.py',
               'office_setup.py', 'office_mcp.py', 'office_check.py', 'browser_agent.py', 'browser_setup.py',
                'tool_availability.py', 'pdf_reader.py', 'pdf_mcp.py', 'transfer_mcp.py', 'file_transfer.py', 'vault_transfer.py', 'login_startup.py',
@@ -58,7 +58,7 @@ TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captai
 TEAM_FILES += ('commons.py', 'commons_control.py', 'village_memory.py', 'resident_management.py', 'village_storage.py', 'founding.py', 'village_owner.py')
 TEAM_FILES += ('studio_store.py','studio_runtime.py','studio_workbench.py','studio_player.py','studio_control.py','studios.py','studio_roles.py')
 TEAM_FILES += ('synod.py','synod_store.py')
-TEAM_FILES += ('pixelart_runner.py',)
+TEAM_FILES += ('pixelart_runner.py', 'pixelart_review.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
