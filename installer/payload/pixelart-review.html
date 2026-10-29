@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Art review</title>
+<style>
+:root{color-scheme:dark}body{font:16px system-ui;background:#101820;color:#e9f1f5;max-width:1200px;margin:auto;padding:1rem}input,button{font:inherit;background:#20323e;color:inherit;border:1px solid #7192a5;border-radius:6px;padding:.55rem}button{cursor:pointer}button:disabled{opacity:.5}header{position:sticky;top:0;background:#101820;padding:.6rem 0;z-index:2;border-bottom:1px solid #466172}.controls{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0}#gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1rem;margin:1rem 0}.card{background:#1a2a35;border:1px solid #405b6a;border-radius:10px;padding:.8rem}.card img{width:128px;height:128px;object-fit:contain;image-rendering:pixelated;background:repeating-conic-gradient(#687680 0 25%,#293a44 0 50%) 50%/16px 16px;display:block;margin:auto}.card h3{overflow-wrap:anywhere;font-size:1rem}.card p{font-size:.85rem;min-height:2.4rem}.tags{color:#a8d4e9;overflow-wrap:anywhere}.decisions{display:flex;gap:.3rem}.selected{outline:2px solid #8bd9ad}#status{min-height:1.5rem}#sentinel{height:2rem}
+</style>
+<header><h1>Pixel Art review</h1><div class="controls"><label>Local key <input id="key" type="password" autocomplete="off"></label><label>Batch <input id="batch" placeholder="batch ID"></label><label>Tag <input id="tag" placeholder="exact tag"></label><button id="open">Open</button><button id="export">Export kept</button></div><div id="status" role="status">Enter the local key and batch ID.</div></header>
+<main id="gallery"></main><div id="sentinel"></div>
+<script>
+const key=document.querySelector('#key'),batch=document.querySelector('#batch'),tag=document.querySelector('#tag'),gallery=document.querySelector('#gallery'),status=document.querySelector('#status');
+key.value=decodeURIComponent(location.hash.slice(1));history.replaceState(null,'',location.pathname+location.search);
+batch.value=new URLSearchParams(location.search).get('batch')||'';
+let offset=0,busy=false,more=false,generation=0;
+async function call(operation,args={}){
+  const response=await fetch('/control/studios',{method:'POST',headers:{Authorization:'Bearer '+key.value,'Content-Type':'application/json'},body:JSON.stringify({operation,...args})});
+  const result=await response.json();if(!response.ok)throw Error(result.error||'Request failed');return result;
+}
+function el(name,text){const node=document.createElement(name);if(text!==undefined)node.textContent=text;return node}
+function card(record){
+  const root=el('article');root.className='card';
+  const image=el('img');image.src='data:image/png;base64,'+record.png;image.alt='Sprite '+record.id;root.append(image);
+  root.append(el('h3',record.id),el('p',record.prompt),el('div',record.tags.join(' · ')));
+  root.lastChild.className='tags';
+  const note=el('input');note.placeholder='Optional note';note.maxLength=1000;note.value=record.review.note||'';note.setAttribute('aria-label','Note for '+record.id);root.append(note);
+  const buttons=el('div');buttons.className='decisions';const saved=el('small',record.review.decision);root.append(buttons,saved);
+  for(const choice of ['keep','reject','pending']){
+    const button=el('button',choice);button.type='button';button.classList.toggle('selected',choice===record.review.decision);
+    button.onclick=async()=>{for(const b of buttons.children)b.disabled=true;saved.textContent='Saving…';try{await call('pixelart_review_decide',{batch:batch.value,sprite:record.id,decision:choice,note:note.value});saved.textContent='Saved: '+choice;for(const b of buttons.children)b.classList.toggle('selected',b.textContent===choice)}catch(e){saved.textContent='Not saved: '+e.message}finally{for(const b of buttons.children)b.disabled=false}};
+    buttons.append(button);
+  }
+  return root;
+}
+async function load(){if(busy||!more)return;busy=true;const current=generation;status.textContent='Loading sprites…';
+  try{const result=await call('pixelart_review_page',{batch:batch.value,tag:tag.value.trim(),offset,limit:40});if(current!==generation)return;for(const record of result.records)gallery.append(card(record));offset=result.next_offset;more=result.has_more;status.textContent=offset+' of '+result.total+' sprites loaded'+(more?'':' · End of batch');}
+  catch(e){status.textContent=e.message;more=false}finally{busy=false}
+}
+document.querySelector('#open').onclick=()=>{generation++;gallery.replaceChildren();offset=0;more=true;load()};
+document.querySelector('#export').onclick=async()=>{status.textContent='Preparing kept sprites…';try{const result=await call('pixelart_review_export',{batch:batch.value});const binary=atob(result.base64),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);const link=el('a');link.href=URL.createObjectURL(new Blob([bytes],{type:'application/zip'}));link.download=result.filename;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),30000);status.textContent='Kept sprites exported'}catch(e){status.textContent=e.message}};
+new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))load()},{rootMargin:'700px'}).observe(document.querySelector('#sentinel'));
+if(key.value&&batch.value){more=true;load()}
+</script></html>
