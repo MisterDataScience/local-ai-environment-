@@ -6,6 +6,12 @@ The optional installer component downloads and verifies Krea 2 Turbo and the pix
 
 Do not describe model installation or the gallery prototype as an operational pixel-art studio.
 
+## Synod integration
+
+Captain routes ordinary sprite briefs to the Pixel Art Studio Lead. Requests to create, redesign or repair a studio go through `studio_contact` to The Synod, preserving its explicit design review and construction blockers. The Captain instruction must retain both routes.
+
+The current Synod construction adapter supports text studios only. A Pixel Art Studio specification that requires `image_generation` must remain blocked until a real, tested Krea 2 + LoRA generation adapter is installed and Synod supports it. The currently provisioned inbox is not evidence that the Synod has built or trialled an operational image studio. Do not mark it Synod-built or ready for sprite generation based on prompt instructions alone.
+
 ## Accepted user workflow
 
 1. The owner asks Captain to route a sprite task to the pixel-art studio. Captain creates or resumes one durable batch with the user's brief and links it to the studio conversation.
