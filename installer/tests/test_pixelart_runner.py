@@ -49,6 +49,7 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(sprite.getpixel((0, 0)), (190, 12, 15, 255))
         self.assertEqual(sprite.getpixel((1, 0))[3], 0)
         self.assertEqual(first["records"][0]["model_revisions"]["pixelart_lora"], "lora-revision")
+        self.assertIn("[TAGS: apple, icon, pixel-art, inventory]", first["records"][0]["tagged_prompt"])
 
     def test_rejects_modified_brief_and_corrupt_existing_output(self):
         render = lambda *args: Image.new("RGB", (512, 512), (255, 0, 255))
