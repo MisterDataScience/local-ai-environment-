@@ -80,6 +80,8 @@ class CaptainSetupTests(unittest.TestCase):
                 self.assertIn('You are the captain', prompt)
                 self.assertLess(len(prompt), 5500)
                 self.assertIn('studio_contact', prompt)
+                self.assertIn('pixelart_contact', prompt)
+                self.assertIn('Route requests to create or repair studios to The Synod', prompt)
                 self.assertFalse(settings['tools']['studio_contact'])
             for role in captain_setup.ROLES:
                 prompt = settings['agent']['captain-' + role]['prompt']
