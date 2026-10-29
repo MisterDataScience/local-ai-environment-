@@ -390,6 +390,13 @@ class StudioTests(unittest.TestCase):
         self.assertEqual(thread[0]['sender'],'captain');self.assertEqual(thread[0]['state'],'complete');self.assertTrue(thread[0]['response'])
         self.assertIn('inbox',json.loads(self.engine.calls[-1]['messages'][-1]['content']))
 
+    def test_pixelart_contact_persists_the_pixelart_lead_prompt_selector(self):
+        self.c.pause()
+        message=self.c.contact(self.c.pixelart_institution,'captain','Create a tagged pixel-art apple sprite.')
+        with self.s.db() as cx:
+            row=dict(cx.execute('SELECT * FROM studio_jobs WHERE id=?',(message['job'],)).fetchone())
+        self.assertTrue(json.loads(row['settings']).get('pixelart_studio'))
+
     def test_studio_lead_chooses_project_instead_of_guessing_when_inbox_is_ambiguous(self):
         self.staff();second=self.s.ingest(self.i,'Second game',[('second.c',b'int score;')],dict(kind='fixture'))
         self.c.pause()
