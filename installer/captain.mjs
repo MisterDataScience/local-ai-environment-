@@ -335,6 +335,21 @@ export default async function Captain({client, directory}, options) {
         if (!response.ok) fail(result.error || 'Studio Lead inbox unavailable');
         return JSON.stringify(result);
       }},
+    pixelart_contact: {description: 'Route a pixel-art request to the ready-to-use Pixel Art Studio Lead. Use this for sprite, pixel-art asset and sprite-sheet production requests; do not send these to the C-game studio. This creates a durable Studio Lead inbox message and starts no founding event.',
+      args: {message: {type: 'string', maxLength: 4000}}, async execute(args, context) {
+        if (Object.keys(args).some(k => k !== 'message')) fail('unknown Pixel Art Studio contact fields');
+        const binding = await origin(context);
+        if (binding.task || !['plan', 'build'].includes(binding.parentAgent)) fail('only the Village Captain can route Pixel Art Studio requests');
+        const gatewayKey = process.env.LOCAL_AI_GATEWAY_KEY;
+        if (!gatewayKey) fail('Captain gateway credential is unavailable');
+        const response = await fetch('http://127.0.0.1:8001/control/studios', {method: 'POST',
+          headers: {Authorization: 'Bearer ' + gatewayKey, 'Content-Type': 'application/json'},
+          body: JSON.stringify({operation: 'pixelart_captain_message', message: text(args.message, 4000, 'message')}),
+          redirect: 'error', signal: context.abort});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) fail(result.error || 'Pixel Art Studio Lead inbox unavailable');
+        return JSON.stringify(result);
+      }},
     team_run: {description: 'Dispatch 1–5 independent temporary workers concurrently and await their results. Captain retains ownership. Different tool profiles share one model. Dependent stages require separate calls. Only one coder per cohort. Workers cannot delegate.',
       args: {tasks: {type: 'array', minItems: 1, maxItems: 5, items: {type: 'object', additionalProperties: false,
         properties: {id: {type: 'string'}, role: {type: 'string', enum: ROLES}, objective: {type: 'string'},
