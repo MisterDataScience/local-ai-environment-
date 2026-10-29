@@ -22,7 +22,7 @@ MAX_SPRITES = 1000
 
 
 def _atomic(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, name = tempfile.mkstemp(prefix=".pixelart-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as output:
@@ -112,7 +112,7 @@ def generate(batch: dict, model_root: Path, output_root: Path, *, renderer=None)
     target = output_root / batch["id"]
     if output_root.is_symlink() or target.is_symlink():
         raise PermissionError("Refusing a symlinked output directory")
-    target.mkdir(parents=True, exist_ok=True)
+    target.mkdir(parents=True, exist_ok=True, mode=0o700)
     batch_spec = json.dumps(batch, sort_keys=True, separators=(",", ":")).encode()
     batch_digest = hashlib.sha256(batch_spec).hexdigest()
     pinned = target / "batch.json"
