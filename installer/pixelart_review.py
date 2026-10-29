@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -20,8 +21,13 @@ class Review:
         self.root = Path(root)
         if self.root.is_symlink():
             raise PermissionError("Review root cannot be a symlink")
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.root.chmod(0o700)
         self.db = self.root / "review.sqlite"
+        if self.db.is_symlink():
+            raise PermissionError("Review database cannot be a symlink")
+        self.db.touch(mode=0o600, exist_ok=True)
+        os.chmod(self.db, 0o600)
         with self.connect() as cx:
             cx.execute("""CREATE TABLE IF NOT EXISTS decisions(
                 event INTEGER PRIMARY KEY AUTOINCREMENT, batch TEXT NOT NULL,
