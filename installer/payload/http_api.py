@@ -106,6 +106,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/pixelart-review':
+            from pathlib import Path
+            content=(Path(__file__).parent/'pixelart-review.html').read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type','text/html; charset=utf-8')
+            self.send_header('Content-Length',str(len(content)))
+            self.send_header('Cache-Control','no-store')
+            self.send_header('Referrer-Policy','no-referrer')
+            self.send_header('Content-Security-Policy',"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; frame-ancestors 'none'")
+            self.end_headers();self.wfile.write(content);return
         if path == '/institutions':
             from pathlib import Path
             content=(Path(__file__).parent/'institutions.html').read_bytes()
