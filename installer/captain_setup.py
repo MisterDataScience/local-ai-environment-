@@ -83,7 +83,7 @@ def download_artifact(url, destination, checksum):
 
 ROLES = ('researcher', 'analyst', 'coder', 'writer', 'reviewer')
 BOARD_TOOLS = ('team_board', 'team_note', 'team_message', 'team_inbox')
-CAPTAIN_TOOLS = ('team_run', 'team_retire', 'studio_contact', *BOARD_TOOLS,
+CAPTAIN_TOOLS = ('team_run', 'team_retire', 'studio_contact', 'pixelart_contact', *BOARD_TOOLS,
                  'village_status', 'village_search', 'village_read', 'village_facilities',
                  'village_publish', 'village_practice_prepare', 'village_manage')
 
@@ -135,6 +135,7 @@ def configure(config, settings, root, status):
         'Native task is for a useful different-model specialist or explicit essay/scaffold work; '
         'never run team_run during those document workflows. '
         'Use studio_contact to speak to the autonomous Studio Lead; it owns studio production. '
+        'Use pixelart_contact for sprite, pixel-art asset and sprite-sheet briefs; the Pixel Art Studio Lead owns that inbox. It requires no founding event. '
         'Route requests to create or repair studios to The Synod through studio_contact. It is installed without founding. '
         'Synod design approval is an explicit owner review, never something the Captain can grant. '
         'Reuse approved Village residents. Their starting maps provide fast_access, glossary and '
