@@ -149,7 +149,8 @@ def generate(batch: dict, model_root: Path, output_root: Path, *, renderer=None)
         finally:
             temporary.unlink(missing_ok=True)
         record = dict(id=sid, batch=batch["id"], batch_digest=batch_digest,
-                      prompt=row["prompt"], rendered_prompt=prompt, tags=row["tags"], seed=row["seed"],
+                      prompt=row["prompt"], tagged_prompt=row["prompt"] + "\n[TAGS: " + ", ".join(row["tags"]) + "]",
+                      rendered_prompt=prompt, tags=row["tags"], seed=row["seed"],
                       model_revisions={k: manifest[k]["revision"] for k in ("base_model", "pixelart_lora")},
                       settings={k: settings[k] for k in ("steps", "guidance_scale", "width", "height")},
                       file="sprites/" + sid + ".png", sha256=hashlib.sha256(payload).hexdigest())
