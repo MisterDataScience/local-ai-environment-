@@ -2,9 +2,9 @@
 
 ## Current boundary
 
-The optional installer component downloads and verifies Krea 2 Turbo and the pixel-art LoRA. A bundled `pixelart_runner.py` can validate a batch, load the model once, extract 32×32 PNGs, save per-sprite prompt/tag/seed/hash receipts, resume verified outputs and search exact tags. Its GPU dependencies are not installed by this component and no native Mac render has passed. The Studio Lead cannot invoke this runner yet. The existing studio workflow is a portable-C game-production lane and does not accept image batches. The review gallery prototype is not connected to generated files or studio records.
+The optional installer component downloads and verifies Krea 2 Turbo and the pixel-art LoRA. A bundled `pixelart_runner.py` can validate a batch, load the model once, extract 32×32 PNGs, save per-sprite prompt/tag/seed/hash receipts, resume verified outputs and search exact tags. Its GPU dependencies are not installed by this component and no native Mac render has passed. The Studio Lead cannot invoke this runner yet. The existing studio workflow is a portable-C game-production lane and does not accept image batches. A local review page now reads runner receipts through authenticated Studio operations, loads 40 sprites at a time, persists owner decisions and exports kept sprites. No Studio Lead job currently creates or launches its batches, and the Captain chat has no verified completion delivery hook.
 
-Do not describe model installation or the gallery prototype as an operational pixel-art studio.
+Do not describe model installation, the runner or the gallery as an operational pixel-art studio until the generation job path and Synod trials work.
 
 ## Synod integration
 
