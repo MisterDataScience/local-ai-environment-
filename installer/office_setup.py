@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import time
 from fnmatch import fnmatchcase
@@ -61,8 +62,15 @@ def install(root, download, run):
         partial.replace(binary)
     verify_binary(binary)
     # Clear quarantine on this verified binary only, never change Gatekeeper globally.
-    if sys.platform == 'darwin' and 'com.apple.quarantine' in os.listxattr(binary):
-        os.removexattr(binary, 'com.apple.quarantine')
+    if sys.platform == 'darwin':
+        attributes = subprocess.check_output(
+            ['/usr/bin/xattr', str(binary)], text=True, timeout=10
+        ).splitlines()
+        if 'com.apple.quarantine' in attributes:
+            subprocess.run(
+                ['/usr/bin/xattr', '-d', 'com.apple.quarantine', str(binary)],
+                check=True, timeout=10
+            )
     command = engine_command(binary, root)
     run(command[:-3] + ['version'], env=engine_environment(), timeout=30)
     from office_check import check
