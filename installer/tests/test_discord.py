@@ -10,6 +10,17 @@ import discord_runtime as runtime
 
 
 class DiscordTests(unittest.TestCase):
+    def test_installer_can_defer_discord_without_requesting_token_or_voice(self):
+        from installer import install_discord_transport
+        root = Path('/local-ai')
+        with patch.object(setup, 'install') as install, patch.object(setup, 'configure') as configure:
+            install_discord_transport(root, None, None, defer_configuration=True)
+            install.assert_called_once_with(root, None, None)
+            configure.assert_not_called()
+            install_discord_transport(root, None, None, defer_configuration=False)
+            self.assertEqual(install.call_count, 2)
+            configure.assert_called_once_with(root)
+
     def test_keychain_secret_uses_stdin_not_process_arguments(self):
         token='Secret_token_0123456789'; root=Path('/local-ai')
         with patch.object(setup.subprocess,'run') as run, patch.object(setup,'read_token',return_value=token):

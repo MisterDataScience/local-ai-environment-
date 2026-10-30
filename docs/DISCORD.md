@@ -7,6 +7,20 @@ The bot joins you, transcribes your speech locally, sends it to the existing
 OpenCode coordinator and speaks with the registered Qwen3-TTS `default` voice.
 This is a server voice channel, not a direct-message phone call.
 
+## Defer bot and reference voice setup
+
+If you want to try the local Captain before setting up voice calls, run the main
+installer with `--defer-discord` (for example,
+`/bin/bash "$HOME/Downloads/mac-local-ai-installer/Install Local AI.command" --defer-discord`).
+The installer still prepares the Discord transport dependencies so the installed
+`Connect Discord.command` can be used later, but it does not request a Discord
+bot token, server invitation or reference WAV. On a fresh installation Discord
+remains disabled; local Captain and ordinary chat are unaffected.
+
+When you have a valid bot token and 3–30-second reference WAV with an exact
+transcript, run `Connect Discord.command` to complete setup. On an upgrade,
+`--defer-discord` leaves any already enabled Discord configuration unchanged.
+
 ## One-time setup
 
 You use your ordinary Discord account to own a bot application; the bot does
