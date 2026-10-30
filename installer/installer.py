@@ -849,7 +849,8 @@ def main():
             with (directory / "installed-versions.txt").open("w") as output:
                 run([args.uv, "pip", "freeze", "--python", directory / ".venv/bin/python"], stdout=output)
         (root / "software-versions.json").write_text(json.dumps(
-            {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "opencode": "1.18.34",
+            {"comfyui": "not_configured" if args.local_trial else COMFY_RELEASE,
+             "open_webui": WEBUI_RELEASE, "opencode": "1.18.34",
              "aioffice": configuration.get('office', {}).get('version', 'not_configured'),
              "text_models": configured_text_models(configuration)}, indent=2))
         if args.minicpm_captain and not args.local_trial:
