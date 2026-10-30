@@ -408,7 +408,7 @@ def install_environments(root, uv, state, *, local_trial=False):
             fd = os.open(deferred_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, 'w') as out:
                 json.dump(deferred, out, indent=2)
-                out.write('\\n')
+                out.write('\n')
         upgraded['text_models'] = {key: value for key, value in upgraded['text_models'].items()
                                    if key in ('local-ai', 'local-ai-captain')}
         if len(upgraded['text_models']) != 2:
