@@ -387,13 +387,35 @@ def install_environments(root, uv, state, *, local_trial=False):
         config_path.write_text(json.dumps(config, indent=2) + "\n")
         config_path.chmod(0o600)
     config = json.loads(config_path.read_text())
+    deferred_path = control / 'trial-deferred-settings.json'
+    if not local_trial and config.get('install_profile') == 'local-trial':
+        if not deferred_path.is_file() or deferred_path.is_symlink():
+            raise RuntimeError('Full-upgrade backup of trial settings is unavailable. Restore settings before upgrading.')
+        deferred = json.loads(deferred_path.read_text())
+        for key, value in deferred.items():
+            config[key] = value
     from captain_config import upgrade as upgrade_captain
     upgraded = upgrade_captain(upgrade_team(upgrade_text_configuration(config)))
     from voice_setup import install as install_voice
     if local_trial:
+        if config.get('install_profile') != 'local-trial':
+            if deferred_path.exists():
+                raise RuntimeError('Unexpected trial settings backup already exists; inspect before proceeding.')
+            deferred = {key: upgraded[key] for key in
+                        ('text_models', 'model_team', 'model_team_version', 'speech',
+                         'conversation', 'discord', 'web', 'browser', 'remote_access',
+                         'vault', 'office') if key in upgraded}
+            fd = os.open(deferred_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, 'w') as out:
+                json.dump(deferred, out, indent=2)
+                out.write('\\n')
+        upgraded['text_models'] = {key: value for key, value in upgraded['text_models'].items()
+                                   if key in ('local-ai', 'local-ai-captain')}
+        if len(upgraded['text_models']) != 2:
+            raise RuntimeError('Local trial requires the default and shared Captain model profiles.')
         upgraded['speech'] = {**upgraded.get('speech', {}), 'enabled': False}
         upgraded['conversation'] = {**upgraded.get('conversation', {}), 'enabled': False}
-        for optional in ('discord', 'web', 'browser', 'remote_access'):
+        for optional in ('discord', 'web', 'browser', 'remote_access', 'vault', 'office'):
             if optional in upgraded:
                 upgraded[optional] = {**upgraded[optional], 'enabled': False}
         upgraded['install_profile'] = 'local-trial'
