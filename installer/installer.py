@@ -326,7 +326,7 @@ def install_comfy(root, uv, state):
     return directory
 
 
-def install_environments(root, uv, state):
+def install_environments(root, uv, state, *, local_trial=False):
     control = root / "control"
     control.mkdir(exist_ok=True)
     # Remove only explicitly retired project files, never user data/workflows.
@@ -390,9 +390,18 @@ def install_environments(root, uv, state):
     from captain_config import upgrade as upgrade_captain
     upgraded = upgrade_captain(upgrade_team(upgrade_text_configuration(config)))
     from voice_setup import install as install_voice
-    upgraded['speech'] = install_voice(root, uv, run)
-    from conversation_setup import install as install_conversation
-    upgraded['conversation'] = install_conversation(root, uv, run)
+    if local_trial:
+        upgraded['speech'] = {**upgraded.get('speech', {}), 'enabled': False}
+        upgraded['conversation'] = {**upgraded.get('conversation', {}), 'enabled': False}
+        for optional in ('discord', 'web', 'browser', 'remote_access'):
+            if optional in upgraded:
+                upgraded[optional] = {**upgraded[optional], 'enabled': False}
+        upgraded['install_profile'] = 'local-trial'
+    else:
+        upgraded['speech'] = install_voice(root, uv, run)
+        from conversation_setup import install as install_conversation
+        upgraded['conversation'] = install_conversation(root, uv, run)
+        upgraded['install_profile'] = 'full'
     if upgraded != config:
         # Keep the old settings and secrets recoverable before migrating.
         backup = config_path.with_name("config.before-model-team-v1.json")
@@ -454,7 +463,7 @@ def verify_context_rejection(key, identifier, context):
     return results
 
 
-def verify_generation(root, configuration):
+def verify_generation(root, configuration, *, local_trial=False):
     import resource_modes
     if resource_modes.load(root / "control") != "max":
         raise RuntimeError("Native acceptance must run in Max mode; installer must select it temporarily.")
@@ -484,14 +493,20 @@ def verify_generation(root, configuration):
         ContextSettings().sync(http('http://127.0.0.1:8001/control/context', key=configuration['api_key']))
         checks = [("text-" + identifier, "Reply with one sentence about Python.", identifier)
                   for identifier in presets]
-        checks += [(kind, prompt, "local-ai") for kind, prompt in [
-            ("text", "Reply with one sentence about Python."),
-            ("image", "/image A red toy racing car on a white table, studio photograph, no text."),
-            ("text-after-image", "Reply with one sentence about statistics."),
-            ("video", "/video A fixed camera watches a red toy racing car move slowly from left to right on a white table. The wheels rotate naturally. Soft studio light and a plain background. Stable camera, no text or logos."),
-            ("text-after-video", "Reply with one sentence about reproducibility."),
-        ]]
-        report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": [], "media": "vault-direct" if configuration.get("vault", {}).get("enabled") else "local"}
+        checks.append(("text", "Reply with one sentence about Python.", "local-ai"))
+        if not local_trial:
+            checks += [(kind, prompt, "local-ai") for kind, prompt in [
+                ("image", "/image A red toy racing car on a white table, studio photograph, no text."),
+                ("text-after-image", "Reply with one sentence about statistics."),
+                ("video", "/video A fixed camera watches a red toy racing car move slowly from left to right on a white table. The wheels rotate naturally. Soft studio light and a plain background. Stable camera, no text or logos."),
+                ("text-after-video", "Reply with one sentence about reproducibility."),
+            ]]
+        report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": [],
+                  "media": "not_configured" if local_trial else ("vault-direct" if configuration.get("vault", {}).get("enabled") else "local")}
+        if local_trial:
+            for feature in ('image', 'text-after-image', 'video', 'text-after-video'):
+                report['checks'].append({'name': feature, 'status': 'not_run',
+                    'reason': 'Local-only trial excludes media generation.'})
         if configuration.get('model_team', {}).get('enabled'):
             report['checks'].append({'name': 'reverse-scaffold-quality', 'status': 'not_run',
                 'reason': 'Stage and schema tests use simulated responses. Author must check actual local-model planning quality on the Mac.'})
@@ -569,7 +584,7 @@ def verify_text_residency(configuration, presets, identifier):
             raise RuntimeError('Shared GGUF residency did not match the completed model/media handoff')
 
 
-def verify_generation_during_install(root, configuration):
+def verify_generation_during_install(root, configuration, *, local_trial=False):
     """Installer-owned Max acceptance without permanent changes to owner modes.
 
     Preconditions: installer lock held, preflight confirmed all app ports free.
@@ -581,7 +596,7 @@ def verify_generation_during_install(root, configuration):
     if saved_mode != "max":
         resource_modes.save(control, "max")
     try:
-        verify_generation(root, configuration)
+        verify_generation(root, configuration, local_trial=local_trial)
     finally:
         if saved_mode != "max":
             resource_modes.save(control, saved_mode)
@@ -711,9 +726,13 @@ def main():
     parser.add_argument("--remote-access", action="store_true",
                         help="Install/connect Tailscale and configure private chat/media HTTPS access.")
     parser.add_argument("--web-access", action="store_true", help="Configure isolated Proton VPN search/page reading.")
+    parser.add_argument('--local-trial', action='store_true',
+                        help='Install local text Captain without account and reference voice setup.')
     parser.add_argument('--minicpm-captain', action='store_true',
                         help='Build the pinned native MiniCPM runtime and use its standard mixed-Q3 model as the shared team.')
     args = parser.parse_args()
+    if args.local_trial and not args.minicpm_captain:
+        parser.error('--local-trial requires the MiniCPM Captain launcher')
     root = args.root.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     for name in ("logs", "cache", "tools", "models/ollama"):
@@ -732,40 +751,49 @@ def main():
         logging.info("Stage 2/8: native Ollama installation")
         install_ollama(root)
         checkpoint(state, "ollama-installed")
-        logging.info("Stage 3/8: ComfyUI and Apple GPU support")
-        install_comfy(root, args.uv, state)
-        logging.info("Stage 4/8: verified image/video model downloads")
-        for relative, url, checksum in MODELS:
-            download(url, root / "ComfyUI/models" / relative, checksum)
+        if args.local_trial:
+            logging.info("Stages 3-4/8: media runtime and downloads deferred for local trial")
+        else:
+            logging.info("Stage 3/8: ComfyUI and Apple GPU support")
+            install_comfy(root, args.uv, state)
+            logging.info("Stage 4/8: verified image/video model downloads")
+            for relative, url, checksum in MODELS:
+                download(url, root / "ComfyUI/models" / relative, checksum)
         logging.info("Stage 5/8: gateway and automatically configured chat UI")
-        configuration = install_environments(root, args.uv, state)
+        configuration = install_environments(root, args.uv, state, local_trial=args.local_trial)
         from workspace_setup import install_cryptomator, save_config
-        app = install_cryptomator(root, download, run)
+        if not args.local_trial:
+            app = install_cryptomator(root, download, run)
         from work_agent import install as install_work_agent
         install_work_agent(root, download, run)
-        from office_setup import install as install_office
-        configuration['office'] = install_office(root, download, run)
-        configuration['cryptomator_app'] = str(app)
+        if not args.local_trial:
+            from office_setup import install as install_office
+            configuration['office'] = install_office(root, download, run)
+            configuration['cryptomator_app'] = str(app)
         save_config(root, configuration)
-        from discord_setup import install as install_discord, configure as configure_discord
-        install_discord(root, download, run)
-        configure_discord(root)
+        if not args.local_trial:
+            from discord_setup import install as install_discord, configure as configure_discord
+            install_discord(root, download, run)
+            configure_discord(root)
+        else:
+            logging.info('Office and Discord enrolment deferred; no bot token or reference WAV required')
         configuration = json.loads((root / 'control/config.json').read_text())
         vault_acceptance = None
         if args.minicpm_captain:
             from captain_setup import install_minicpm
             configuration = install_minicpm(root, download)
             from workspace_install import configure_during_install
-            logging.info("Completing encrypted Cryptomator AI Workspace inside Captain installation")
-            configuration, vault_acceptance = configure_during_install(root, app)
-            if vault_acceptance.get('status') != 'passed':
-                raise RuntimeError('Encrypted workspace acceptance did not pass')
+            if not args.local_trial:
+                logging.info("Completing encrypted Cryptomator AI Workspace inside Captain installation")
+                configuration, vault_acceptance = configure_during_install(root, app)
+                if vault_acceptance.get('status') != 'passed':
+                    raise RuntimeError('Encrypted workspace acceptance did not pass')
         logging.info("Stage 6/8: hardware generation and memory handoff tests")
         fingerprint = acceptance_fingerprint(root)
         accepted_file = root / "accepted-fingerprint.txt"
         if (not completed(state, "hardware-acceptance") or not accepted_file.exists()
                 or accepted_file.read_text() != fingerprint):
-            verify_generation_during_install(root, configuration)
+            verify_generation_during_install(root, configuration, local_trial=args.local_trial)
             accepted_file.write_text(fingerprint)
             checkpoint(state, "hardware-acceptance")
         else:
@@ -786,9 +814,9 @@ def main():
                 run([args.uv, "pip", "freeze", "--python", directory / ".venv/bin/python"], stdout=output)
         (root / "software-versions.json").write_text(json.dumps(
             {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "opencode": "1.18.34",
-             "aioffice": configuration['office']['version'],
+             "aioffice": configuration.get('office', {}).get('version', 'not_configured'),
              "text_models": configured_text_models(configuration)}, indent=2))
-        if args.minicpm_captain:
+        if args.minicpm_captain and not args.local_trial:
             # No separate post-install activation: the Captain profile installs
             # the signed local container engine, VPN-bound browsing and private
             # Tailscale routing before first launch. Account sign-in/licensing
@@ -831,7 +859,7 @@ def main():
             start_login_service(root)
             background = await_background(root, configuration)
             receipt = write_receipt(root, configuration, native_acceptance, background,
-                                    vault=vault_acceptance, require_integrations=True)
+                                    vault=vault_acceptance, require_integrations=not args.local_trial)
             checkpoint(state, "installed")
             logging.info("Captain installation core ready. Remaining physical checks: %s",
                          ', '.join(receipt['pending_physical_acceptance']))
