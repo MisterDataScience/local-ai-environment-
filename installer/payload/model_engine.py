@@ -228,6 +228,8 @@ class Engine:
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
+        if self.config.get('install_profile') == 'local-trial' and route != 'text':
+            raise ValueError('The local-only trial supports text requests only. Additional capabilities are not configured.')
         if body.get('inference_only') and (route != 'text' or body.get('tools')):
             raise ValueError('This request permits text inference only; commands and tools are prohibited.')
         body['_vision'] = any(m.get('images') for m in messages)
