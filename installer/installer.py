@@ -842,7 +842,10 @@ def main():
                 resource_modes.save(control, "normal")
         logging.info("Stage 7/8: create daily launcher and record versions")
         application = make_launcher(root)
-        for directory in (root / "ComfyUI", root / "control", root / "webui"):
+        versioned_environments = (root / "control", root / "webui")
+        if not args.local_trial:
+            versioned_environments = (root / "ComfyUI", *versioned_environments)
+        for directory in versioned_environments:
             with (directory / "installed-versions.txt").open("w") as output:
                 run([args.uv, "pip", "freeze", "--python", directory / ".venv/bin/python"], stdout=output)
         (root / "software-versions.json").write_text(json.dumps(
