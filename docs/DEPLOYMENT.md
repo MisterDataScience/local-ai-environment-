@@ -6,6 +6,42 @@ an older snapshot and do not include all current source changes. Merging source
 does not rebuild it. See [release validation](RELEASE-VALIDATION.md#current-source-and-package-status)
 for the manual release gates and package/source verification.
 
+## Local-only first run
+
+For an initial test on Apple Silicon, use the standard installer with the
+`--local-trial` option:
+
+```bash
+/bin/bash "$HOME/Downloads/mac-local-ai-installer/Install Local AI.command" --local-trial
+```
+
+This is a deliberately limited local profile. It installs the verified native
+MiniCPM Captain and local OpenCode Work Agent, one small Qwen3.5 fallback text
+model, gateway and Open WebUI. The full source contains the Synod and studios,
+but live institution operations can require FileVault and an encrypted workspace,
+which are **not** provisioned in this trial.
+
+The trial does **not** prompt for a Discord token, reference voice WAV, vault
+creation, Proton WireGuard key, Docker permissions, Tailscale login or GitHub
+token. Local speech, Discord, Office, image/video and network integrations are
+disabled. Their existing files and downloads are preserved, with previously
+configured settings kept in a private deferred-settings backup. Only two text
+model profiles are enabled during the trial.
+
+A trial still needs Internet access for missing verified model dependencies and
+retains the native text generation and real Captain worker-delegation acceptance
+gates. Image/video and voice checks are `not_run`, not passes. The receipt
+identifies the trial profile and unconfigured integrations. The Captain is
+available at `http://127.0.0.1:4096` on the Mac, and ordinary chat at
+`http://127.0.0.1:8081`. Both are local-only, so an iPad or Windows client
+can use the existing VNC desktop but not the unconfigured Tailscale web URL.
+
+Run the ordinary full installer later to restore deferred settings and configure
+additional capabilities. Stop the running Local AI instance before upgrading.
+On a pre-existing installation, choose the trial knowing that active optional
+integrations will be disabled until full installation. Existing secrets and
+data are not deleted by the trial.
+
 ## Installation or upgrade
 
 1. Stop LOCAL AI and the Work Agent. Leave Docker open if you use VPN web access.

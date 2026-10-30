@@ -35,7 +35,7 @@ def acceptance_summary(root, config):
         raise RuntimeError('Native acceptance report has no checks.')
     names = {item.get('name') for item in rows
              if isinstance(item, dict) and item.get('status') == 'passed'}
-    required = set(BASE_CHECKS)
+    required = {'text'} if config.get('install_profile') == 'local-trial' else set(BASE_CHECKS)
     required.update('text-' + model for model in configured_text_models(config))
     if config.get('captain', {}).get('enabled'):
         required.add('native-captain-team')
@@ -115,15 +115,16 @@ def write_receipt(root, config, native, background, vault=None, *, require_integ
             ('Tailscale remote Captain', 'remote_access', 'private_remote_captain')):
         if config.get(flag, {}).get('enabled') and background.get(verification) != 'passed':
             raise RuntimeError(category + ' was configured without a passing integration test')
+    local_trial = config.get('install_profile') == 'local-trial'
     receipt = {
-        'profile': 'minicpm-captain',
-        'status': 'core_ready_with_native_followups',
+        'profile': 'local-trial' if local_trial else 'minicpm-captain',
+        'status': 'local_text_ready_with_native_followups' if local_trial else 'core_ready_with_native_followups',
         'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'native_acceptance': native,
         'background_services': background,
         'encrypted_workspace': vault if vault is not None else {
             'status': 'not_configured', 'reason': 'Vault setup was not included in this installation'},
-        'encrypted_workspace_login_unlock': 'owner_must_unlock_cryptomator_after_login',
+        'encrypted_workspace_login_unlock': 'not_configured' if local_trial else 'owner_must_unlock_cryptomator_after_login',
         'integration_acceptance': {
             'vpn_web': background.get('vpn_web', 'not_configured'),
             'vpn_playwright': background.get('vpn_playwright', 'not_configured'),
@@ -138,8 +139,8 @@ def write_receipt(root, config, native, background, vault=None, *, require_integ
             'external_provider': 'Requires terms-compliant provider permission and per-prompt approval',
             'github_account': 'Requires owner authentication',
         },
-        'notice': ('Core Mac acceptance ran; real login/reboot, permissions, peripherals, '
-                   'VPN failures and sustained memory pressure remain unverified.'),
+        'notice': ('Local-only trial: text and native Captain acceptance required. Media, voice, vault, browser and remote integrations are deferred.'
+                   if local_trial else 'Core Mac acceptance ran; real login/reboot, permissions, peripherals, VPN failures and sustained memory pressure remain unverified.'),
     }
     target = root / 'captain-install-readiness.json'
     temporary = target.with_suffix('.json.tmp')

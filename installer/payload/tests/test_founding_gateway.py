@@ -32,7 +32,7 @@ class FoundingGatewayTests(unittest.TestCase):
 
     def test_real_admission_pauses_for_foreground_and_strips_forged_internal_fields(self):
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory);engine,connector=self.setup_engine(root)
+            root=Path(directory).resolve();engine,connector=self.setup_engine(root)
             file=root/'conversations.json';file.write_text(json.dumps([{'id':'a','mapping':{'a':{'message':{'id':'a','author':{'role':'user'},'content':{'parts':['Synthetic private history']}}}}}]))
             cx=connector(engine.founding.root);source=village.import_file(cx,engine.founding.root,file,confirm=True)['sha'];cx.close()
             entered=threading.Event()
@@ -59,7 +59,7 @@ class FoundingGatewayTests(unittest.TestCase):
 
     def test_upload_and_review_controls_require_owner_auth_and_start_no_inference(self):
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory);engine,connector=self.setup_engine(root)
+            root=Path(directory).resolve();engine,connector=self.setup_engine(root)
             server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.engine=engine;server.daemon_threads=True
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start();base='http://127.0.0.1:'+str(server.server_port)
             def post(path,data,key=True):

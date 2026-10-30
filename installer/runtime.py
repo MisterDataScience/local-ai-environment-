@@ -200,6 +200,8 @@ def main(background=False):
             except (OSError, RuntimeError, ValueError):
                 print('Unlock AI Workspace in Cryptomator on the Mac to use file tools.')
             print('Vault media saves to Outputs/Media. Local chat data is backed up to the vault on clean shutdown.')
+        elif config.get('install_profile') == 'local-trial':
+            print('Local-only trial: text and Captain delegation enabled. Media, voice and remote integrations deferred.')
         else:
             print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")
         if config.get("browser", {}).get("enabled"):
