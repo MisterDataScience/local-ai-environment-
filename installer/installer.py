@@ -704,6 +704,15 @@ def make_launcher(root):
     return application
 
 
+def install_discord_transport(root, download_fn, run_fn, *, defer_configuration=False):
+    from discord_setup import install as install_discord, configure as configure_discord
+    install_discord(root, download_fn, run_fn)
+    if defer_configuration:
+        logging.info('Discord bot connection and reference voice registration deferred. Run Connect Discord.command after installation.')
+        return
+    configure_discord(root)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
@@ -711,6 +720,8 @@ def main():
     parser.add_argument("--remote-access", action="store_true",
                         help="Install/connect Tailscale and configure private chat/media HTTPS access.")
     parser.add_argument("--web-access", action="store_true", help="Configure isolated Proton VPN search/page reading.")
+    parser.add_argument('--defer-discord', action='store_true',
+                        help='Install Discord dependencies but defer bot connection and reference WAV registration.')
     parser.add_argument('--minicpm-captain', action='store_true',
                         help='Build the pinned native MiniCPM runtime and use its standard mixed-Q3 model as the shared team.')
     args = parser.parse_args()
@@ -747,9 +758,7 @@ def main():
         configuration['office'] = install_office(root, download, run)
         configuration['cryptomator_app'] = str(app)
         save_config(root, configuration)
-        from discord_setup import install as install_discord, configure as configure_discord
-        install_discord(root, download, run)
-        configure_discord(root)
+        install_discord_transport(root, download, run, defer_configuration=args.defer_discord)
         configuration = json.loads((root / 'control/config.json').read_text())
         vault_acceptance = None
         if args.minicpm_captain:
