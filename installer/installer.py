@@ -392,8 +392,13 @@ def install_environments(root, uv, state, *, local_trial=False):
         if not deferred_path.is_file() or deferred_path.is_symlink():
             raise RuntimeError('Full-upgrade backup of trial settings is unavailable. Restore settings before upgrading.')
         deferred = json.loads(deferred_path.read_text())
+        selected_captain = config.get('captain', {})
+        active_captain_model = (config.get('text_models', {}).get(selected_captain.get('model_id'))
+                                if selected_captain.get('provider') == 'llama' else None)
         for key, value in deferred.items():
             config[key] = value
+        if active_captain_model is not None:
+            config['text_models'][selected_captain['model_id']] = active_captain_model
     from captain_config import upgrade as upgrade_captain
     upgraded = upgrade_captain(upgrade_team(upgrade_text_configuration(config)))
     from voice_setup import install as install_voice
