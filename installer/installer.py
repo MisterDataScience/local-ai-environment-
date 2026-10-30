@@ -405,15 +405,21 @@ def install_environments(root, uv, state, *, local_trial=False):
     if local_trial:
         if config.get('install_profile') != 'local-trial':
             if deferred_path.exists():
-                raise RuntimeError('Unexpected trial settings backup already exists; inspect before proceeding.')
-            deferred = {key: upgraded[key] for key in
-                        ('text_models', 'model_team', 'model_team_version', 'speech',
-                         'conversation', 'discord', 'web', 'browser', 'remote_access',
-                         'vault', 'office') if key in upgraded}
-            fd = os.open(deferred_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, 'w') as out:
-                json.dump(deferred, out, indent=2)
-                out.write('\n')
+                if deferred_path.is_symlink():
+                    raise RuntimeError('Trial settings backup cannot be a symlink.')
+                deferred = json.loads(deferred_path.read_text())
+                if not isinstance(deferred, dict) or 'text_models' not in deferred:
+                    raise RuntimeError('Incomplete deferred settings backup; cannot continue trial.')
+                # An interrupted first run may have created the backup before config was saved.
+            else:
+                deferred = {key: upgraded[key] for key in
+                            ('text_models', 'model_team', 'model_team_version', 'speech',
+                             'conversation', 'discord', 'web', 'browser', 'remote_access',
+                             'vault', 'office') if key in upgraded}
+                fd = os.open(deferred_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, 'w') as out:
+                    json.dump(deferred, out, indent=2)
+                    out.write('\n')
         upgraded['text_models'] = {key: value for key, value in upgraded['text_models'].items()
                                    if key in ('local-ai', 'local-ai-captain')}
         if len(upgraded['text_models']) != 2:
@@ -888,6 +894,8 @@ def main():
             receipt = write_receipt(root, configuration, native_acceptance, background,
                                     vault=vault_acceptance, require_integrations=not args.local_trial)
             checkpoint(state, "installed")
+            if not args.local_trial:
+                (root / 'control/trial-deferred-settings.json').unlink(missing_ok=True)
             logging.info("Captain installation core ready. Remaining physical checks: %s",
                          ', '.join(receipt['pending_physical_acceptance']))
             logging.info("Daily launcher: %s", application)
