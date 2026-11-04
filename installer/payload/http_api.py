@@ -172,6 +172,9 @@ class Handler(BaseHTTPRequestHandler):
                 {"id": identifier, "name": preset["name"], "object": "model", "created": 0,
                  "owned_by": "local"} for identifier, preset in self.server.engine.visible_models().items()]})
         if path == "/workspace/openapi.json":
+            from feature_state import available
+            if not available(self.server.engine.config, "workspace"):
+                return self.json_response(503, {"error": "Run Install Encrypted Workspace.command"})
             return self.json_response(200, vault_tools.specification())
         if path == "/tools/openapi.json":
             return self.json_response(200, specification())
@@ -288,6 +291,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json_response(409, {'error': str(error)})
         if path.startswith('/workspace/'):
             try:
+                from feature_state import require
+                require(self.server.engine.config, 'workspace')
                 length = int(self.headers.get('Content-Length', '0'))
                 if not 0 < length <= 1600000:
                     self.close_connection = True

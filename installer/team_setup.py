@@ -93,7 +93,11 @@ def verify_work_agent(process, env, enabled, timeout=90):
                         raise RuntimeError('OpenCode model team policy did not load; delegation remains disabled')
                 for name in ('local_image', 'local_video', 'local_speech'):
                     matches = [r for r in rules if r['permission'] in ('*', name) and r['pattern'] == '*']
-                    expected = 'deny' if name == 'local_video' and mode_token and not mode_token.endswith(':max') else 'ask'
+                    caps = next((p[1].get('capabilities', {'media': True, 'speech': True})
+                        for p in configured.get('plugin', []) if isinstance(p, list) and len(p) == 2 and p[1].get('roles')),
+                        {'media': True, 'speech': True})
+                    allowed = caps.get('speech' if name == 'local_speech' else 'media', False)
+                    expected = 'deny' if not allowed or (name == 'local_video' and mode_token and not mode_token.endswith(':max')) else 'ask'
                     if not matches or matches[-1]['action'] != expected:
                         raise RuntimeError('Coordinator media approval permissions were not loaded')
             if 'captain-coder' in configured.get('agent', {}):

@@ -92,6 +92,10 @@ def ollama_environment(root, parallel=1, port=None):
 
 
 def webui_environment(root, configuration):
+    from feature_state import effective_config
+    if "_feature_status" not in configuration:
+        configuration = effective_config(root, configuration,
+            testing=tuple(filter(None, os.environ.get("LOCAL_AI_ACCEPTANCE_FEATURES", "").split(","))))
     env = os.environ.copy()
     # Installer-owned integrations must not inherit arbitrary host tool servers.
     env.pop("TOOL_SERVER_CONNECTIONS", None)
@@ -148,7 +152,8 @@ def webui_environment(root, configuration):
         'auth_type': 'bearer', 'key': configuration['api_key'], 'config': {'enable': True},
         'info': {'id': 'local-ai-files', 'name': 'Local AI file workflows',
                  'description': 'Local PDF/OCR, chat uploads and approved active-project transfers'}})
-    if configuration.get('vault', {}).get('enabled'):
+    from feature_state import available
+    if configuration.get('vault', {}).get('enabled') and available(configuration, 'workspace'):
         connections.append({'type': 'openapi', 'url': 'http://127.0.0.1:8001',
             'spec_type': 'url', 'spec': '', 'path': 'workspace/openapi.json',
             'auth_type': 'bearer', 'key': configuration['api_key'], 'config': {'enable': True},

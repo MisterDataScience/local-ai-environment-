@@ -60,13 +60,20 @@ def check_captain_watchdog(root, processes, watchdog, mode, *, now, resumed=Fals
 
 def main(background=False):
     root = Path(__file__).resolve().parent.parent
+    from feature_state import installation_lock
+    with installation_lock(root, shared=True):
+        return supervise(root, background)
+
+
+def supervise(root, background=False):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     lock = (root / ".runtime.lock").open("w")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         raise SystemExit("Local AI is already running. Open http://127.0.0.1:8081 in Safari.")
-    config = json.loads((root / "control/config.json").read_text())
+    from feature_state import effective_config
+    config = effective_config(root, json.loads((root / "control/config.json").read_text()))
     remote = config.get("remote_access", {})
     if remote.get("enabled"):
         from remote_access import cli_json, assert_private_ports, APP
@@ -201,7 +208,7 @@ def main(background=False):
                 print('Unlock AI Workspace in Cryptomator on the Mac to use file tools.')
             print('Vault media saves to Outputs/Media. Local chat data is backed up to the vault on clean shutdown.')
         else:
-            print("Use ordinary text, /image DESCRIPTION, or /video DESCRIPTION.")
+            print("Use ordinary text. Run Check LOCAL AI Setup.command for optional capabilities.")
         if config.get("browser", {}).get("enabled"):
             print("Browser: Playwright MCP over Proton VPN. Enable its integration in chat.")
         if config.get("web", {}).get("enabled"):

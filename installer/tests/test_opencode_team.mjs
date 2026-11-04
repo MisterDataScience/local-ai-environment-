@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import LocalTeam from '../opencode-team.mjs';
 
-async function fixture(t) {
+async function fixture(t, capabilities) {
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ instance_id: 'backend', epoch: 0, mode: 'normal' }) });
   t.after(() => { globalThis.fetch = previousFetch; });
@@ -18,7 +18,7 @@ async function fixture(t) {
   const client = { session: {
     get: async () => ({ data: session }), messages: async () => ({ data: messages }),
   }};
-  const options = { ledgerPath, modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code', document: 'doc', essay_document: 'doc', scaffold_document: 'doc' } };
+  const options = { ledgerPath, ...(capabilities ? {capabilities} : {}), modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code', document: 'doc', essay_document: 'doc', scaffold_document: 'doc' } };
   const hooks = await LocalTeam({ client, directory: root }, options);
   await hooks['chat.message']({ sessionID: 'session1' }, { message: messages[0].info, parts: messages[0].parts });
   function call(id, role = 'analyst', extra = {}, parent = 'user1') {
@@ -516,4 +516,17 @@ test('Office cannot bypass essay workflow restrictions', async t => {
     {type:'tool',callID:'essay-office',state:{status:'running'}}]});
   await assert.rejects(f.before([{tool:'aioffice_office_edit',sessionID:'session1',callID:'essay-office'},
     {args:{file:'essay.docx',ops:[]}}]), /separate request/);
+});
+
+
+test('unaccepted media and speech have no schemas or callable permissions', async t => {
+  const f = await fixture(t, {media: false, speech: false});
+  assert.deepEqual(Object.keys(f.hooks.tool), []);
+  const config = {tools: {}, agent: {plan: {permission: {}}, build: {permission: {}}}};
+  await f.hooks.config(config);
+  for (const name of ['local_image', 'local_video', 'local_speech']) {
+    assert.equal(config.tools[name], false);
+    assert.equal(config.agent.plan.permission[name], 'deny');
+    assert.equal(config.agent.build.permission[name], 'deny');
+  }
 });

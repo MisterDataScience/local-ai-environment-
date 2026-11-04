@@ -1,125 +1,75 @@
-# LOCAL AI installer
+# LOCAL AI installer: Captain launcher update
 
-**The Synod** is included automatically in the studio runtime and appears in
-**Village Institutions.command** without a founding event. It handles studio
-creation and repair commissions, exact design review and private institutional
-archives. See [The Synod](docs/THE-SYNOD.md) for its current adapter limits.
+Extract this ZIP into a new folder. Run **Open Captain.command** on the Mac mini.
+It uses the existing `~/LocalAI-Automated` installation. It starts an accepted
+installation if stopped, checks the gateway, Captain agents, chat HTML and saved
+sign-in, then opens Safari and displays the local login in Terminal.
 
-After installation, open `Village Commons.command` for **Prepare the Village from
-your conversation history**. The system creates baseline residents and prepares
-knowledge, memories, specialists and maps for final owner approval. Encrypted
-Village backup/restore and managed-source forgetting are included. Read
-[Founding and recovery](docs/FOUNDING-AND-RECOVERY.md).
+If installation is incomplete, it reports the failed check and recovery action.
+Run **Install LOCAL AI Core.command** from this folder to install the updated
+modules and permanent launcher. Do not delete `~/LocalAI-Automated` or its models.
+After successful installation, use `~/LocalAI-Automated/Open Captain.command`
+for daily chat. Keep Terminal open until the launcher finishes its checks.
 
-The host creates the five baseline residents automatically. The Captain can prepare complete specialist changes, and approved work prepares memory-map suggestions for owner review. [Normal use](docs/RESIDENT-MEMORY.md#normal-use-the-system-prepares-you-approve) requires no manual agent or map setup.
-
-Residents now use an [owner-curated starting map](docs/RESIDENT-MEMORY.md): fast-access memories, a glossary of deeper own memories, and preferred Library or Archive workflows. The owner previews and approves map changes separately from approving memories or documents.
-
-The optional [Village Commons guide](docs/VILLAGE-COMMONS.md) explains the new `Village Commons.command` owner dashboard: four active residents in Max, bounded gatherings, creative formats, hidden drafts, exact final approvals and individual memories. Opening the dashboard starts no inference.
-
-The Work Agent includes a captain and up to five temporary workers. The **Install Local AI.command** launcher automatically installs the chosen
-MiniCPM Captain profile. The older named MiniCPM launcher is an alias, not an
-extra step.
-See [the captain explanation](docs/CAPTAIN-AND-WORKERS.md).
-
-Village workshop, noticeboard, suggestions and practice cases use the same
-installer and Captain. Read the [Village infrastructure guide](docs/VILLAGE-INFRASTRUCTURE.md)
-for first use, owner approval commands and the pending native acceptance checks.
-
-This is the single integrated installer for LOCAL AI. It includes vision,
-Apple PDF/OCR, approved file workflows, background operation, the scoped Mac
-controller and generic external reasoning, alongside the existing text,
-Office, media and voice tools.
-
-## Run
-
-Stop LOCAL AI and the Work Agent before upgrading. On a native Apple Silicon
-Mac with macOS 15+, 32 GB unified memory and at least 100 GB free space, run:
+If Finder blocks the downloaded launcher, run this in Terminal after extracting
+into Downloads (adjust the path if extracted elsewhere):
 
 ```bash
-/bin/bash "$HOME/Downloads/mac-local-ai-installer/Install Local AI.command"
+/bin/bash "$HOME/Downloads/mac-local-ai-installer/Open Captain.command"
 ```
 
-Use the downloaded folder's actual location if it differs. Keep Terminal open
-while the installer downloads dependencies/models and performs native acceptance.
-Installation lives under `~/LocalAI-Automated`. Existing local configuration and
-credentials are retained. No credentials or model weights are packaged here.
+The launcher never changes Gaming mode, kills a running supervisor, downloads
+models, deletes data or marks an incomplete installation as accepted. It waits
+up to three minutes for services, plus individual bounded probe timeouts. Repeated
+clicks do not launch another supervisor. The loopback address works on the Mac
+mini itself; another device needs separately configured remote access.
 
-## First-run Captain
+This update is based on the uploaded `Mac-Local-AI-Automated-Installer-2.zip`.
+It does not contain the later additional-text-model separation discussed in chat.
+An old document-model acceptance failure may therefore still block core setup;
+this launcher reports it and does not bypass it. Existing full acceptance caching
+is retained. Granular caching remains deferred until native acceptance succeeds.
 
-During installation, Cryptomator opens so the owner can create or unlock the
-vault inside the application. The installer detects a confirmed mounted volume,
-registers the workspace and verifies protected reads and writes. A separate
-`Configure AI Workspace.command` step is not needed. No passwords or recovery
-keys are collected by LOCAL AI, and future vault unlocking remains manual.
+HTTP checks verify the authentication challenge, saved credentials and HTML app
+response. They do not establish successful Safari rendering or a human sign-in.
+Native macOS launchctl, model inference, permissions and reboot checks must still
+be completed on the target Mac. See VALIDATION.txt for this update's tests.
 
-After native tests pass, the installer registers the unprivileged login
-LaunchAgent, starts the managed Captain Work Agent and opens
-http://127.0.0.1:4096 in Safari. The installer prints the local-only
-username and password. `Open Captain.command` prints them again if needed.
-The Captain UI is separate from ordinary Open WebUI chat at
-http://127.0.0.1:8081: delegation requires the Captain UI.
+# Original installer instructions
 
-The Captain installer automatically installs and checks signed Docker Desktop,
-Proton VPN-only retrieval and Playwright, and the private Tailscale HTTPS
-route to **the real OpenCode Captain**. You approve the Docker licence inside its
-GUI, supply your own Proton WireGuard key in Terminal, and sign in to Tailscale
-when macOS asks. The installer also offers optional fine-grained GitHub token
-registration. No separate Enable Web Access, Enable Browser or Enable Remote
-Access scripts are needed for a new Captain installation.
+Run `Install LOCAL AI Core.command` first. `Install Local AI.command` and the
+older named MiniCPM launcher also default to core. Keep Terminal open while the
+verified dependencies, Captain and small fallback install and run native tests.
 
-Remote Captain URL: `https://MAC.TAILNET.ts.net:10000` (private Tailscale
-Serve, separate Captain username and password). Chat: port 443; media: 8443.
-Tailscale must be installed and signed in on your iPad/Windows device too.
-The installer tests VPN, Playwright, native Captain auth, and HTTPS routes
-before reporting success. Its first-login, off-device, VPN-drop and
-32GB full-load acceptance remain unverified until the real Mac is available.
+For an unidentified-developer warning, open **System Settings > Privacy &
+Security**, then **Open Anyway** for the core launcher. The scripts are unsigned;
+see the [macOS approval steps](docs/MODULAR-INSTALLER.md#macos-blocks-a-downloaded-launcher).
 
-Core readiness is recorded at `~/LocalAI-Automated/captain-install-readiness.json`.
-The receipt distinguishes tested services, owner credentials and physical
-follow-up checks. It never stores the Cryptomator password/recovery key.
+Core needs native Apple Silicon, macOS 15+, 32 GB memory, Apple Command Line
+Tools and 35 GB free storage. It installs no optional voice/media weights and
+asks for no Discord token, reference WAV, vault, Docker licence, Proton key,
+Tailscale login or GitHub credential.
 
-## Daily use
+Captain: `http://127.0.0.1:4096`, with local authentication. Ordinary chat:
+`http://127.0.0.1:8081`. Worker delegation is in the Captain interface.
+`Open Captain.command` displays its private login. User login startup is installed
+after native core acceptance, not before FileVault unlock.
 
-Launch `~/LocalAI-Automated/Start Local AI.command` or `Local AI.app`.
-Captain installation registers the background startup automatically.
-`Enable Login Startup.command` remains for manual repair or other profiles.
-`Create Autonomous Job.command` authorises a finite local text-file batch with
-crash-safe checkpoints and create-only Markdown output. `Autonomous Job Status.command`,
-`Stop Autonomous Job.command JOB_ID`, and `Resume Autonomous Job.command JOB_ID`
-manage its independent launchd worker. See docs/AUTONOMOUS-JOBS.md.
-This does not authorise unrestricted unattended OpenCode tools.
-`Stop Local AI.command` requests graceful shutdown. The chat is local at
-`http://127.0.0.1:8081`; remote Captain is preconfigured in the same install on Tailscale HTTPS 10000.
+Run a named optional `.command` when that feature's inputs are ready. Each uses
+the existing `~/LocalAI-Automated` installation and its pinned modules. Stop Local
+AI and the Work Agent before installing; run `Start Local AI.command` afterward.
+`Install Everything.command` runs the same modules, leaving unfinished work in
+its own state. `Check LOCAL AI Setup.command` lists status and the exact next
+installer. `Test Discord Voice.command` performs supervised call acceptance.
 
-Every capability's code is included. The following account-, permission- or
-policy-bound services cannot be activated without local consent or credentials:
+See [modular installation](docs/MODULAR-INSTALLER.md) for all launchers,
+dependencies, recovery and remaining native checks. The Synod and studio source
+is included, but institutional tools require accepted encrypted workspace storage
+and the existing Village security checks. Core does not advertise them as usable.
 
-- Vision/PDF: chat uploads and Work Agent project tools; run `Check Required Capabilities.command`.
-- Office/files: installed automatically; encrypted vault registration and smoke
-  testing occur during Captain installation. Manual future unlocks and native
-  transfer approvals remain required.
-- Recurring text tasks: `Schedule AI Task.command`, then inspect `Scheduled Task Status.command`.
-- VPN/browser and private Tailscale: configured and tested during Captain installation;
-  the relevant Docker/Proton/Tailscale approvals are collected during installation.
-- Desktop: `Enable Desktop Control.command` and `Check Desktop Control.command`.
-- Generic external helper: `Enable External Delegation.command`, with authorised provider access and verified selectors.
-
-Scoped automation disables normal effectful chat/Work Agent tools while enabled.
-Run `Disable Scoped Automation.command` and restart to return to normal workflows.
-`Stop Automation.command` latches a stop; only local rearm permits a new session.
-
-## Validation and guides
-
-The ZIP contains `docs/DEPLOYMENT.md`, `docs/RELEASE-VALIDATION.md` and the individual
-feature guides. In the source repository, these are in the top-level `docs` folder.
-`RELEASE.json` in the ZIP records per-file hashes and the release identifier.
-
-The combined source passes authoring tests. Owner-Mac GPU/memory, microphone,
-VPN-drop, live browser/provider and native approval checks remain explicitly
-unverified until run on that machine. Installer acceptance results and dedicated
-check helpers report actual outcomes; do not infer success from a downloaded ZIP.
-
-The canonical source and deployment package are on `main` at
-https://github.com/MisterDataScience/local-ai-environment- . No feature branch is
-needed for deployment. Historical manual setup files are not the current installer.
+Preserve existing models, chats, vaults and cached downloads during upgrades.
+Run core over an interrupted installation to migrate it. A PR #40 trial backup
+is restored without deleting it. No credentials or model weights are packaged.
+The modular package remains a native Mac acceptance candidate. A package/source
+hash match and source tests do not establish working Apple GPU inference,
+permissions, physical audio or reboot behaviour.

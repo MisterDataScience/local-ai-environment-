@@ -6,9 +6,9 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-24-synod-1'
+RELEASE = '2026-11-04-captain-daily-launcher-candidate'
 PREFIX = 'mac-local-ai-installer/'
-STAMP = (2026, 10, 24, 0, 0, 0)
+STAMP = (2026, 11, 4, 0, 0, 0)
 
 
 def contents(root):
@@ -26,7 +26,12 @@ def contents(root):
             result[name] = (path.read_bytes(), 0o755 if path.suffix == '.command' else 0o644)
     if not result:
         raise ValueError('Installer source is empty')
-    manifest = {'release': RELEASE, 'source_inputs': {
+    manifest = {'release': RELEASE,
+        'default_install_profile': 'core', 'feature_state_schema': 1,
+        'modular_inputs': {'base_main': 'a0e035c179cc14e520a6cb011b758262f4f5fa5f',
+                           'release_status': 'candidate', 'native_acceptance': 'not_run'},
+        'launcher_update': {'source_zip_sha256': 'ed4ae2d312eb3c7753b28d04a7a3403dbe93fee262417af177f1274bd6640c5b',
+                            'native_acceptance': 'not_run'}, 'source_inputs': {
         'main': 'cc490411940f5387191f5127ff853309b857a1e0',
         'required_capabilities': 'bb68a8e101b39d8489b015daecb0c40ba2b040b1',
         'scoped_automation': 'b3439a7938811f4ec8efb98155fd953f35f83d4e'},

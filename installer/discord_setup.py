@@ -52,7 +52,8 @@ def discord(token, path, data=None):
         with urlopen(req, timeout=30) as response: return json.load(response)
     except HTTPError as error:
         # Do not expose the request, headers or token through installer exception logs.
-        raise RuntimeError(f'Discord setup request failed (HTTP {error.code}). Check the bot token and invite permissions.') from None
+        detail = 'Discord rejected the bot token.' if error.code == 401 else 'Check Discord service availability and the required permissions.'
+        raise RuntimeError(f'Discord setup request failed (HTTP {error.code}). ' + detail) from None
 
 
 def install(root, download, run):

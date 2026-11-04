@@ -57,6 +57,7 @@ async function loadStore(ledgerPath) {
 
 export default async function LocalTeam({ client, directory }, options = {}) {
   const { ledgerPath, roles, modeToken } = options;
+  const capabilities = options.capabilities ?? {media: true, speech: true};
   if (!ledgerPath || !directory || !roles?.coordinator || !roles?.analyst || !roles?.coder || !modeToken) fail('configuration missing');
   if (!stores.has(ledgerPath)) stores.set(ledgerPath, loadStore(ledgerPath));
   const { ledger, exclusive, save, active } = await stores.get(ledgerPath);
@@ -231,20 +232,21 @@ export default async function LocalTeam({ client, directory }, options = {}) {
           ? 'worker.' + input.agent.slice('captain-'.length) : undefined);
       if (typeof workflow === 'string') output.headers['X-Local-AI-Workflow'] = workflow;
     },
-    tool: { local_image: mediaTool('image'), local_video: mediaTool('video'), local_speech: mediaTool('speak') },
+    tool: { ...(capabilities.media ? {local_image: mediaTool('image'), local_video: mediaTool('video')} : {}),
+            ...(capabilities.speech ? {local_speech: mediaTool('speak')} : {}) },
     async config(config) {
       // Base configuration denies task. Only successful plugin initialization
       // enables it, so a missing/broken policy file cannot allow unbounded work.
       config.tools.task = true;
-      config.tools.local_image = true;
-      config.tools.local_video = modeToken.endsWith(':max');
-      config.tools.local_speech = true;
+      config.tools.local_image = !!capabilities.media;
+      config.tools.local_video = !!capabilities.media && modeToken.endsWith(':max');
+      config.tools.local_speech = !!capabilities.speech;
       for (const name of ['plan', 'build']) {
         config.agent[name].permission.task = { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow',
           essay_document: 'allow', scaffold_document: 'allow' };
-        config.agent[name].permission.local_image = 'ask';
-        config.agent[name].permission.local_video = modeToken.endsWith(':max') ? 'ask' : 'deny';
-        config.agent[name].permission.local_speech = 'ask';
+        config.agent[name].permission.local_image = capabilities.media ? 'ask' : 'deny';
+        config.agent[name].permission.local_video = capabilities.media && modeToken.endsWith(':max') ? 'ask' : 'deny';
+        config.agent[name].permission.local_speech = capabilities.speech ? 'ask' : 'deny';
       }
     },
     async 'chat.message'(input, output) {

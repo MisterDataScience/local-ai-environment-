@@ -1,274 +1,33 @@
-Studio release 2026-10-20-village-studios-1:
-605 local checks passed; five skipped. Suites: 375 installer tests including
-five skips, 136 payload tests, 92 JavaScript tests and seven release-script tests.
-Studio cases compile real C with a Clang fixture, run Wasmtime in a subprocess,
-check pixels from reusable sprite/tile/font helpers, test fuel and import denial,
-and verify explicit checkpoints, replay, owner approvals, scoped memory maps,
-source withdrawal and the offline player's actual Wasm execution.
-The release package is checked against source, permissions and its manifest;
-repeat builds are byte-identical. No GitHub Actions were used.
-Native Mac sandbox/Zig execution, browser layout, sustained local-model
-performance and the owner's actual C games have not been tested on this host.
-See docs/INSTITUTIONS-AND-STUDIOS.md for normal use and compatibility limits.
-Earlier validation records below are historical.
+Captain daily launcher update, 4 November 2026
 
-Consolidated Village release 2026-10-19-integrated-village-1:
-584 local checks passed; five skipped (four native Apple PDF cases and one
-pinned WebUI-wheel compatibility case). Suites: 357 installer tests including
-five skips, 135 payload tests, 90 JavaScript tests and seven builder-script tests.
-Optional browser test attempted but blocked by missing Chromium. Syntax and
-installer/source/permissions/manifest checks passed; repeat ZIPs are identical.
-Includes local founding review, owner approval boundaries, encrypted Village
-backup/restore and conservative managed-source erasure with durable tombstones.
-Native Mac installation, mount, GPU, model-quality and browser acceptance are
-not claimed. No GitHub Actions used. See docs/FOUNDING-AND-RECOVERY.md and
-current docs/RELEASE-VALIDATION.md. Earlier records below are historical.
+Source: user-uploaded Mac-Local-AI-Automated-Installer-2.zip.
+Environment: Linux, Python 3.12. Native Mac execution not performed.
 
-Prepared resident management preview 2026-10-19:
-142 focused checks: nine management, 16 Commons, eight layered-memory, 18 Village/
-facilities, nine Captain setup, 26 installer, six Commons HTTP/transport,
-49 Captain/OpenCode JavaScript and one builder regression. Covers system-prepared
-maps with no inference, final owner review, complete Captain specialist proposals,
-activation only on approval, revision/retirement, replay, stale/rejected/expired
-proposals and denial to workers. Baseline roles need no manual creation.
-Python/JavaScript syntax, exact installer/source checks and deterministic rebuild
-verified for publication. No GitHub Actions used. Native Mac acceptance remains
-pending; encrypted backup/restore, full source deletion and founding-corpus
-analysis remain engineering work. They are not owner setup instructions.
-See docs/RESIDENT-MEMORY.md, docs/VILLAGE-STATUS.md and current release validation.
-Earlier records below are historical.
+Validation completed:
+- Installer/source unittest discovery: 488 tests run, OK, 16 skipped.
+- Gateway payload unittest suite: completed with exit status 0.
+- Final launcher and installer regression suites after routing Start Local AI
+  through the same entry point: 12 + 30 tests, all passed.
+- New HTTP tests use a real local server: authenticated HTML success,
+  missing authentication, invalid HTML, rejected credentials and redirects.
+- Launcher tests cover stopped/running supervisor, failed acceptance,
+  failed live readiness, Gaming mode, concurrent clicks, installer lock,
+  stale core state, absent installation and generated launchers.
+- Bash syntax checked for every packaged .command file.
+- ZIP membership and SHA-256 manifest verified when packaging.
 
-Layered resident-memory preview 2026-10-19:
-130 focused checks: eight new starting-map Python, 15 Commons core, 18 Village/
-archive/facilities, nine Captain setup, 26 installer, six Commons HTTP/transport,
-47 Captain/OpenCode JavaScript and one release-builder regression. Includes real
-SQLite and Python subprocess navigation, curated native worker packets, separate
-map approval, scoped workflow/area lookup, stale digests, no recency fallback,
-source withdrawal and migration rollback. Source/ZIP integrity, reproducibility
-and Python/JavaScript syntax checked for publication. Native Mac browser/model/
-installation/performance acceptance remains pending. No GitHub Actions used.
-See docs/RESIDENT-MEMORY.md and current docs/RELEASE-VALIDATION.md.
-Earlier preview results below are historical.
+The initial broad test run could not import requests. Requests was installed
+into a separate workspace-only test dependency directory and the suite passed.
+No installer dependency locks were changed.
 
-Village Commons preview 2026-10-19:
-14 Commons core and six Commons gateway/transport Python checks pass with
-synthetic responses, real SQLite and local HTTP. Existing affected suites:
-11 shared inference/backend, four native Captain capacity, 25 gateway,
-18 Village/archive/facilities, nine Captain setup, 26 installer Python checks;
-46 Captain/OpenCode JavaScript checks. Builder regression: one passing check.
-Python/JavaScript syntax, exact installer/source verification and deterministic
-rebuild checked for the published artifact. No GitHub Actions dispatched/rerun.
-Native Mac upgrade, browser layout, local-model protocol/quality, actual GPU
-cancellation, throughput/memory and VPN research NOT RUN. Encrypted Village
-backup/restore and complete source deletion remain unfinished; begin only with
-synthetic or approved general content. Read docs/VILLAGE-COMMONS.md and the
-current section of docs/RELEASE-VALIDATION.md for usage and precise boundaries.
+Native limitations:
+- No Apple GPU inference, launchctl, Safari rendering, human sign-in,
+  permissions, reboot or sleep/wake acceptance was performed here.
+- The UI probe checks HTTP Basic challenge, saved authentication and app HTML.
+  It does not execute browser JavaScript or verify every static asset.
+- This upload predates the additional-text-model separation. The old document
+  model can still block core acceptance. No acceptance gate is bypassed.
+- Existing full acceptance caching is unchanged; finer-grained caching is deferred.
 
-Village infrastructure preview 2026-10-19:
-18 Village/archive/facility Python tests, nine Captain setup tests, 26 installer
-tests and 46 Captain/OpenCode policy JavaScript tests pass locally. Coverage
-includes the actual Python/SQLite bridge using synthetic native sessions and
-approval doubles, exact workshop approval, project isolation, explicit practice
-links, replay, scope revocation, migration rollback and inert artifact storage.
-Native Mac/OpenCode approvals are NOT RUN. Practice folders are not OS sandboxes.
-Encrypted Village backup/restore and source deletion remain unfinished. Use only
-fabricated or approved general material. See docs/VILLAGE-INFRASTRUCTURE.md and
-docs/RELEASE-VALIDATION.md for commands, acceptance steps and precise scope.
-
-Integrated release 2026-10-09-integrated-1:
-162 installer Python checks: 158 passed, four Apple-only tests skipped on Linux.
-104 payload Python tests passed. 74 JavaScript checks passed. The pinned WebUI
-0.11.1 compatibility check passed. Release builder integrity/staleness and
-reproducibility checks passed. See docs/RELEASE-VALIDATION.md for exact scope.
-Both feature updates are combined. Scheduled requests now prohibit effectful
-command/tool routes, preserve length cutoffs as incomplete, and malformed JSON
-gets structured HTTP errors. Scoped mode disables the newly integrated MCPs.
-The ZIP is rebuilt and verified against source. Owner-Mac acceptance is NOT RUN.
-The optional voice browser UI test is NOT RUN because Chromium is unavailable.
-
-Earlier feature validation below is historical, not certification of this release.
-
-Office update 2026-10-09 UTC: 106 installer tests and 32 affected JavaScript
-policy tests pass. Real AIOffice 1.27.2 MCP acceptance passes for DOCX/XLSX/PPTX,
-directly and through the compact relay: creation, reading, editing, formula
-cache verification, independent ZIP/XML inspection, validation, HTML/SVG
-rendering, path/symlink rejection, stale revisions and snapshots. One Linux
-x64 run measured 76,276 KiB idle and a sampled peak of 176,400 KiB on small
-fixtures. These are not Mac measurements. The installer adds a checksum-pinned
-macOS arm64 binary, network denial, managed-heap/file bounds and Check Office.
-Native Mac network-sandbox behavior, UI layout/fidelity, local-model routing
-and sustained memory pressure remain unverified. PDF input editing is not
-implemented; PNG/PDF export requires an existing compatible local renderer.
-See OFFICE-TOOLS.md for usage and precise validation boundaries.
-
-Reverse-scaffold update 2026-10-08 UTC: 99 installer tests, 100 gateway tests
-and 70 JavaScript tests passed (269 checks). The affected 41 JavaScript tests
-also passed after the native synthetic-message ID fix. Coverage includes
-staged execution, imported architecture audits, explicit hash approvals,
-stale dependencies, exact word budgets, source mapping, source preservation,
-input limits and the shared two-attempt budget. Source acquisition is handled
-by the client; the document specialist receives supplied passages and cannot
-browse. Native Mac launch, local-model scaffold quality and 32GB memory/latency
-acceptance remain untested. Host checks cannot prove substantive coverage or
-source entailment; each stage requires author review. See
-REVERSE-ESSAY-SCAFFOLDING.md for implementation boundaries and usage.
-
-Essay-edit update 2026-10-08 UTC: 96 installer tests, 100 gateway tests and
-57 JavaScript tests passed (253 checks). New coverage includes explicit turn
-activation, original integrity, API submission without command expansion,
-private existing-harness attachment, immutable request binding, input/attempt
-limits, native result recovery, separate outputs, omission/protected-text guards
-and permission-scoped moves. Responses are simulated; no local-model essay
-quality, native launcher or Mac memory/latency acceptance has run here. Host
-checks cannot prove semantic equivalence. Passing candidates require author
-review. Random selection is not implemented; requested alternatives stay in
-notes. See ESSAY-EDITING.md and ESSAY-EDITING-SPECIFICATION.md.
-
-Discord update 2026-10-08 UTC: 93 installer tests, 100 gateway tests and
-43 JavaScript tests pass (236 checks). Includes an adapter-level simulated
-voice call, owner-scoped approval, interruption, PCM conversion, playback
-acknowledgements, capture bounds, Keychain command secrecy and runtime mode
-transitions/backoff. Actual pinned Opus codec and DAVE imports pass on the
-authoring host. Discord live voice, target-Mac Keychain/Node, GPU latency and
-32GB memory behavior are not verified here. See DISCORD.md for live acceptance.
-
-Conversation update 2026-10-08 UTC: 87 installer tests, 100 gateway tests and
-35 JavaScript endpoint/contract/policy tests passed locally (222 checks).
-Coverage includes real loopback incremental token delivery before backend
-completion, native-session bridging with simulated responses, compaction
-continuations, scoped permission replies, played-versus-generated records,
-stale response rejection, worker cancellation, lease expiry and heavy-model
-exclusivity. Python compilation, JavaScript syntax and diff checks passed.
-The optional Playwright browser test is included but NOT run: its Chromium
-runtime was absent and the browser download returned an invalid archive.
-Microphone/AEC behavior, native MLX inference, latency, voice quality and
-32GB Mac memory pressure remain unverified. Installation load-checks all audio
-workers; Check Conversation.command provides a native audio round-trip/timing
-report. Interactive acceptance is explicitly not_run in the installer report.
-
-Qwen3-TTS update 2026-10-08 UTC: 81 installer tests, 93 gateway tests and
-32 JavaScript contract/policy/media tests passed locally (206 checks).
-Speech uses the pinned MLX Qwen3-TTS 1.7B Base checkpoint, a private one-shot
-worker and the serial gateway. Tests mock synthesis; actual Mac model load,
-voice similarity, speed and peak memory remain unverified here. Installation
-checks native model loading, and generation acceptance requires a registered
-default voice sample/transcript. Without one, speech generation is not_run.
-
-Coordinator media update 2026-10-08 UTC: 79 installer tests, 87 gateway tests
-and 31 JavaScript contract/policy/media tests passed locally (197 checks).
-Media tools share the existing serial render queue. Tests cover approval denial,
-specialist blocking, stale mode rejection, Max video, failure logging and budgets.
-Actual native model selection of these tools, UI asset rendering and Mac GPU
-performance remain unverified. SDXL/LTX defaults retained after model review.
-
-Handoff contract update 2026-10-07 UTC: 79 installer tests and 26 JavaScript
-contract/policy tests passed locally (105 checks). Native Mac model compliance,
-approval behavior, performance and memory use remain unverified. Native acceptance
-now requires a ready-for-review structured handoff return, not merely child text.
-The gateway is unchanged from its previously passing 86-test suite.
-
-Coder execution update 2026-10-07 UTC: 79 installer tests and 17 JavaScript
-policy tests passed for this change (96 checks). The gateway is unchanged from
-the prior 86-test passing run. New coverage verifies Build coder project tools,
-Plan read-only enforcement, native edit/bash approval configuration, rejection
-of automatic edit permission, direct-coder execution, active reserved parent
-binding, analyst tool refusal, denied delegation/network tools, 24-tool limits
-and mode invalidation. The plugin never handles permission.ask or grants approval.
-
-Native Mac acceptance now requires a real coder read of a disposable project
-file. Actual denied/approved edits and shell test execution remain manual native
-acceptance checks and have NOT been executed here. Code and tests are packaged
-with the updated guides. No gateway concurrency or output caps were changed.
-
-OpenCode team update 2026-10-07 UTC: 79 installer tests, 86 gateway tests and
-12 JavaScript policy tests passed locally (177 total). Gateway integration uses
-real loopback HTTP with simulated Ollama; it proves protocol/lifecycle sequencing,
-not native model inference. Tests cover both specialist paths, parent resumption,
-profile switches, unload failure, private role migration, artifact refusal,
-effective native-permission checks, direct commands, and acceptance rejection
-when no real child result/model is present. Policy tests cover concurrent calls,
-duplicate calls, concrete-failure retry, persistent accounting across reconnects
-and fresh processes, native compaction continuations and overflow replay, child
-tool/attachment refusal, stale gateway epochs, restarts and bounded results.
-
-The installer now prepares the exact selected Q4_K_M artifacts, records full
-installed model digests, checks model metadata and requires actual native
-OpenCode analyst/coder handoffs plus final parent answers on the Mac. Those
-native acceptance checks have NOT been run here. Apple GPU speed, memory pressure,
-long-context accuracy, real model tool reliability and native UI permission
-behavior remain unverified. The ZIP contains current sources and guides, with
-no weights, credentials or runtime state. WebUI delegation and image input are
-not implemented. All models remain serialized through the existing gateway.
-
-Earlier validation records follow; old model/context descriptions below are
-historical and superseded by the model-team documentation.
-
-Context update 2026-10-07 UTC: 72 installer tests and 83 gateway tests passed
-locally (155 total). Python syntax, installer shell syntax and diff checks passed.
-Coverage includes native protection flags, backend-version refusal, mode-specific
-compaction, small custom contexts, authenticated context endpoint/media isolation,
-WebUI settings API verification/retry/redirect refusal, private upgrade preservation,
-and failure of acceptance when oversized input succeeds or returns a generic error.
-The installer checks four native input overflow cases per preset and verifies the
-WebUI settings API. These checks have NOT been executed on the user's Mac here.
-The ZIP is rebuilt from current source, checked for exact code/document contents
-and excludes caches, credentials, models and runtime data. Summaries remain lossy.
-No additional model concurrency, streaming change or RAM safeguard override added.
-
-Authoring checks completed 2026-10-06 UTC.
-Update 2026-10-07 UTC: 65 installer tests and 79 gateway tests passed locally,
-including the new reverse-image cases and output/context regressions. JSON/SSE
-cutoff propagation was tested through real loopback HTTP with mocked Ollama.
-Tests verify 1K/4K/8K output caps, 4K Gaming/16K stock contexts, shorter client
-budgets, reduced ceilings for custom small contexts, one-time stock migration,
-preserved custom settings, OpenCode limits and native-cutoff acceptance failure.
-The installer now requests an eight-token essay from every native preset and
-requires finish_reason=length. This check has not been executed on a Mac here.
-Intended hardware is the user's 32 GB M6 Mac mini. No M6 GPU benchmark, memory
-pressure, swap, long-essay or native-client cutoff display result is claimed.
-No concurrency increase or GPU/OS memory-safeguard override was introduced.
-The automated ZIP is rebuilt from the updated source and includes its guides.
-
-Earlier validation record:
-59 installer/remote/web/workspace/backup/harness tests and 68 gateway/protocol/vault/mode tests passed.
-Python syntax and installer shell syntax passed. ZIP rebuilt from current source.
-New coverage: direct vault PNG output, actual Linux FFmpeg pipe-to-MP4 encoding,
-partial cleanup on mount loss, output symlink rejection, workflow allowlist,
-loopback HTTP byte ranges and locked-media rejection, engine renderer cleanup,
-offline SQLite/WAL backup and restore, preserved previous data, checksums,
-three-backup retention, cache exclusion, active-service refusal, legacy media
-copy preserving UUID URLs and original files. No generated plaintext staging.
-Mount state is simulated in filesystem success tests. Actual Cryptomator volume
-semantics, iCloud sync, macOS DMG installation/signatures, Open WebUI approvals,
-live GitHub calls, Apple GPU inference and VPN/DNS leak tests remain unverified.
-No vault password, recovery key or live account credential is included.
-Cryptomator 1.19.3 arm64 release asset SHA-256 obtained from official GitHub
-release metadata; macOS performs DMG hash/signature/Gatekeeper validation.
-Vault mode uses bundled ComfyUI output nodes, disables other custom nodes,
-previews and metadata, and suppresses ComfyUI plaintext diagnostic logs.
-Live WebUI history/uploads/indexes and runtime logs still reside locally.
-WebUI backups go to the vault before startup and after clean shutdown when
-unlocked. Rebuildable data/cache is excluded. Migration copies, never erases.
-GitHub uses the official remote MCP server, not the removed bespoke adapter.
-Open WebUI 0.11.1 approval defaults are experimental and can be overridden.
-Test denial, approval, reload and account permissions before real account writes.
-See docs/ENCRYPTED-WORKSPACE.md for native acceptance and storage boundaries.
-
-Resource modes: eligibility, HTTP auth, filtered model list, queue invalidation,
-active-render cancellation, persistence, unload-failure blocking and gaming
-inference limits tested. Mode selector/native Mac and game performance unverified.
-
-OpenCode 1.18.34 integration: official macOS arm64 asset digest pinned, native
-provider/permission configuration and upstream flags inspected. Tests cover
-project copying, secret/config omission, checksum refusal, local provider setup,
-launch refusal in Gaming, native web launch and stop on mode change, and actual
-Ollama usage accounting. OpenCode binary execution/UI and local-model agent
-performance were NOT tested here. Mac acceptance is documented in WORK-AGENT.md.
-Open WebUI Pyodide defaults verified against pinned v0.11.1 source and made explicit.
-
-Context integration: mode-aware native WebUI compaction configured; loopback
-JSON/SSE error and usage propagation tested. Ollama native tokenizer enforcement
-is required with truncation and shifting disabled. Native Mac/client end-to-end
-inference and full-request context acceptance remain pending.
-See docs/CONTEXT-MANAGEMENT.md for remaining gaps and Mac acceptance.
-
+No user model weights, settings or conversations were accessed or deleted.
+No repository publication was performed.

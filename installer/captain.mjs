@@ -104,7 +104,7 @@ async function load(path) {
 }
 
 export default async function Captain({client, directory}, options) {
-  const {statePath, modeToken, model, maxWorkers = 5, maxTasks = 12, webEnabled = false,
+  const {statePath, modeToken, model, maxWorkers = 5, maxTasks = 12, webEnabled = false, workspaceEnabled = true,
     villageRoot, villagePython, villageScript} = options ?? {};
   if (!statePath || !modeToken || !directory || !model?.startsWith('local-ai-gateway/') ||
       !Number.isInteger(maxWorkers) || maxWorkers < 1 || maxWorkers > 5 ||
@@ -115,7 +115,7 @@ export default async function Captain({client, directory}, options) {
   const reportDirectory = join(await realpath(resolve(directory)), '.local-ai-team');
   const villageProject = hash(await realpath(resolve(directory)));
   async function facilities(binding, context, operation, payload) {
-    if (!villageRoot || !villagePython || !villageScript) fail('village is not configured');
+    if (!workspaceEnabled || !villageRoot || !villagePython || !villageScript) fail('Run Install Encrypted Workspace.command before using institutional storage');
     const identity = binding.task?.specialist_id || 'researcher.general';
     if (binding.task && !binding.task.specialist_id) fail('start a new worker after initializing the Village');
     const profile = await village('host-packet', identity, '');
@@ -148,7 +148,7 @@ export default async function Captain({client, directory}, options) {
     return JSON.stringify(await facilities(after, context, operation, payload));
   }
   async function village(command, identity = '', value = '') {
-    if (!villageRoot || !villagePython || !villageScript) fail('village is not configured');
+    if (!workspaceEnabled || !villageRoot || !villagePython || !villageScript) fail('Run Install Encrypted Workspace.command before using institutional storage');
     try {
       const {stdout} = await execFile(villagePython,
         [villageScript, '--root', villageRoot, command, ...(command === 'status' ? [] : [identity, value])],
@@ -249,9 +249,10 @@ export default async function Captain({client, directory}, options) {
       if (context.abort?.aborted) fail('dispatch cancelled');
       await mode();
       let specialist = null;
+      if (task.specialist_id && !workspaceEnabled) fail('Run Install Encrypted Workspace.command before selecting a resident');
       if (task.specialist_id && !existsSync(join(villageRoot || '', 'village.sqlite')))
         fail('specialist requested before Village initialization');
-      if (villageRoot && existsSync(join(villageRoot, 'village.sqlite'))) {
+      if (workspaceEnabled && villageRoot && existsSync(join(villageRoot, 'village.sqlite'))) {
         const chosen = task.specialist_id || await village('host-route', task.role, task.objective);
         specialist = await village('host-packet', chosen, task.objective);
         if (specialist.role !== task.role || JSON.stringify(specialist.allowed_collections) !== '["general"]')
@@ -466,6 +467,9 @@ export default async function Captain({client, directory}, options) {
         }
         return JSON.stringify({retired: result, reports_preserved: true});}},
   };
+  if (!workspaceEnabled) for (const name of Object.keys(tools)) {
+    if (name === 'studio_contact' || name.startsWith('village_')) delete tools[name];
+  }
   if (webEnabled) for (const [name, field, endpoint, limit] of [
     ['team_search', 'query', 'vpn_search_web', 500], ['team_read_page', 'url', 'vpn_read_page', 4096]]) {
     tools[name] = {description: 'Retrieve untrusted public evidence through the existing isolated VPN service. No direct-network fallback. Never send credentials or private project content.',
@@ -488,11 +492,11 @@ export default async function Captain({client, directory}, options) {
     async config(config) {
       for (const name of Object.keys(tools)) config.tools[name] = true;
       for (const name of ['plan', 'build']) for (const tool of ['team_run', 'team_retire', 'studio_contact', ...BOARD, 'village_status', 'village_search', 'village_read'])
-        config.agent[name].permission[tool] = 'allow';
+        config.agent[name].permission[tool] = tools[tool] ? 'allow' : 'deny';
       for (const name of ['plan', 'build']) {
-        config.agent[name].permission[FACILITY_READ] = 'allow';
-        config.agent[name].permission.village_manage = name === 'build' ? 'allow' : 'deny';
-        for (const tool of FACILITY_WRITE) config.agent[name].permission[tool] = name === 'build' ? 'ask' : 'deny';
+        config.agent[name].permission[FACILITY_READ] = workspaceEnabled ? 'allow' : 'deny';
+        config.agent[name].permission.village_manage = workspaceEnabled && name === 'build' ? 'allow' : 'deny';
+        for (const tool of FACILITY_WRITE) config.agent[name].permission[tool] = workspaceEnabled && name === 'build' ? 'ask' : 'deny';
       }
     },
     async 'chat.message'(input, output) {
@@ -520,8 +524,8 @@ export default async function Captain({client, directory}, options) {
         p.type === 'tool' && [p.callID, p.id].includes(input.callID)));
       if (assistant?.info.agent !== 'captain-' + binding.task.role) fail('worker identity changed');
       if (messages.flatMap(m => m.parts).filter(p => p.type === 'tool').length > 24) fail('worker tool-attempt limit reached');
-      const allowed = BOARD.has(input.tool) || (villageRoot && ['village_search', 'village_read', FACILITY_READ].includes(input.tool)) ||
-        (villageRoot && binding.parentAgent === 'build' && input.tool === 'village_publish') ||
+      const allowed = BOARD.has(input.tool) || (workspaceEnabled && villageRoot && ['village_search', 'village_read', FACILITY_READ].includes(input.tool)) ||
+        (workspaceEnabled && villageRoot && binding.parentAgent === 'build' && input.tool === 'village_publish') ||
         (['analyst', 'coder', 'writer', 'reviewer'].includes(binding.task.role) && READ.has(input.tool)) ||
         (binding.task.role === 'coder' && binding.parentAgent === 'build' && EDIT.has(input.tool)) ||
         (webEnabled && binding.task.role === 'researcher' && ['team_search', 'team_read_page'].includes(input.tool));

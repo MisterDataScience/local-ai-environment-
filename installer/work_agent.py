@@ -175,6 +175,8 @@ def configuration(config, identifiers, mode='normal', root=None, status=None):
     settings.update(model=coordinator, small_model=coordinator, subagent_depth=1)
     settings['plugin'] = [[plugin.as_uri(), {
         'ledgerPath': str(root / 'work-agent/state/team-budget.json'), 'roles': roles,
+        'capabilities': {'media': config.get('_feature_status', {}).get('media', 'ready') == 'ready',
+                         'speech': config.get('_feature_status', {}).get('speech', 'ready') == 'ready'},
         'modeToken': (str(status['instance_id']) + ':' + str(status['epoch']) + ':' + mode) if status else None}]]
     # Task remains denied until the policy plugin successfully initializes.
     routing = (
@@ -298,7 +300,10 @@ def main():
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGHUP, interrupted)
     root = args.root.expanduser().resolve()
-    config = json.loads((root / 'control/config.json').read_text())
+    from feature_state import effective_config, optional_runtime_config
+    config = effective_config(root, json.loads((root / 'control/config.json').read_text()),
+        testing=tuple(filter(None, os.environ.get('LOCAL_AI_ACCEPTANCE_FEATURES', '').split(','))))
+    config = optional_runtime_config(root, config)
     base, key = 'http://127.0.0.1:8001', config['api_key']
     status = http(base + '/control/mode', key=key)
     if status['mode'] == 'gaming' or status['transitioning'] or status['error']:

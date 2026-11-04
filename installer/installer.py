@@ -58,6 +58,7 @@ TEAM_FILES += ('captain.mjs', 'captain-runtime.mjs', 'captain_setup.py', 'captai
 TEAM_FILES += ('commons.py', 'commons_control.py', 'village_memory.py', 'resident_management.py', 'village_storage.py', 'founding.py', 'village_owner.py')
 TEAM_FILES += ('studio_store.py','studio_runtime.py','studio_workbench.py','studio_player.py','studio_control.py','studios.py','studio_roles.py')
 TEAM_FILES += ('synod.py','synod_store.py')
+TEAM_FILES += ('feature_state.py', 'feature_install.py', 'feature_checks.py', 'installer.py', 'turnkey_install.py')
 MODELS = [
     ("checkpoints/sd_xl_base_1.0.safetensors",
      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
@@ -172,7 +173,7 @@ def acceptance_fingerprint(root):
     return hashlib.sha256("\n".join(hashes + [COMFY_RELEASE, COMFY_COMMIT, TORCH_VERSION, TORCHVISION_VERSION, TORCHAUDIO_VERSION, WEBUI_RELEASE]).encode()).hexdigest()
 
 
-def preflight(root):
+def preflight(root, *, core=False):
     if platform.system() != "Darwin" or platform.machine() != "arm64":
         raise RuntimeError("Requires Apple Silicon running native arm64 macOS, not Intel/Rosetta.")
     version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2])
@@ -182,10 +183,13 @@ def preflight(root):
     if memory < 32 * 1024**3:
         raise RuntimeError("This model selection requires at least 32GB unified memory.")
     first_install = not (root / "install-state.json").exists()
-    minimum_free = (100 if first_install else 20) * 1024**3
+    minimum_free = ((35 if core else 100) if first_install else 20) * 1024**3
     if shutil.disk_usage(root).free < minimum_free:
         raise RuntimeError(f"Need at least {minimum_free // 1024**3}GB free SSD space for this installation stage.")
-    for service, port in PORTS.items():
+    tools = subprocess.run(['/usr/bin/xcode-select', '-p'], capture_output=True, text=True)
+    if tools.returncode:
+        raise RuntimeError("Install Apple Command Line Tools with xcode-select --install, complete the macOS dialogue, then rerun this installer.")
+    for service, port in {**PORTS, "Captain": 4096, "conversation": 8003}.items():
         if port_open(port):
             raise RuntimeError(f"{service} port {port} is already in use. Close that Local AI instance first.")
     logging.info("Hardware checks passed: %.0fGB unified memory", memory / 1024**3)
@@ -326,8 +330,9 @@ def install_comfy(root, uv, state):
     return directory
 
 
-def install_environments(root, uv, state):
-    control = root / "control"
+def install_environments(root, uv, state, *, core=False):
+    from feature_state import safe_path
+    control = safe_path(root / "control")
     control.mkdir(exist_ok=True)
     # Remove only explicitly retired project files, never user data/workflows.
     for name in ("tool_registry.py", "tool_executor.py", "tool_loop.py", "github_adapter.py", "github_mcp.py",
@@ -351,8 +356,6 @@ def install_environments(root, uv, state):
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     # Install only our descriptor-based save nodes; vault-mode CLI disables every
     # other external node. Keep the bundled copy in control for repair/checks.
-    shutil.copytree(SOURCE / 'comfy_vault', root / 'ComfyUI/custom_nodes/local_ai_vault',
-                    dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     shutil.copytree(SOURCE / 'comfy_vault', control / 'comfy_vault',
                     dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     python = control / ".venv/bin/python"
@@ -377,7 +380,7 @@ def install_environments(root, uv, state):
     from webui_local_images import harden, harden_pdf
     harden(root)
     harden_pdf(root)
-    config_path = control / "config.json"
+    config_path = safe_path(control / "config.json")
     if not config_path.exists():
         config = {"comfy_dir": str(root / "ComfyUI"), "text_model": "qwen3:14b",
                   "thinking": False, "render_timeout_seconds": 3600,
@@ -387,24 +390,59 @@ def install_environments(root, uv, state):
         config_path.write_text(json.dumps(config, indent=2) + "\n")
         config_path.chmod(0o600)
     config = json.loads(config_path.read_text())
-    from captain_config import upgrade as upgrade_captain
-    upgraded = upgrade_captain(upgrade_team(upgrade_text_configuration(config)))
-    from voice_setup import install as install_voice
-    upgraded['speech'] = install_voice(root, uv, run)
-    from conversation_setup import install as install_conversation
-    upgraded['conversation'] = install_conversation(root, uv, run)
+    upgraded = core_configuration(root, config) if core else full_configuration(config, root, uv)
     if upgraded != config:
-        # Keep the old settings and secrets recoverable before migrating.
-        backup = config_path.with_name("config.before-model-team-v1.json")
+        from feature_state import atomic_json
+        backup = config_path.with_name("config.before-modular-install.json")
         if not backup.exists():
-            backup.write_text(json.dumps(config, indent=2) + "\n")
-            backup.chmod(0o600)
-        temporary = config_path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(upgraded, indent=2) + "\n")
-        temporary.chmod(0o600)
-        temporary.replace(config_path)
+            atomic_json(backup, config)
+        atomic_json(config_path, upgraded)
     return upgraded
 
+
+
+def core_configuration(root, config):
+    """Fresh core needs one pinned small fallback plus the shared Captain.
+
+    Existing models, vault policies and optional settings retain their identity.
+    A previous experimental trial backup is restored exactly once before migration.
+    """
+    import copy
+    from feature_state import migrate, safe_path
+    result = copy.deepcopy(config)
+    if result.get('install_profile') == 'local-trial':
+        backup = safe_path(root / 'control/trial-deferred-settings.json')
+        if not backup.is_file():
+            raise RuntimeError('Trial deferred settings are missing. Restore that private backup before migrating.')
+        deferred = json.loads(backup.read_text())
+        if not isinstance(deferred, dict) or not isinstance(deferred.get('text_models'), dict):
+            raise RuntimeError('Trial deferred settings are incomplete; preserved for recovery.')
+        for key, value in deferred.items():
+            if key == 'text_models':
+                # Retain the actual selected native Captain, restore other owner presets.
+                result[key] = {**value, **result.get(key, {})}
+            else:
+                result[key] = value
+    from model_team import preset
+    from captain_config import upgrade as upgrade_captain
+    if 'text_models' not in result:
+        result['text_models'] = {'local-ai': preset('coordinator')}
+        result['model_team_version'] = 1
+        result['model_team'] = {'enabled': True, 'roles': {}}
+        result['text_context_version'] = 2
+        result['captain'] = {'enabled': False}
+    result = upgrade_captain(upgrade_text_configuration(result))
+    result['feature_schema'] = 1
+    result['install_profile'] = 'core'
+    migrate(root, result)
+    return result
+
+
+def full_configuration(config, root, uv):
+    # Compatibility for callers of the previous Python API. User-facing full
+    # installation uses the same modular feature functions as individual launchers.
+    from captain_config import upgrade as upgrade_captain
+    return upgrade_captain(upgrade_team(upgrade_text_configuration(config)))
 
 def verify_text_cutoff(key, identifier):
     """Exercise native output exhaustion, not just a one-sentence smoke test."""
@@ -454,7 +492,9 @@ def verify_context_rejection(key, identifier, context):
     return results
 
 
-def verify_generation(root, configuration):
+def verify_generation(root, configuration, *, core=False):
+    from feature_state import effective_config
+    configuration = effective_config(root, configuration, testing=("core",) if core else ())
     import resource_modes
     if resource_modes.load(root / "control") != "max":
         raise RuntimeError("Native acceptance must run in Max mode; installer must select it temporarily.")
@@ -472,9 +512,10 @@ def verify_generation(root, configuration):
         presets = configured_text_models(configuration)
         from team_setup import prepare_models
         prepare_models(root, presets, download, run, http)
-        run([control / ".venv/bin/python", control / "check-workflows.py"], cwd=control)
+        if not core:
+            run([control / ".venv/bin/python", control / "check-workflows.py"], cwd=control)
         gateway = launch([control / ".venv/bin/python", control / "gateway.py"], control,
-                         root / "logs/gateway.log", os.environ.copy())
+                         root / "logs/gateway.log", dict(os.environ, LOCAL_AI_ACCEPTANCE_FEATURES="core" if core else ""))
         processes.append(gateway)
         wait_ready("http://127.0.0.1:8001/health", gateway)
         webui = launch([root / "webui/.venv/bin/open-webui", "serve", "--host", "127.0.0.1", "--port", "8081"],
@@ -484,14 +525,20 @@ def verify_generation(root, configuration):
         ContextSettings().sync(http('http://127.0.0.1:8001/control/context', key=configuration['api_key']))
         checks = [("text-" + identifier, "Reply with one sentence about Python.", identifier)
                   for identifier in presets]
-        checks += [(kind, prompt, "local-ai") for kind, prompt in [
-            ("text", "Reply with one sentence about Python."),
-            ("image", "/image A red toy racing car on a white table, studio photograph, no text."),
-            ("text-after-image", "Reply with one sentence about statistics."),
-            ("video", "/video A fixed camera watches a red toy racing car move slowly from left to right on a white table. The wheels rotate naturally. Soft studio light and a plain background. Stable camera, no text or logos."),
-            ("text-after-video", "Reply with one sentence about reproducibility."),
-        ]]
-        report = {"tested_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "checks": [], "media": "vault-direct" if configuration.get("vault", {}).get("enabled") else "local"}
+        checks.append(('text', 'Reply with one sentence about Python.', 'local-ai'))
+        if not core:
+            checks += [(kind, prompt, 'local-ai') for kind, prompt in (
+                ('image', '/image A red toy car on a white table.'),
+                ('text-after-image', 'Reply with one sentence about statistics.'),
+                ('video', '/video A red toy car moves across a white table.'),
+                ('text-after-video', 'Reply with one sentence about reproducibility.'))]
+        report = {'tested_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  'profile': 'core' if core else 'full', 'checks': [],
+                  'media': 'not_run' if core else ('vault-direct' if configuration.get('vault', {}).get('enabled') else 'local')}
+        if core:
+            report['checks'].extend({'name': name, 'status': 'not_run',
+                'reason': 'Run the independent feature installer for native acceptance.'}
+                for name in ('image', 'video', 'speech', 'discord', 'vpn-web', 'remote-access'))
         if configuration.get('model_team', {}).get('enabled'):
             report['checks'].append({'name': 'reverse-scaffold-quality', 'status': 'not_run',
                 'reason': 'Stage and schema tests use simulated responses. Author must check actual local-model planning quality on the Mac.'})
@@ -503,7 +550,7 @@ def verify_generation(root, configuration):
         if configuration.get('conversation', {}).get('enabled'):
             report['checks'].append({'name': 'interactive-conversation', 'status': 'not_run',
                 'reason': 'Audio workers load-checked during installation. Run Check Conversation.command, then the microphone, interruption, approvals and memory checks in REALTIME-CONVERSATION.md.'})
-        if configuration.get('speech', {}).get('enabled'):
+        if not core and configuration.get('speech', {}).get('enabled'):
             if (root / 'voice-engine/voices/default.json').exists():
                 checks += [('speech', '/speak This is a local speech generation acceptance test.', 'local-ai-small'),
                            ('text-after-speech', 'Reply with one sentence about audio.', 'local-ai-small')]
@@ -569,7 +616,7 @@ def verify_text_residency(configuration, presets, identifier):
             raise RuntimeError('Shared GGUF residency did not match the completed model/media handoff')
 
 
-def verify_generation_during_install(root, configuration):
+def verify_generation_during_install(root, configuration, *, core=False):
     """Installer-owned Max acceptance without permanent changes to owner modes.
 
     Preconditions: installer lock held, preflight confirmed all app ports free.
@@ -581,7 +628,10 @@ def verify_generation_during_install(root, configuration):
     if saved_mode != "max":
         resource_modes.save(control, "max")
     try:
-        verify_generation(root, configuration)
+        if core:
+            verify_generation(root, configuration, core=True)
+        else:
+            verify_generation(root, configuration)
     finally:
         if saved_mode != "max":
             resource_modes.save(control, saved_mode)
@@ -589,20 +639,12 @@ def verify_generation_during_install(root, configuration):
 
 def make_launcher(root):
     command = root / "Start Local AI.command"
-    command.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
-                       "\nif /usr/bin/curl --noproxy '*' --max-time 3 -fsS http://127.0.0.1:8081/health >/dev/null 2>&1; then\n"
-                       "  if [ -f captain-managed-ready.json ]; then\n"
-                       "    exec /usr/bin/open -a Safari http://127.0.0.1:4096\n"
-                       "  fi\n"
-                       "  exec /usr/bin/open -a Safari http://127.0.0.1:8081\n"
-                       "fi\nexec .venv/bin/python runtime.py\n")
+    launch_script = ("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
+                     "\nexec .venv/bin/python turnkey_install.py --root " + shlex.quote(str(root)) + "\n")
+    command.write_text(launch_script)
     command.chmod(0o755)
     captain_launcher = root / 'Open Captain.command'
-    captain_launcher.write_text("#!/bin/bash\nset -e\ncd " + shlex.quote(str(root / "control")) +
-        "\n.venv/bin/python -c 'from managed_captain import credentials; from pathlib import Path; "
-        "auth = credentials(Path.cwd().parent); print(\"Captain username:\", auth[\"username\"]); "
-        "print(\"Captain password:\", auth[\"password\"])'\n"
-        "exec /usr/bin/open -a Safari http://127.0.0.1:4096\n")
+    captain_launcher.write_text(launch_script)
     captain_launcher.chmod(0o755)
     for label, argument in (("Enable Web Access", ""), ("Disable Web Access", " --disable")):
         web_command = root / (label + ".command")
@@ -704,159 +746,126 @@ def make_launcher(root):
     return application
 
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--uv", type=Path, required=True)
-    parser.add_argument("--remote-access", action="store_true",
-                        help="Install/connect Tailscale and configure private chat/media HTTPS access.")
-    parser.add_argument("--web-access", action="store_true", help="Configure isolated Proton VPN search/page reading.")
-    parser.add_argument('--minicpm-captain', action='store_true',
-                        help='Build the pinned native MiniCPM runtime and use its standard mixed-Q3 model as the shared team.')
+    parser.add_argument('--root', type=Path, default=Path.home() / 'LocalAI-Automated')
+    parser.add_argument('--uv', type=Path, required=True)
+    parser.add_argument('--everything', action='store_true', help='Core plus the independent feature installers.')
+    parser.add_argument('--minicpm-captain', action='store_true', help='Compatibility: core always includes MiniCPM.')
+    parser.add_argument('--local-trial', action='store_true', help='Compatibility alias for the stable core profile.')
+    parser.add_argument('--defer-discord', action='store_true', help='Skip Discord during Install Everything.')
+    parser.add_argument('--web-access', action='store_true')
+    parser.add_argument('--remote-access', action='store_true')
     args = parser.parse_args()
-    root = args.root.expanduser().resolve()
+    if args.local_trial and args.everything:
+        parser.error('--local-trial and --everything cannot be combined')
+    from feature_state import (atomic_json, effective_config, installation_lock, read,
+                               safe_path, snapshot, write)
+    root = safe_path(args.root.expanduser()).resolve()
     root.mkdir(parents=True, exist_ok=True)
-    for name in ("logs", "cache", "tools", "models/ollama"):
-        (root / name).mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
-                        handlers=[logging.StreamHandler(), logging.FileHandler(root / "logs/install.log")])
-    lock = (root / ".installer.lock").open("w")
+    for name in ('logs', 'cache', 'tools', 'models/ollama'):
+        safe_path(root / name).mkdir(parents=True, exist_ok=True)
+    file_handler = logging.FileHandler(root / 'logs/install.log')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s',
+        handlers=[logging.StreamHandler(), file_handler])
+    state = root / 'install-state.json'
+    started = False
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        raise SystemExit("Another copy of the installer is running.")
-    state = root / "install-state.json"
-    try:
-        logging.info("Stage 1/8: hardware and port checks")
-        preflight(root)
-        logging.info("Stage 2/8: native Ollama installation")
-        install_ollama(root)
-        checkpoint(state, "ollama-installed")
-        logging.info("Stage 3/8: ComfyUI and Apple GPU support")
-        install_comfy(root, args.uv, state)
-        logging.info("Stage 4/8: verified image/video model downloads")
-        for relative, url, checksum in MODELS:
-            download(url, root / "ComfyUI/models" / relative, checksum)
-        logging.info("Stage 5/8: gateway and automatically configured chat UI")
-        configuration = install_environments(root, args.uv, state)
-        from workspace_setup import install_cryptomator, save_config
-        app = install_cryptomator(root, download, run)
-        from work_agent import install as install_work_agent
-        install_work_agent(root, download, run)
-        from office_setup import install as install_office
-        configuration['office'] = install_office(root, download, run)
-        configuration['cryptomator_app'] = str(app)
-        save_config(root, configuration)
-        from discord_setup import install as install_discord, configure as configure_discord
-        install_discord(root, download, run)
-        configure_discord(root)
-        configuration = json.loads((root / 'control/config.json').read_text())
-        vault_acceptance = None
-        if args.minicpm_captain:
+        with installation_lock(root):
+            from feature_install import ensure_stopped, make_launchers, run_feature, INSTALLERS
+            ensure_stopped(root)
+            logging.info('Core: Apple Silicon, developer tools, free space and port checks')
+            try:
+                preflight(root, core=True)
+            except RuntimeError as error:
+                print(str(error))
+                raise
+            write(root, 'core', 'installed', next_action='Rerun Install LOCAL AI Core.command', acceptance={})
+            started = True
+            install_ollama(root)
+            checkpoint(state, 'ollama-installed')
+            configuration = install_environments(root, args.uv, state, core=True)
+            from work_agent import install as install_work_agent
+            install_work_agent(root, download, run)
             from captain_setup import install_minicpm
             configuration = install_minicpm(root, download)
-            from workspace_install import configure_during_install
-            logging.info("Completing encrypted Cryptomator AI Workspace inside Captain installation")
-            configuration, vault_acceptance = configure_during_install(root, app)
-            if vault_acceptance.get('status') != 'passed':
-                raise RuntimeError('Encrypted workspace acceptance did not pass')
-        logging.info("Stage 6/8: hardware generation and memory handoff tests")
-        fingerprint = acceptance_fingerprint(root)
-        accepted_file = root / "accepted-fingerprint.txt"
-        if (not completed(state, "hardware-acceptance") or not accepted_file.exists()
-                or accepted_file.read_text() != fingerprint):
-            verify_generation_during_install(root, configuration)
-            accepted_file.write_text(fingerprint)
-            checkpoint(state, "hardware-acceptance")
-        else:
-            logging.info("Checking the previously completed hardware acceptance report.")
-        from turnkey_install import acceptance_summary
-        native_acceptance = acceptance_summary(root, configuration)
-        if args.minicpm_captain:
+            write(root, 'core', 'testing')
+            # Core acceptance is independent of optional state and never prompts
+            # for its inputs. Keep its fingerprint separate from feature checks.
+            fingerprint = acceptance_fingerprint(root)
+            accepted_file = root / 'accepted-core-fingerprint.txt'
+            if not accepted_file.exists() or accepted_file.read_text() != fingerprint:
+                verify_generation_during_install(root, configuration, core=True)
+                accepted_file.write_text(fingerprint)
+            from turnkey_install import acceptance_summary
+            native = acceptance_summary(root, configuration)
             import resource_modes
-            control = root / "control"
-            if not (control / "resource-mode.json").exists():
-                # Initial launch should use the more memory-conservative Normal
-                # profile. Max (five slots) remains an explicit user option.
-                resource_modes.save(control, "normal")
-        logging.info("Stage 7/8: create daily launcher and record versions")
-        application = make_launcher(root)
-        for directory in (root / "ComfyUI", root / "control", root / "webui"):
-            with (directory / "installed-versions.txt").open("w") as output:
-                run([args.uv, "pip", "freeze", "--python", directory / ".venv/bin/python"], stdout=output)
-        (root / "software-versions.json").write_text(json.dumps(
-            {"comfyui": COMFY_RELEASE, "open_webui": WEBUI_RELEASE, "opencode": "1.18.34",
-             "aioffice": configuration['office']['version'],
-             "text_models": configured_text_models(configuration)}, indent=2))
-        if args.minicpm_captain:
-            # No separate post-install activation: the Captain profile installs
-            # the signed local container engine, VPN-bound browsing and private
-            # Tailscale routing before first launch. Account sign-in/licensing
-            # and WireGuard private key entry happen *during* this installer.
-            from docker_setup import install as install_docker
-            logging.info("Captain integrations: install signed Docker Desktop and local Engine")
-            install_docker(root, download)
-            from web_access import configure as configure_web
-            logging.info("Captain integrations: configure VPN-only web retrieval")
-            configure_web(root)
-            checkpoint(state, "web-access-configured")
-            from browser_setup import configure as configure_browser
-            logging.info("Captain integrations: install and verify VPN-only Playwright MCP")
-            configure_browser(root)
-            checkpoint(state, "browser-configured")
-            from remote_access import configure as configure_remote
-            logging.info("Captain integrations: authenticated tailnet for chat, media and Captain")
-            configure_remote(root)
-            checkpoint(state, "remote-access-configured")
-            # Account consent also lives in the one installer. Empty input leaves
-            # the optional account integration disabled; it must not be reported
-            # as a functioning GitHub connection.
-            from account_tools import configure as configure_github
-            logging.info("Captain integrations: optional owner-authorised GitHub account")
-            github_configured = configure_github(root)
-            checkpoint(state, "github-consent-completed")
+            if not (root / 'control/resource-mode.json').exists():
+                resource_modes.save(root / 'control', 'normal')
+            application = make_launcher(root)
+            make_launchers(root)
+            for directory in (root / 'control', root / 'webui'):
+                with (directory / 'installed-versions.txt').open('w') as output:
+                    run([args.uv, 'pip', 'freeze', '--python', directory / '.venv/bin/python'], stdout=output)
+            atomic_json(root / 'software-versions.json', {
+                'open_webui': WEBUI_RELEASE, 'opencode': '1.18.34',
+                'text_models': configured_text_models(configuration)})
+            # Prove the same authenticated UI and MCP policy used in daily operation
+            # before advertising core readiness or installing dependent features.
+            from feature_checks import services
+            from turnkey_install import await_background
+            with services(root, ('core',), captain=True) as test_config:
+                await_background(root, test_config, require_integrations=False)
+            write(root, 'core', 'ready', acceptance=native, installed_version='modular-core-v1',
+                  validated_hashes={'acceptance_fingerprint': fingerprint}, last_failure=None, next_action='')
+            selected = list(INSTALLERS) if args.everything else []
+            if args.web_access and 'web' not in selected:
+                selected.append('web')
+            if args.remote_access and 'remote' not in selected:
+                selected.append('remote')
+            if args.defer_discord and 'discord' in selected:
+                selected.remove('discord')
+            for feature in selected:
+                run_feature(root, feature, args.uv)
             configuration = json.loads((root / 'control/config.json').read_text())
-        else:
-            if args.web_access:
-                from web_access import configure as configure_web
-                configure_web(root)
-                checkpoint(state, "web-access-configured")
-            if args.remote_access:
-                from remote_access import configure as configure_remote
-                configure_remote(root)
-                checkpoint(state, "remote-access-configured")
-        if args.minicpm_captain:
-            from turnkey_install import start_login_service, await_background, write_receipt, open_local_ui
-            logging.info("Stage 8/8: registering Captain login service and checking live readiness")
-            start_login_service(root)
-            background = await_background(root, configuration)
-            receipt = write_receipt(root, configuration, native_acceptance, background,
-                                    vault=vault_acceptance, require_integrations=True)
-            checkpoint(state, "installed")
-            logging.info("Captain installation core ready. Remaining physical checks: %s",
-                         ', '.join(receipt['pending_physical_acceptance']))
-            logging.info("Daily launcher: %s", application)
-            print("Captain core is ready at http://127.0.0.1:8081. Starts automatically at login.")
-            print("Read captain-install-readiness.json for tests not yet verified on this Mac.")
-            open_local_ui(root)
-        else:
-            checkpoint(state, "installed")
-            logging.info("Stage 8/8: launching Local AI")
-            logging.info("Daily launcher: %s", application)
-            runtime_python = str(root / "control/.venv/bin/python")
-            os.execv(runtime_python, [runtime_python, str(root / "control/runtime.py")])
+        # Runtime takes the shared installation lock. It can start only after
+        # source/config mutations finish and the exclusive lock is released.
+        from turnkey_install import start_login_service, await_background, write_receipt, open_local_ui
+        start_login_service(root)
+        live_config = effective_config(root, configuration)
+        background = await_background(root, live_config, require_integrations=False)
+        receipt = write_receipt(root, configuration, native, background, require_integrations=False)
+        with installation_lock(root, shared=True):
+            write(root, 'core', 'ready', acceptance={**native, 'background_services': background},
+                  last_failure=None, next_action='', pending_checks=receipt['pending_physical_acceptance'])
+            checkpoint(state, 'installed')
+        logging.info('Core ready. Daily launcher: %s', application)
+        print('Captain ready at http://127.0.0.1:4096. Starts after macOS login.')
+        print('Run Check LOCAL AI Setup.command for optional features and checks not yet run.')
+        open_local_ui(root)
+        return 0
     except (Exception, KeyboardInterrupt) as error:
-        logging.exception("INSTALLATION STOPPED: %s", error)
-        print("\nInstallation stopped. Completed files/stages are preserved.")
-        print("Run the same installer again to resume. Details:", root / "logs/install.log")
+        # Never log credentials/requests from third-party exceptions.
+        logging.error('Core installation stopped (%s). Completed files are preserved.', type(error).__name__)
+        from turnkey_install import ReadinessError
+        if isinstance(error, ReadinessError):
+            logging.error('%s', error)
+        print('Installation stopped. Run the same installer to resume. Check logs/install.log.')
+        # Lock conflicts must not change a receipt belonging to another installer.
+        try:
+            if not started:
+                return 1
+            with installation_lock(root, shared=True):
+                write(root, 'core', 'failed', last_failure=type(error).__name__,
+                      next_action='Rerun Install LOCAL AI Core.command. Completed files are preserved.')
+        except RuntimeError:
+            pass
         return 1
     finally:
-        lock.close()
-    return 0
+        logging.getLogger().removeHandler(file_handler)
+        file_handler.close()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())
-
-
-

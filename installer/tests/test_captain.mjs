@@ -53,7 +53,7 @@ async function fixture(t, options = {}) {
   const villageOptions = await options.village?.(root) ?? {};
   const hooks = await Captain({client, directory: root}, {statePath, modeToken: 'gateway:0:max',
     model: 'local-ai-gateway/local-ai-captain', maxWorkers: 5, maxTasks: options.maxTasks ?? 12,
-    webEnabled: true, ...villageOptions});
+    webEnabled: true, ...villageOptions, ...(options.workspaceEnabled === undefined ? {} : {workspaceEnabled: options.workspaceEnabled})});
   await hooks['chat.message']({sessionID: root}, {message: {id: 'user'}, parts: messages.get(root)[0].parts});
   function context(callID, agent = 'build', parentID = 'user') {
     messages.get(root).push({info: {id: 'assistant-' + callID, role: 'assistant', agent, parentID},
@@ -525,3 +525,16 @@ test('Commons-style worker cannot access Captain lifecycle management', async t 
   assert.equal(result.tasks[0].status, 'completed');
 });
 
+
+
+test('core dispatch works without advertising or opening institutional storage', async t => {
+  const f = await fixture(t, {workspaceEnabled: false, village: async root => {
+    const villageRoot = join(root, 'locked-village');
+    await mkdir(villageRoot);
+    await writeFile(join(villageRoot, 'village.sqlite'), 'existing protected data');
+    return {villageRoot, villagePython: '/must-not-execute', villageScript: '/must-not-execute'};
+  }});
+  assert.ok(!Object.keys(f.hooks.tool).some(name => name === 'studio_contact' || name.startsWith('village_')));
+  const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('core-worker')]}, f.context('core-worker-call')));
+  assert.equal(result.tasks[0].status, 'completed');
+});

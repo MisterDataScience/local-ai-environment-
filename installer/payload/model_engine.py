@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 import uuid
 
 from backend_http import api, port_open
+from feature_state import require as require_feature
 from routing import messages_and_route
 from text_models import configured_text_models, output_ceiling
 from context_policy import compaction_policy, UsageCounters
@@ -88,6 +89,7 @@ class Engine:
         self.studios_lock = threading.Lock()
 
     def studios_controller(self):
+        require_feature(self.config, "workspace")
         with self.studios_lock:
             if self.studios is None:
                 from studios import Studios
@@ -95,6 +97,7 @@ class Engine:
             return self.studios
 
     def founding_controller(self):
+        require_feature(self.config, "workspace")
         with self.founding_lock:
             if self.founding is None:
                 from founding import Founding
@@ -102,6 +105,7 @@ class Engine:
             return self.founding
 
     def commons_controller(self):
+        require_feature(self.config, "workspace")
         with self.commons_lock:
             if self.commons is None:
                 from commons import Commons
@@ -228,6 +232,10 @@ class Engine:
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
+        feature = {"image": "media", "video": "media", "speak": "speech",
+                   "search": "web", "read": "web", "reverse": "web"}.get(route)
+        if feature:
+            require_feature(self.config, feature)
         if body.get('inference_only') and (route != 'text' or body.get('tools')):
             raise ValueError('This request permits text inference only; commands and tools are prohibited.')
         body['_vision'] = any(m.get('images') for m in messages)

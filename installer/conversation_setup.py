@@ -22,9 +22,11 @@ def install(root, uv, run):
     dependency_receipt = install_locked(uv, python, 'voice', run)
     wanted = {'stt': STT_MODEL, 'stt_revision': STT_REVISION, 'vad_revision': VAD_REVISION,
               'vad_blob': VAD_BLOB, 'mlx_revision': MLX_REVISION, 'onnxruntime': '1.22.1', **dependency_receipt}
+    from voice_setup import verify_artifacts
     marker = folder / 'conversation-installed.json'
     if (not marker.exists() or json.loads(marker.read_text()) != wanted
-            or not (folder / 'stt/config.json').is_file() or not (folder / 'silero.onnx').is_file()):
+            or not (folder / 'stt/config.json').is_file() or not (folder / 'silero.onnx').is_file()
+            or not verify_artifacts(folder, folder / 'conversation-artifacts.json')):
         run([python, str(root / 'control/conversation_setup.py'), '--root', root, '--download'])
         env = dict(os.environ, HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
         for kind in ('vad', 'stt', 'tts'):
