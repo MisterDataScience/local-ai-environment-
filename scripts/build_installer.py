@@ -6,9 +6,9 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-11-04-captain-daily-launcher-candidate'
+RELEASE = '2026-11-05-context-acceptance-candidate'
 PREFIX = 'mac-local-ai-installer/'
-STAMP = (2026, 11, 4, 0, 0, 0)
+STAMP = (2026, 11, 5, 0, 0, 0)
 
 
 def contents(root):

@@ -26,8 +26,16 @@ Native limitations:
 - The UI probe checks HTTP Basic challenge, saved authentication and app HTML.
   It does not execute browser JavaScript or verify every static asset.
 - This upload predates the additional-text-model separation. The old document
-  model can still block core acceptance. No acceptance gate is bypassed.
+  model still requires native acceptance. No acceptance gate is bypassed.
 - Existing full acceptance caching is unchanged; finer-grained caching is deferred.
 
 No user model weights, settings or conversations were accessed or deleted.
 No repository publication was performed.
+
+5 November 2026: 32K context acceptance fixture correction
+- Tool-schema probe uses 98,304 repeated x tokens at 32K context, instead
+  of 131,072. JSON tool definitions now fit under the existing 262,144-byte
+  gateway limit. The message/history/tool-result probes are unchanged.
+- A regression test passes every fixture through the real tool validator.
+- Context acceptance tests: 5 passed. Turnkey tests: 7 passed.
+- Native Mac rerun is still required. No success receipt is fabricated.

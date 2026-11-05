@@ -26,8 +26,9 @@ mini itself; another device needs separately configured remote access.
 
 This update is based on the uploaded `Mac-Local-AI-Automated-Installer-2.zip`.
 It does not contain the later additional-text-model separation discussed in chat.
-An old document-model acceptance failure may therefore still block core setup;
-this launcher reports it and does not bypass it. Existing full acceptance caching
+The 32K document-model tool-schema acceptance fixture now stays within the
+gateway tool-definition byte limit. Native context rejection is still required;
+other model failures remain blockers. Existing full acceptance caching
 is retained. Granular caching remains deferred until native acceptance succeeds.
 
 HTTP checks verify the authentication challenge, saved credentials and HTML app

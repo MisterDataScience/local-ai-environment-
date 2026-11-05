@@ -459,7 +459,12 @@ def verify_text_cutoff(key, identifier):
 
 def verify_context_rejection(key, identifier, context):
     """Prove oversized inputs are rejected, including history and tool envelopes."""
+    from turnkey_install import ReadinessError
     large = ' x' * max(context * 4, 4096)
+    # At 32K context, the 4x fixture exceeds the separate 256 KiB tool
+    # definition limit once JSON overhead is included. Keep this probe within
+    # that envelope so it reaches the backend's context rejection check.
+    schema_large = ' x' * max(context * 3, 4096)
     tool = {'type': 'function', 'function': {'name': 'read_text', 'description': 'Read text',
                                            'parameters': {'type': 'object', 'properties': {}}}}
     cases = [
@@ -474,7 +479,7 @@ def verify_context_rejection(key, identifier, context):
                          {'role': 'tool', 'tool_call_id': 'acceptance-read', 'content': large},
                          {'role': 'user', 'content': 'Summarise it.'}], [tool]),
         ('tool-schema', [{'role': 'user', 'content': 'Reply briefly.'}], [
-            {'type': 'function', 'function': dict(tool['function'], description=large)}]),
+            {'type': 'function', 'function': dict(tool['function'], description=schema_large)}]),
     ]
     results = []
     for name, messages, tools in cases:
@@ -485,10 +490,10 @@ def verify_context_rejection(key, identifier, context):
         except HTTPError as error:
             payload = json.loads(error.read(8192))
             if error.code != 400 or payload.get('error', {}).get('code') != 'context_length_exceeded':
-                raise RuntimeError(f'{identifier}/{name}: context acceptance returned an unexpected error') from None
+                raise ReadinessError(f'{identifier}/{name}: context acceptance returned an unexpected error (HTTP {error.code}); expected context_length_exceeded') from None
             results.append({'case': name, 'status': 'passed', 'code': 'context_length_exceeded'})
         else:
-            raise RuntimeError(f'{identifier}/{name}: oversized input was accepted; native context protection is not verified')
+            raise ReadinessError(f'{identifier}/{name}: oversized input was accepted; native context protection is not verified')
     return results
 
 
