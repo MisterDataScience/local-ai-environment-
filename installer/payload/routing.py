@@ -9,7 +9,9 @@ def messages_and_route(body, model_ids=None):
         raise ValueError("The request body must be a JSON object.")
     if body.get("model") not in (model_ids if model_ids is not None else {MODEL_ID}):
         raise ValueError("Choose one of the configured local-ai text presets in Open WebUI.")
-    tools_for_ollama(body)  # Validate schemas before admitting a job; never execute them.
+    preset = model_ids.get(body['model'], {}) if isinstance(model_ids, dict) else {}
+    native = isinstance(preset, dict) and preset.get('backend') == 'llama'
+    tools_for_ollama(body, allow_required=native)  # Validate before admission; never execute tools.
     cleaned = messages_for_ollama(body.get("messages"))
     latest = next((m["content"] for m in reversed(cleaned) if m["role"] == "user"), "")
     stripped = latest.strip()
@@ -17,6 +19,8 @@ def messages_and_route(body, model_ids=None):
     parts = stripped.split(maxsplit=1)
     command = parts[0].lower() if parts else ""
     if cleaned[-1]["role"] == "user" and command in {"/image", "/video", "/speak", "/search", "/read", "/reverse"}:
+        if body.get('tool_choice') == 'required':
+            raise ValueError('Required function calls are supported only for text inference')
         if len(parts) != 2 or not parts[1].strip():
             raise ValueError("Put a description/query/URL after the command.")
         return cleaned, command[1:], parts[1].strip()

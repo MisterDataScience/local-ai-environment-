@@ -252,7 +252,7 @@ class GatewayTests(unittest.TestCase):
     def test_same_loaded_model_is_reused(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = model_engine.Engine({"text_models": DEFAULT_TEXT_MODELS}, Path(directory))
-            engine.text_profile = ('qwen3:14b', 16384, False)
+            engine.text_profile = ('qwen3:14b', 16384, True)
             try:
                 with patch.object(model_engine, "port_open", return_value=False), \
                      patch.object(engine, "unload_ollama") as unload, \
@@ -260,6 +260,21 @@ class GatewayTests(unittest.TestCase):
                          {"message": {"content": "answer"}}]):
                     engine.submit(request("hello")).result(2)
                     unload.assert_not_called()
+            finally:
+                engine.executor.shutdown()
+
+    def test_enabling_thinking_reloads_a_previous_non_thinking_runner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = model_engine.Engine({'text_models': DEFAULT_TEXT_MODELS}, Path(directory))
+            engine.text_profile = ('qwen3:14b', 16384, False)
+            try:
+                with patch.object(model_engine, 'port_open', return_value=False), \
+                     patch.object(engine, 'unload_ollama') as unload, \
+                     patch.object(model_engine, 'api', side_effect=[{'models': [{'name': 'qwen3:14b'}]},
+                         {'message': {'content': 'answer'}}]) as backend:
+                    engine.submit(request('hello')).result(2)
+                    unload.assert_called_once()
+                    self.assertTrue(backend.call_args.args[2]['think'])
             finally:
                 engine.executor.shutdown()
 

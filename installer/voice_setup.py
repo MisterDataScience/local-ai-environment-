@@ -22,7 +22,7 @@ def install(root, uv, run):
     dependency_receipt = install_locked(uv, python, 'voice', run)
     marker = folder / 'installed.json'
     wanted = {'model': MODEL_ID, 'model_revision': MODEL_REVISION, 'mlx_revision': MLX_REVISION, **dependency_receipt}
-    if not marker.exists() or json.loads(marker.read_text()) != wanted or not (folder / 'model/config.json').exists():
+    if not marker.exists() or json.loads(marker.read_text()) != wanted or not (folder / 'model/config.json').exists() or not verify_artifacts(folder / 'model', folder / 'artifacts.json'):
         run([python, str(root / 'control/voice_setup.py'), '--root', root, '--download'])
         env = dict(os.environ, HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
         run([python, str(root / 'control/speech_worker.py')],
@@ -33,6 +33,23 @@ def install(root, uv, run):
         marker.chmod(0o600)
     return {'enabled': True, **wanted}
 
+
+
+def verify_artifacts(folder, manifest_path):
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        return False
+    artifacts = json.loads(manifest_path.read_text())
+    if not isinstance(artifacts, dict) or not artifacts:
+        return False
+    for relative, info in artifacts.items():
+        path = folder / relative
+        if (Path(relative).is_absolute() or '..' in Path(relative).parts or path.is_symlink()
+                or not path.is_file() or path.stat().st_size != info['size']):
+            return False
+        from installer import digest
+        if digest(path) != info['sha256']:
+            return False
+    return True
 
 def download_model(root):
     from huggingface_hub import snapshot_download

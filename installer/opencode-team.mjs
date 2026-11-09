@@ -4,7 +4,9 @@ import { readFile, open, rename } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import {workers as captainWorkers, activeCaptains} from './captain-runtime.mjs';
 import { dirname, join, resolve } from 'node:path';
-import { hash, validateContract, bindContract, assessResult, reviewBrief, saveArtifact, RESULT_INSTRUCTION } from './handoff-contract.mjs';
+import { isDeepStrictEqual, promisify } from 'node:util';
+import { execFile as execFileCallback } from 'node:child_process';
+import { hash, validateContract, bindContract, assessResult, reviewBrief, saveArtifact, RESULT_INSTRUCTION, NATIVE_RESULT_INSTRUCTION, nativeResultFormat } from './handoff-contract.mjs';
 
 import {parseRequest, preserve, loadRequest, makeContract, persistResult, RETURN_INSTRUCTION as ESSAY_RETURN} from './essay-edit.mjs';
 
@@ -13,15 +15,42 @@ import {parseScaffold, beginScaffold, loadScaffold, scaffoldContract, finishScaf
 const MAX_INPUT = 12000;
 const CODER_TOOLS = new Set(['read', 'glob', 'grep', 'edit', 'write', 'apply_patch', 'bash']);
 const READ_TOOLS = new Set(['read', 'glob', 'grep']);
+const MAINTENANCE_AGENTS = new Set(['compaction', 'summary', 'title']);
 const OFFICE_READ = new Set(['office_read', 'office_query', 'office_get', 'office_validate', 'office_help', 'office_status']);
 const fields = ['objective', 'constraints', 'evidence', 'completed', 'remaining', 'result'];
 const stores = new Map();
 const turnKey = (session, message) => createHash('sha256').update(session + '\0' + message).digest('hex');
 const fail = (text) => { throw new Error('Local model team: ' + text); };
-const data = (response) => {
-  if (response.error || !response.data) fail('could not verify native session identity');
+const execFile = promisify(execFileCallback);
+const operationError = response => {
+  const error = response?.error;
+  return typeof error === 'string' ? error : error?.data?.message ?? error?.message ?? JSON.stringify(error ?? 'missing data');
+};
+const data = (response, context = 'native session lookup') => {
+  if (response.error || !response.data) fail('could not verify native session identity: ' + context
+    + '; HTTP ' + (response.response?.status ?? 'unknown') + '; ' + operationError(response).slice(0, 512));
   return response.data;
 };
+
+function resumeState(messages, explicit, overflow) {
+  const index = messages.findLastIndex(explicit);
+  if (index < 0) return;
+  const user = messages[index];
+  const assistant = messages.slice(index + 1).findLast(message => message.info.role === 'assistant'
+    && !message.info.summary && !MAINTENANCE_AGENTS.has(message.info.agent));
+  const tools = assistant?.parts.filter(part => part.type === 'tool') ?? [];
+  if (tools.some(part => ['pending', 'running'].includes(part.state?.status))) return;
+  if (assistant?.info.error) return;
+  if (assistant?.info.structured !== undefined) return;
+  const unfinished = !assistant || ['tool-calls', 'length'].includes(assistant.info.finish)
+    || (overflow && !assistant.info.finish);
+  if (!unfinished) return;
+  // A completed answer is terminal even when a synthetic user part asks for
+  // more. A resume without subsequent assistant/tool progress gets no second go.
+  return {user, assistantID: assistant?.info.id, unanswered: !assistant,
+    checkpoint: hash(JSON.stringify([user.info.id, assistant?.info.id,
+    assistant?.info.finish, tools.map(part => [part.callID, part.state?.status])]))};
+}
 
 async function loadStore(ledgerPath) {
   let ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
@@ -57,9 +86,102 @@ async function loadStore(ledgerPath) {
 
 export default async function LocalTeam({ client, directory }, options = {}) {
   const { ledgerPath, roles, modeToken } = options;
+  const nativeStructuredResults = options.nativeStructuredResults === true;
+  const capabilities = options.capabilities ?? {media: true, speech: true};
   if (!ledgerPath || !directory || !roles?.coordinator || !roles?.analyst || !roles?.coder || !modeToken) fail('configuration missing');
   if (!stores.has(ledgerPath)) stores.set(ledgerPath, loadStore(ledgerPath));
   const { ledger, exclusive, save, active } = await stores.get(ledgerPath);
+  const childResumeMarks = new Map();
+
+  function explicitUser(session, sessionID, message) {
+    return message.info.role === 'user' && (session.parentID
+      ? message.parts.some(part => part.type === 'text' && !part.metadata?.compaction_continue)
+        && !message.parts.some(part => part.type === 'compaction')
+      : !!ledger.turns[turnKey(sessionID, message.info.id)]);
+  }
+
+  function originalRequest(message) {
+    const text = message.parts.filter(part => part.type === 'text' && !part.synthetic && !part.ignored)
+      .map(part => part.text).join('\n');
+    // Native task prompts may be synthetic, but remain the child session's
+    // original bound objective. Never select maintenance followups as sources.
+    const request = text || (message.parts.filter(part => part.type === 'text'
+      && !part.metadata?.compaction_continue && !part.ignored).map(part => part.text).join('\n'));
+    if (!request.trim() || request.length > MAX_INPUT) {
+      fail('pending request cannot be restored within the 12000-character resume bound; resume it explicitly');
+    }
+    return request;
+  }
+
+  async function pendingRequestAnchor(sessionID, messageID) {
+    const session = data(await client.session.get({path: {id: sessionID}}));
+    const messages = await nativeMessages(session, sessionID);
+    const user = messages.findLast(message => explicitUser(session, sessionID, message));
+    if (!user) return;
+    const turn = ledger.turns[turnKey(sessionID, user.info.id)];
+    const authority = session.parentID ? childResumeMarks.get(sessionID) : turn?.compaction_resume;
+    if (!authority || authority.userID !== user.info.id || !authority.checkpoint
+        || (!session.parentID && authority.checkpoint !== turn.compaction_checkpoint)) return;
+    // Only the actual latest maintenance user message may carry this anchor.
+    // Older summaries/followups cannot activate a stale pending request.
+    const latestUser = messages.findLast(message => message.info.role === 'user');
+    if (latestUser?.info.id !== messageID) return;
+    const index = messages.findIndex(message => message.info.id === user.info.id);
+    const latest = messages.slice(index + 1).findLast(message => message.info.role === 'assistant'
+      && !message.info.summary && !MAINTENANCE_AGENTS.has(message.info.agent)
+      && (message.info.finish || message.info.error || message.parts.length));
+    if (latest?.info.error || latest?.info.structured !== undefined || latest?.info.finish === 'stop') return;
+    const request = originalRequest(user);
+    return 'Native session state: the original user request below remains '
+      + (authority.unanswered ? 'unanswered' : 'unfinished') + '. '
+      + 'A summary claiming it was completed is not evidence of a delivered answer. '
+      + 'Answer or finish this original request now. This resumes existing work with its existing permissions and budgets. '
+      + 'Do not merely announce that there is nothing to do.\nOriginal user request, verbatim:\n'
+      + JSON.stringify(request);
+  }
+
+  async function coderBinding(sessionID, parentID, agent) {
+    const callID = active.get(parentID);
+    if (!callID) fail('structured coder input has no active parent handoff');
+    const {key, messages} = await identity({sessionID: parentID, callID});
+    const nativeTask = messages.flatMap(message => message.parts).find(part =>
+      part.type === 'tool' && part.tool === 'task' && [part.callID, part.id].includes(callID));
+    if (nativeTask?.state?.metadata?.sessionId !== sessionID || nativeTask.state.status !== 'running') {
+      fail('structured coder input is not bound to the active native task child');
+    }
+    const call = ledger.turns[key].calls.find(item => item.id === callID);
+    if (call?.role !== 'coder' || call.agent !== agent || call.status !== 'reserved') {
+      fail('structured coder input does not match its reserved execution profile');
+    }
+    return {callID, call};
+  }
+
+  async function nativeMessages(session, sessionID) {
+    if (session.id && session.id !== sessionID) fail('native session lookup returned a different identity');
+    const response = await client.session.messages({path: {id: sessionID}});
+    if (!response.error && response.data) return response.data;
+    // v1.18.34 reloads format classes as plain JSON, then its history response
+    // encoder rejects them. Only this exact codec failure may use the same
+    // committed SQLite records through a read-only, parent-bound host reader.
+    const reader = options.nativeHistoryReader;
+    if (!nativeStructuredResults || !reader || !session.parentID ||
+        !['coder', 'coder-plan'].includes(session.agent) || response.response?.status !== 400 ||
+        !operationError(response).includes('Expected OutputFormatJsonSchema')) {
+      return data(response, 'session.messages');
+    }
+    const {callID} = await coderBinding(sessionID, session.parentID, session.agent);
+    const {stdout} = await execFile(reader.python, ['-I', reader.script,
+      '--database', reader.database, '--session-id', sessionID, '--parent-id', session.parentID,
+      '--call-id', callID, '--agent', session.agent, '--model-id', roles.coder],
+      {timeout: 10000, maxBuffer: 8 * 1024 * 1024});
+    const result = JSON.parse(stdout);
+    if (result.source !== 'native_sqlite_readonly' || result.session_id !== sessionID ||
+        result.parent_id !== session.parentID || !Array.isArray(result.messages)) {
+      fail('native read-only history reader returned an invalid identity');
+    }
+    Object.defineProperty(result.messages, 'nativeHistorySource', {value: result.source});
+    return result.messages;
+  }
 
   async function checkMode() {
     const response = await fetch('http://127.0.0.1:8001/control/mode', {
@@ -148,6 +270,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
   }
 
   async function coderTool(input, session, messages, assistant) {
+    if (assistant.info.agent === 'coder-plan' && !READ_TOOLS.has(input.tool)) fail('Plan coder is read-only');
     if (!CODER_TOOLS.has(input.tool)) fail('coder tool is not allowed');
     await checkMode();
     let relevant = messages;
@@ -223,34 +346,105 @@ export default async function LocalTeam({ client, directory }, options = {}) {
   }
 
   return {
+    async 'experimental.chat.messages.transform'(input, output) {
+      const marker = '[OpenCode maintenance; not a new user request]\n';
+      const lastUser = output.messages.findLastIndex(message => message.info.role === 'user');
+      for (let index = 0; index < output.messages.length; index++) {
+        const message = output.messages[index];
+        if (message.info.role !== 'user') continue;
+        const maintenance = message.parts.some(part => part.type === 'text' && part.synthetic
+          && part.metadata?.compaction_continue === true);
+        const anchor = index === lastUser && maintenance && message.info.sessionID
+          ? await pendingRequestAnchor(message.info.sessionID, message.info.id) : undefined;
+        let changed = false;
+        const parts = message.parts.map(part => {
+          if (part.type !== 'text' || !part.synthetic || part.metadata?.compaction_continue !== true
+              || (!anchor && part.text.startsWith(marker))) return part;
+          changed = true;
+          return {...part, text: marker + (anchor ?? part.text)};
+        });
+        // Replace objects in the outbound array; do not edit stored user parts.
+        if (changed) output.messages[index] = {...message, parts};
+      }
+    },
+    async 'experimental.session.compacting'(input, output) {
+      output.context.push('Host maintenance: synthetic continuation messages were generated by OpenCode, '
+        + 'not requested by the user. Preserve that distinction. Keep only genuine unfinished user work '
+        + 'in Active and Next Move. Completed conversational answers have no next action. '
+        + 'An assistant invitation to continue is not a user instruction. Summarise completed chatter briefly.');
+      const session = data(await client.session.get({path: {id: input.sessionID}}));
+      const messages = await nativeMessages(session, input.sessionID);
+      const state = resumeState(messages, message => explicitUser(session, input.sessionID, message), true);
+      if (state) output.context.push('Native history records the latest genuine user request as '
+        + (state.unanswered ? 'unanswered: there is no ordinary assistant reply after it.' : 'unfinished: no terminal reply has been delivered.')
+        + ' Do not mark requested output as already delivered. Request text is not completion evidence.');
+    },
+    async 'experimental.compaction.autocontinue'(input, output) {
+      output.enabled = false;
+      const session = data(await client.session.get({path: {id: input.sessionID}}));
+      const messages = await nativeMessages(session, input.sessionID);
+      // The persisted turn ledger records genuine root input through chat.message.
+      // Native synthetic followups and overflow replays do not create new turns.
+      const explicit = message => explicitUser(session, input.sessionID, message);
+      const state = resumeState(messages, explicit, input.overflow === true);
+      if (!state) return;
+      originalRequest(state.user); // Do not authorise an unrecoverable resume.
+      const authority = {checkpoint: state.checkpoint, userID: state.user.info.id,
+        assistantID: state.assistantID, unanswered: state.unanswered};
+      if (session.parentID) {
+        if (childResumeMarks.get(input.sessionID)?.checkpoint === state.checkpoint) return;
+        if (childResumeMarks.size >= 10000 && !childResumeMarks.has(input.sessionID)) return;
+        childResumeMarks.set(input.sessionID, authority);
+        output.enabled = true;
+        return;
+      }
+      await exclusive(async () => {
+        const turn = ledger.turns[turnKey(input.sessionID, state.user.info.id)];
+        if (!turn || turn.compaction_checkpoint === state.checkpoint) return;
+        turn.compaction_checkpoint = state.checkpoint;
+        turn.compaction_resume = authority;
+        await save();
+        output.enabled = true;
+      });
+    },
     async 'chat.headers'(input, output) {
-      const workflow = ({plan: 'captain', build: 'captain', analyst: 'analyst', coder: 'coder',
+      const workflow = ({plan: 'captain', build: 'captain', analyst: 'analyst', coder: 'coder', 'coder-plan': 'coder',
         document: 'document', essay_document: 'essay', scaffold_document: 'scaffold',
         compaction: 'compaction', title: 'maintenance', summary: 'maintenance'})[input.agent]
         ?? (['researcher', 'analyst', 'coder', 'writer', 'reviewer'].some(role => input.agent === 'captain-' + role)
           ? 'worker.' + input.agent.slice('captain-'.length) : undefined);
       if (typeof workflow === 'string') output.headers['X-Local-AI-Workflow'] = workflow;
     },
-    tool: { local_image: mediaTool('image'), local_video: mediaTool('video'), local_speech: mediaTool('speak') },
+    tool: { ...(capabilities.media ? {local_image: mediaTool('image'), local_video: mediaTool('video')} : {}),
+            ...(capabilities.speech ? {local_speech: mediaTool('speak')} : {}) },
     async config(config) {
       // Base configuration denies task. Only successful plugin initialization
       // enables it, so a missing/broken policy file cannot allow unbounded work.
       config.tools.task = true;
-      config.tools.local_image = true;
-      config.tools.local_video = modeToken.endsWith(':max');
-      config.tools.local_speech = true;
+      config.tools.local_image = !!capabilities.media;
+      config.tools.local_video = !!capabilities.media && modeToken.endsWith(':max');
+      config.tools.local_speech = !!capabilities.speech;
       for (const name of ['plan', 'build']) {
-        config.agent[name].permission.task = { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow',
+        config.agent[name].permission.task = { '*': 'deny', analyst: 'allow', coder: 'allow', 'coder-plan': 'allow', document: 'allow',
           essay_document: 'allow', scaffold_document: 'allow' };
-        config.agent[name].permission.local_image = 'ask';
-        config.agent[name].permission.local_video = modeToken.endsWith(':max') ? 'ask' : 'deny';
-        config.agent[name].permission.local_speech = 'ask';
+        config.agent[name].permission.local_image = capabilities.media ? 'ask' : 'deny';
+        config.agent[name].permission.local_video = capabilities.media && modeToken.endsWith(':max') ? 'ask' : 'deny';
+        config.agent[name].permission.local_speech = capabilities.speech ? 'ask' : 'deny';
       }
     },
     async 'chat.message'(input, output) {
       const session = data(await client.session.get({ path: { id: input.sessionID } }));
       if (session.parentID) {
         if (output.parts.some(p => p.type !== 'text')) fail('specialist input must be supplied text only');
+        const agent = input.agent ?? output.message?.agent;
+        if (nativeStructuredResults && ['coder', 'coder-plan'].includes(agent)) {
+          const {call} = await coderBinding(input.sessionID, session.parentID, agent);
+          const saved = await readFile(call.contract_file, 'utf8');
+          if (hash(saved) !== call.contract_sha256) fail('saved acceptance contract changed');
+          // OpenCode persists this format before its native inference loop.
+          // It supplies StructuredOutput alongside permitted inspection tools.
+          output.message.format = nativeResultFormat(JSON.parse(saved), agent === 'coder-plan');
+        }
         return;
       }
       if (!output.parts.some(p => !p.synthetic && ['text', 'file', 'agent'].includes(p.type))) return;
@@ -289,7 +483,7 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       });
     },
     async 'chat.params'(input) {
-      const role = ['plan', 'build'].includes(input.agent) ? 'coordinator' : input.agent;
+      const role = ['plan', 'build'].includes(input.agent) ? 'coordinator' : input.agent === 'coder-plan' ? 'coder' : input.agent;
       if (roles[role] && (input.model.providerID !== 'local-ai-gateway' || input.model.id !== roles[role])) {
         fail('agent model changed; use the configured role');
       }
@@ -331,10 +525,10 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         });
       }
       if (session.parentID || input.tool !== 'task') {
-        const messages = data(await client.session.messages({ path: { id: input.sessionID } }));
+        const messages = await nativeMessages(session, input.sessionID);
         const assistant = messages.find(m => m.info.role === 'assistant' && m.parts.some(p =>
           p.type === 'tool' && (p.callID === input.callID || p.id === input.callID)));
-        if (assistant?.info.agent === 'coder') return coderTool(input, session, messages, assistant);
+        if (['coder', 'coder-plan'].includes(assistant?.info.agent)) return coderTool(input, session, messages, assistant);
         if (session.parentID) fail('non-coder specialists cannot use tools or delegate');
         if (assistant && ['plan','build'].includes(assistant.info.agent) && input.tool !== 'task') {
           const {key} = await identity(input);
@@ -385,7 +579,8 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         const acceptanceHash = hash(JSON.stringify(contract.acceptance));
         const prior = turn.calls.find(c => c.role === taskRole);
         if (prior && prior.acceptance_hash !== acceptanceHash) fail('retry must preserve the original acceptance checklist');
-        contract.return_format = RESULT_INSTRUCTION;
+        contract.return_format = nativeStructuredResults && taskRole === 'coder'
+          ? NATIVE_RESULT_INSTRUCTION : RESULT_INSTRUCTION;
         if (essayRequest) {
           contract.essay_mode = 'copyedit-v1';
           contract.return_format += ESSAY_RETURN;
@@ -399,6 +594,10 @@ export default async function LocalTeam({ client, directory }, options = {}) {
         const saved = await saveArtifact(join(dirname(ledgerPath), 'handoff-contracts'),
           hash(key + input.callID) + '.json', contract);
         output.args.prompt = packet;
+        // Resolve execution profile from the actual parent, never model-provided mode text.
+        const owner = messages.find(m => m.info.role === 'assistant' && m.parts.some(p =>
+          p.type === 'tool' && (p.callID === input.callID || p.id === input.callID)));
+        if (taskRole === 'coder' && owner.info.agent === 'plan') output.args.subagent_type = 'coder-plan';
         turn.calls.push({ id: input.callID, role: taskRole, agent: output.args.subagent_type, status: 'reserved',
           acceptance_hash: acceptanceHash, contract_file: saved.path, contract_sha256: saved.sha256 });
         ledger.turns[key] = turn;
@@ -408,6 +607,11 @@ export default async function LocalTeam({ client, directory }, options = {}) {
     },
     async 'tool.execute.after'(input, output) {
       if (captainWorkers.has(input.sessionID)) return;
+      if (['read', 'glob', 'grep', 'bash'].includes(input.tool) &&
+          typeof input.callID === 'string' && input.callID && typeof output.output === 'string') {
+        output.output = 'Native tool evidence: ' + JSON.stringify({tool: input.tool, tool_call_id: input.callID})
+          + '\n' + output.output;
+      }
       if (input.tool.startsWith('aioffice_')) {
         const {key} = await identity(input);
         // Native MCP after hooks receive CallToolResult, unlike native tools'
@@ -438,6 +642,9 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       if (hash(text) !== call.contract_sha256) fail('saved acceptance contract changed');
       const contract = JSON.parse(text);
       let raw = output.output;
+      let nativeFinalText;
+      let nativeFinalTextStatus;
+      let nativeFormatCallID;
       let tools = [];
       const sourceIssues = [];
       const childID = output.metadata?.sessionId;
@@ -445,13 +652,51 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       else {
         const child = data(await client.session.get({ path: { id: childID } }));
         if (child.parentID !== input.sessionID) fail('return belongs to another parent');
-        const messages = data(await client.session.messages({ path: { id: childID } }));
+        const messages = await nativeMessages(child, childID);
+        if (messages.nativeHistorySource) call.native_history_source = messages.nativeHistorySource;
         const final = messages.findLast(m => m.info.role === 'assistant');
         raw = final?.parts.filter(p => p.type === 'text').map(p => p.text).join('\n') ?? '';
         tools = messages.flatMap(m => m.parts).filter(p => p.type === 'tool');
         if (!final || final.info.error || final.info.finish === 'length') sourceIssues.push('Specialist response missing, failed or cut off.');
+        if (nativeStructuredResults && call.role === 'coder') {
+          nativeFinalText = raw;
+          raw = ''; // Plain text cannot substitute for a native submission.
+          nativeFinalTextStatus = nativeFinalText.trim() ? 'unverified_commentary' : 'empty';
+          const structured = final?.info.structured;
+          const submissions = (final?.parts ?? []).filter(p => p.type === 'tool' && p.tool === 'StructuredOutput');
+          if (!structured || typeof structured !== 'object' || Array.isArray(structured)) {
+            sourceIssues.push('Native structured final result missing.');
+          } else {
+            raw = JSON.stringify(structured);
+            const submission = submissions[0];
+            if (submissions.length !== 1 || submission.state?.status !== 'completed' ||
+                typeof submission.callID !== 'string' || !submission.callID ||
+                !isDeepStrictEqual(submission.state.input, structured)) {
+              sourceIssues.push('Structured final result lacks its matching completed native submission.');
+            } else nativeFormatCallID = submission.callID;
+          }
+          if (nativeFinalText.trim()) {
+            // StructuredOutput is the native return channel. Keep accompanying
+            // text for review; it supplies no result fields or execution evidence.
+            // A second parseable JSON result must still agree with the submission.
+            try {
+              if (!isDeepStrictEqual(JSON.parse(nativeFinalText), structured)) {
+                nativeFinalTextStatus = 'conflicting_json';
+                sourceIssues.push('Final JSON text differs from native structured final result.');
+              } else nativeFinalTextStatus = 'matching_result';
+            } catch {
+              nativeFinalTextStatus = 'unverified_commentary';
+            }
+          }
+        }
       }
       const report = assessResult(contract, raw, tools, sourceIssues);
+      if (call.native_history_source) report.native_history_source = call.native_history_source;
+      if (nativeFinalText !== undefined) Object.assign(report, {
+        result_transport: 'native_structured_output', native_final_text: nativeFinalText,
+        native_final_text_status: nativeFinalTextStatus,
+        ...(nativeFormatCallID ? {native_format_call_id: nativeFormatCallID} : {}),
+      });
       if (call.role === 'document' && ledger.turns[key].essay) {
         const record = ledger.turns[key].essay;
         const request = await loadRequest(record);
@@ -478,7 +723,10 @@ export default async function LocalTeam({ client, directory }, options = {}) {
       output.output = JSON.stringify({ ...reviewBrief(report),
         ...(report.essay ? {essay:report.essay} : {}), ...(report.scaffold ? {scaffold:report.scaffold} : {}),
         full_report: artifact.path, sha256: artifact.sha256,
-        instruction: 'Review every criterion and its evidence. Read full_report when full_report_required is true or evidence is disputed or unclear. Otherwise use this complete review brief without rereading the saved report. Unresolved items remain open. Native execution alone does not prove correctness.' });
+        instruction: 'Review every criterion and its evidence. Read full_report when full_report_required is true or evidence is disputed or unclear. '
+          + (report.native_final_text_status === 'unverified_commentary'
+            ? 'Accompanying native_final_text is unverified commentary, not result or test evidence; review it for contradictions before relying on the handoff. ' : '')
+          + 'Otherwise use this complete review brief without rereading the saved report. Unresolved items remain open. Native execution alone does not prove correctness.' });
       output.metadata = { ...output.metadata, localTeamReview: report.status, localTeamReport: artifact.path,
         localTeamReportSha256: artifact.sha256 };
     },

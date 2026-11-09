@@ -47,8 +47,11 @@ configured text models. Normal/Max output ceilings are 4096/8192, additionally
 limited to half each profile's context. The 8K coordinator therefore remains
 limited to 4096 output even in Max. Use analyst/coder for longer output.
 
-OpenCode advertises per-model input/output/context limits and uses native
-compaction. WebUI still uses a conservative global trigger determined by the
+OpenCode further caps its advertised generation allowance at one quarter of
+context: 2,048 for 8K, 4,096 for 16K, and up to 8,192 for 32K in Max. This keeps
+tool-heavy fixed prompts from consuming the compaction threshold by themselves;
+thinking stays enabled. OpenCode uses native compaction, with host-gated
+continuation for unfinished work. WebUI still uses a conservative global trigger determined by the
 smallest eligible profile; full per-role WebUI compaction is future work.
 See [CONTEXT-MANAGEMENT.md](CONTEXT-MANAGEMENT.md).
 

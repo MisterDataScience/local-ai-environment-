@@ -10,6 +10,27 @@ class ContextLengthError(RuntimeError):
     """An explicit backend context rejection, not an estimated token count."""
 
 
+def backend_rejection(path, status, detail):
+    """Classify bounded native error bodies consistently for JSON and SSE calls."""
+    if isinstance(detail, bytes):
+        detail = detail.decode(errors="replace")
+    try:
+        value = json.loads(detail)
+        message = value.get("error", "") if isinstance(value, dict) else ""
+        if isinstance(message, dict):
+            message = message.get("message", "")
+        explicit_overflow = isinstance(message, str) and any(phrase in message.lower() for phrase in (
+            "context length exceeded", "exceeds the context window", "input length exceeds",
+            "exceeds maximum context length", "maximum context length",
+            "context size exceeded", "prompt is too long", "exceed context size",
+            "prompt is longer than the context length", "exceeds the available context size"))
+        if path in {"/api/chat", "/v1/chat/completions"} and status in (400, 413) and explicit_overflow:
+            return ContextLengthError("Backend rejected the request: context length exceeded")
+    except (ValueError, TypeError):
+        pass
+    return RuntimeError(f"Backend rejected {path}: HTTP {status}: {detail}")
+
+
 def completion_error(error):
     if isinstance(error, ContextLengthError):
         return 400, {"error": {"message": "This request exceeds the model's context. Compact the conversation, split a large document or tool result, or select a model with a larger configured context. No automatic retry or input trimming was performed.",
@@ -25,21 +46,7 @@ def api(base, path, payload=None, timeout=30):
             return json.load(response)
     except HTTPError as error:
         detail = error.read(8192).decode(errors="replace")
-        try:
-            value = json.loads(detail)
-            message = value.get("error", "") if isinstance(value, dict) else ""
-            if isinstance(message, dict):
-                message = message.get("message", "")
-            explicit_overflow = isinstance(message, str) and any(phrase in message.lower() for phrase in (
-                "context length exceeded", "exceeds the context window", "input length exceeds",
-                "exceeds maximum context length", "maximum context length",
-                "context size exceeded", "prompt is too long", "exceed context size",
-                "prompt is longer than the context length", "exceeds the available context size"))
-            if path in {"/api/chat", "/v1/chat/completions"} and error.code in (400, 413) and explicit_overflow:
-                raise ContextLengthError("Backend rejected the request: context length exceeded") from error
-        except (ValueError, TypeError):
-            pass
-        raise RuntimeError(f"Backend rejected {path}: HTTP {error.code}: {detail}") from error
+        raise backend_rejection(path, error.code, detail) from error
 
 
 def port_open(port):

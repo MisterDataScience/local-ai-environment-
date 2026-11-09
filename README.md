@@ -6,25 +6,34 @@ chat. The system includes Office/file tools, vision and PDF/OCR, image/video,
 speech, an encrypted workspace and private Tailscale access. See
 [deployment](docs/DEPLOYMENT.md) for installation and account requirements.
 
-`main` is the source of truth. The checked-in
-[installer ZIP](downloads/Mac-Local-AI-Automated-Installer.zip) is an older
-snapshot and does not contain all current source changes. Source merges do not
-refresh it automatically. The release workflow is manual-only and publishes a
-replacement only after its Linux and two native macOS gates pass. See
-[release validation](docs/RELEASE-VALIDATION.md) before choosing a package.
+`main` contains the installer source and its matching
+[downloadable ZIP](downloads/Mac-Local-AI-Automated-Installer.zip). Release
+`2026-11-09-mac-native-recovery-1` brings the Mac installation and first-use
+repairs back into the repository. The owner reported the repaired installation
+working and its native conversation check passed. The rebuilt archive still
+needs its own installation acceptance. See the [repair record](docs/MAC-REPAIR-CONSOLIDATION-2026-11-09.md)
+and [release checks](docs/RELEASE-VALIDATION.md).
 
 ## Install or upgrade
 
-Requirements: native Apple Silicon, macOS 15+, 32 GB unified memory and at least
-100 GB free space for the initial install. Stop Local AI and the Work Agent
-before upgrading. Existing configuration, credentials, models and chats are retained.
+Core needs native Apple Silicon, macOS 15+, 32 GB unified memory, Apple Command
+Line Tools and 35 GB free space. Stop Local AI before upgrading. Keep your
+existing installation, models and cached downloads.
 
-1. Obtain a validated installer for the intended source revision and extract it.
-2. Open `Install Local AI.command` inside `mac-local-ai-installer` once.
-3. Complete the Apple, Cryptomator, Docker, Proton VPN and Tailscale prompts
-   described in [deployment](docs/DEPLOYMENT.md#installation-or-upgrade).
-4. Review native acceptance results. After the required checks pass, the installer
-   registers login startup and opens the authenticated Captain interface.
+1. Download and extract the installer ZIP.
+2. In a Terminal window showing a shell prompt, run the core launcher:
+
+   ```bash
+   /bin/bash "$HOME/Downloads/mac-local-ai-installer/Install LOCAL AI Core.command"
+   ```
+
+   Adjust the folder if you extracted it elsewhere. A Terminal window occupied
+   by `runtime.py` is running Local AI and cannot execute another shell command.
+3. Let the installer finish its native checks. Core includes Captain and ordinary
+   chat, with thinking enabled. It needs no optional account, vault or recording.
+4. Add speech, media, encrypted storage, Office, web/browser or remote access
+   later through the named installers. [Modular setup](docs/MODULAR-INSTALLER.md)
+   lists each feature's requirements and checks.
 
 The standard 32 GB installation selects AtomicChat's abliterated MiniCPM-V 4.7
 Captain profile with verified base weights, vision projector and mandatory LoRA.
@@ -53,7 +62,7 @@ Cryptomator vault unlocking remains an owner action after reboot.
 | Isolated desktop control and external reasoning | [Scoped automation](docs/SCOPED-AUTOMATION.md) |
 | Resource budgets, compaction and workflow token reports | [Context management](docs/CONTEXT-MANAGEMENT.md) |
 
-For personalisation, open `Village Commons.command` and select **Prepare the
+After encrypted workspace acceptance, open `Village Commons.command` and select **Prepare the
 Village from your conversation history**. The host prepares baseline residents
 and cited proposals. Lasting knowledge, access and membership changes retain
 their owner review. C studios keep one persistent game production lane per studio;
@@ -68,7 +77,7 @@ physical reboot/sleep recovery. See [release validation](docs/RELEASE-VALIDATION
 [headless/remote acceptance](docs/HEADLESS-AND-REMOTE-ACCEPTANCE.md).
 
 The installer writes `captain-install-readiness.json` only after its required
-native, workspace and live service checks pass. Review its unobserved physical
+native core and live service checks pass. Review its unobserved physical
 journeys and account-dependent services. Use `Check Required Capabilities.command`
 and the dedicated feature checks for enabled capabilities.
 

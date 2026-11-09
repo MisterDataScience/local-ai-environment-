@@ -43,7 +43,10 @@ def recover(root):
             continue  # PID reuse or external services never authorize a kill.
         # Popen cannot attach to an orphan. Signal its recorded process group
         # and wait for the private port to close on the next normal startup.
-        os.killpg(pid, signal.SIGTERM)
+        if service.get('name') == 'gateway':
+            os.kill(pid, signal.SIGTERM)
+        else:
+            os.killpg(pid, signal.SIGTERM)
         remaining.append(service)
     if remaining:
         atomic_json(path, {'services': remaining})

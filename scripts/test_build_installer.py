@@ -40,5 +40,21 @@ class PackageTests(unittest.TestCase):
                 verify(root, other)
 
 
+    def test_repository_package_contains_core_repair_and_native_recovery_gate(self):
+        import json
+        from build_installer import contents
+        root = Path(__file__).resolve().parents[1]
+        files = contents(root)
+        required = {'Install LOCAL AI Core.command', 'Check Captain Conversation.command',
+                    'feature_state.py', 'native_session_store.py', 'captain_conversation_check.py',
+                    'tests/test_captain_conversation_check.py'}
+        self.assertTrue(required.issubset(files))
+        manifest = json.loads(files['RELEASE.json'][0])
+        self.assertEqual(manifest['default_install_profile'], 'core')
+        self.assertEqual(manifest['owner_mac_acceptance'], 'not_run_for_rebuilt_archive')
+        self.assertEqual(manifest['repair_inputs']['native_conversation_gate'], 'required')
+        self.assertEqual(set(manifest['files']), set(files) - {'RELEASE.json'})
+
+
 if __name__ == '__main__':
     unittest.main()

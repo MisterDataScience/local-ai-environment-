@@ -125,6 +125,9 @@ class Audio:
                 self.condition.notify_all()
 
     def control(self, action):
+        from feature_state import require
+        if action not in {'stop', 'cancel', 'heartbeat'}:
+            require(self.engine.config, 'conversation')
         with self.condition:
             if action == 'stop':
                 self.enabled = False

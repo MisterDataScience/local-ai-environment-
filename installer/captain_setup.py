@@ -117,6 +117,7 @@ def configure(config, settings, root, status):
         'statePath': str(Path(root) / 'work-agent/state/captain.json'),
         'modeToken': f"{status['instance_id']}:{status['epoch']}:{status['mode']}" if status else None,
         'model': model, 'maxWorkers': captain['max_workers'],
+        'workspaceEnabled': config.get('_feature_status', {}).get('workspace', 'ready') == 'ready',
         'maxTasks': captain['max_tasks_per_turn'], 'webEnabled': bool(config.get('web', {}).get('enabled')),
         'villageRoot': str(Path(root) / 'village'),
         'villagePython': str(Path(root) / 'control/.venv/bin/python'),
@@ -183,6 +184,13 @@ def configure(config, settings, root, status):
             'village_publish requires Build and native approval; it cannot approve or execute contributions. '
             'Use exact references and never claim reported checks are independently verified.')
         settings['agent']['captain-' + role]['prompt'] += WORKER_REPORT_STYLE
+    if config.get('feature_schema') == 1 and config.get('_feature_status', {}).get('workspace') != 'ready':
+        for agent in settings['agent'].values():
+            for tool in ('studio_contact', 'village_*'):
+                agent.setdefault('permission', {})[tool] = 'deny'
+            agent['prompt'] = agent.get('prompt', '') + (
+                ' Institutional storage and studios are unavailable until Install Encrypted Workspace.command passes. '
+                'Do not advertise them as operational or attempt downloads.')
 
 
 def pinned_artifact(metadata, repository, revision, filename, checksum):
@@ -254,13 +262,14 @@ def install_minicpm(root, download=None):
     path = root / 'control/config.json'
     config = json.loads(path.read_text())
     from captain_config import upgrade
-    config = upgrade(config)
+    from text_models import upgrade_text_configuration
+    config = upgrade(upgrade_text_configuration(config))
     config['captain'].update(enabled=True, provider='llama', single_model=True,
                             model_id='local-ai-captain', variant=MODEL_VARIANT, llama=files)
     config.setdefault('model_team', {})['enabled'] = True
     config['text_models']['local-ai-captain'] = {'name': 'Captain · MiniCPM-V 4.7 · AtomicChat abliterated',
         'model': 'MiniCPM-V-4.7-35B-A3B-AtomicChat-Uncensored', 'backend': 'llama', 'num_ctx': 16384,
-        'keep_alive_seconds': 120, 'thinking': False}
+        'keep_alive_seconds': 120, 'thinking': True}
     # Remove unused stock selections from the download plan. Previously installed
     # weights remain untouched; custom presets are preserved.
     from model_team import QWEN9, CODER

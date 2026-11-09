@@ -55,8 +55,10 @@ jobs:
       - run: python -m unittest discover -s scripts -p 'test_*.py' -v
       - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/tests -v
       - run: PYTHONPATH=installer:installer/payload python -m unittest discover -s installer/payload/tests -v
-      - name: JavaScript policy and workflow checks
-        run: node --test $(find installer/tests -name '*.mjs' ! -name 'test_conversation_browser.mjs')
+      - name: JavaScript policy and pinned format-codec checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/format-codec" --ignore-scripts --no-audit --no-fund --save-exact effect@4.0.0-beta.83
+          LOCAL_AI_EFFECT_ROOT="$RUNNER_TEMP/format-codec/node_modules/effect" node --test $(find installer/tests -name '*.mjs' ! -name 'test_conversation_browser.mjs')
       - name: Real pinned OpenCode captain protocol without model weights
         run: |
           curl -fL --retry 3 https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64-baseline.tar.gz -o "$RUNNER_TEMP/opencode.tar.gz"

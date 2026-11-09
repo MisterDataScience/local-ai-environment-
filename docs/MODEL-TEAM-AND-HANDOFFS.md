@@ -13,6 +13,61 @@ unchanged on retries. Structured returns are checked against native tool records
 full results remain recoverable. These checks add no model judge and do not prove
 semantic correctness. See WORK-AGENT.md for the schema, storage and limitations.
 
+**Native coder return update, 6 November 2026:** delegated coder sessions using
+the native GGUF backend now use OpenCode's JSON-schema output format. The host
+binds the schema to the saved checklist and reserved child session. OpenCode
+offers its data-only `StructuredOutput` final-return tool alongside permitted
+inspection tools, and the gateway preserves the required-tool setting. Calls
+are sequential so a read finishes before its receipt can appear in the result.
+
+The host reads the native structured field and requires a matching completed
+submission in that final message. Additional final prose, missing submissions
+or mismatched arguments fail validation. The full report preserves any extra
+text. Existing inspection and command evidence checks still run on the submitted
+object. The formatting tool does not count as file inspection or command execution.
+Plan coder permissions still prohibit edits and shell commands. Other backends,
+direct coding conversations and document workflows retain their existing return
+paths. This candidate still requires native OpenCode acceptance on the target Mac.
+
+The first native run of this return path failed before coder inference: the
+message-save encoder requires Effect's `OutputFormatJsonSchema` runtime class,
+while the plugin hook supplied a plain JSON object. The format factory now
+supplies Effect 4.0.0-beta.83's shared class brand for the pinned OpenCode 1.18.34
+encoder. The marker is non-enumerable and does not enter saved JSON. Native
+field validation and handoff evidence checks still apply. A regression using
+the actual pinned Effect encoder reproduces the old rejection and verifies the
+format round trip. Coordinator acceptance failures also save actual task
+errors under `logs/native-acceptance` and show the first error in the installer.
+
+The owner's subsequent native trace confirmed a second boundary failure:
+OpenCode reloads the saved format as JSON, then rejects it when encoding the
+session-history API response. This prevented the coder's read/glob calls from
+passing their policy checks. For this exact HTTP 400 format-codec error only,
+the host now reads the same committed message and part records through a
+read-only SQLite connection. It verifies the pinned version, parent task,
+child session, execution profile and model before returning any records.
+Reports record `native_history_source: native_sqlite_readonly` when used.
+Inspection criteria still require a completed native read/glob/grep receipt;
+failed calls retain their original status and cannot satisfy the criterion.
+Authentication errors and unrelated API failures remain failures.
+
+Structured tool requests use a reasoning reminder that directs the final result
+through `StructuredOutput`. Ordinary text retains its measured text reminder.
+Thinking remains enabled in both paths. The Captain entry module exports only
+its initializer so OpenCode does not invoke its task-validation helper as a
+second plugin. Local boundary checks use the pinned SDK and Effect encoder,
+real HTTP requests and a real SQLite database. Target-Mac acceptance is pending.
+
+The Captain's independent-session guard also needs the current native tool
+identity. It now requests only the latest assistant message, which contains
+the running call, rather than requesting the coder's older formatted input
+again. It rejects missing call identity and unassigned Captain workers. Assigned
+Captain workers retain their full-history attempt and permission checks.
+The boundary regression now runs both installed policy plugins in native
+order; the earlier test covered only the sequential team plugin. Failed tool
+entries in handoff reports retain their native error text, with explicit
+truncation metadata for errors longer than 4,000 characters.
+
 Decision date: 2026-10-07. Target: a Mac mini with 32 GB total unified memory.
 Status: the first text-only OpenCode implementation is included in the installer.
 Native Mac performance and end-to-end model/client validation remain pending.
@@ -48,8 +103,11 @@ Ollama's family, quantisation and coordinator tool capability are checked before
 acceptance. Artifact sizes are roughly 3.3/6.6/7.38 GB, not running-memory totals.
 A failed download, digest or architecture check stops installation without fallback.
 
-The coordinator routes in non-thinking mode with a short structured request.
-The analyst may use supported thinking mode. Model templates must preserve the
+All configured text profiles enable supported thinking mode, including the
+Captain, coordinator, analyst, coder, document roles and temporary workers.
+Gaming mode retains thinking. Existing profiles are migrated on installation;
+the MiniCPM runtime explicitly enables thinking in its pinned chat template and
+keeps reasoning in a separate response channel from final text. Model templates must preserve the
 backend's required thinking/tool-call format. Role instructions do not make the
 Qwen variants distinct specialist fine-tunes: their difference is capacity,
 resource use and assigned work. The coder supplies task specialisation.

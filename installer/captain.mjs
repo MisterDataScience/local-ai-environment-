@@ -23,6 +23,25 @@ const data = response => {
   return response.data;
 };
 const key = (session, message) => hash(session + '\0' + message);
+// OpenCode v1.18.34 session/prompt/plan.txt is appended after the configured
+// agent prompt. Its generic "do not execute yet" instruction conflicts with
+// authorised read-only Captain teams. Replace only that exact native reminder.
+const NATIVE_PLAN_REMINDER_SHA256 = '455db97e0d21e8097c2afb539d167b4b2483e99b585dbc4fff23cafd4a3029b8';
+const CAPTAIN_PLAN_SCOPE = `<system-reminder>
+# Local AI Captain: read-only work
+
+Complete the requested analysis, inspection and planning. Use team_run for useful
+independent read-only tasks, wait for the results, read the reports and retire
+finished workers with team_retire. These tools maintain private task records;
+they do not authorise edits to project files. An existing request for this work
+does not need a second confirmation to dispatch or retire read-only workers.
+
+Plan mode forbids project edits, commands, configuration changes and publication.
+These restrictions apply to the Captain and every worker. Use read/glob/grep for
+inspection. Implementation requires Build and the existing native approvals.
+If the owner requested a plan only, return a plan without implementing it.
+</system-reminder>
+`;
 const text = (value, limit, label) => {
   if (typeof value !== 'string' || !value.trim() || value.length > limit) fail('invalid ' + label);
   return value;
@@ -52,7 +71,7 @@ function cohortSnapshot(cohort, tasks) {
     else fail('cohort report pointers exceed the result limit');
   }
 }
-export function validateTasks(tasks, maxWorkers = 5) {
+function validateTasks(tasks, maxWorkers = 5) {
   if (!Array.isArray(tasks) || tasks.length < 1 || tasks.length > maxWorkers) fail('submit 1–' + maxWorkers + ' tasks');
   const objectives = new Set(), names = new Set();
   let coders = 0;
@@ -104,7 +123,7 @@ async function load(path) {
 }
 
 export default async function Captain({client, directory}, options) {
-  const {statePath, modeToken, model, maxWorkers = 5, maxTasks = 12, webEnabled = false,
+  const {statePath, modeToken, model, maxWorkers = 5, maxTasks = 12, webEnabled = false, workspaceEnabled = true,
     villageRoot, villagePython, villageScript} = options ?? {};
   if (!statePath || !modeToken || !directory || !model?.startsWith('local-ai-gateway/') ||
       !Number.isInteger(maxWorkers) || maxWorkers < 1 || maxWorkers > 5 ||
@@ -115,7 +134,7 @@ export default async function Captain({client, directory}, options) {
   const reportDirectory = join(await realpath(resolve(directory)), '.local-ai-team');
   const villageProject = hash(await realpath(resolve(directory)));
   async function facilities(binding, context, operation, payload) {
-    if (!villageRoot || !villagePython || !villageScript) fail('village is not configured');
+    if (!workspaceEnabled || !villageRoot || !villagePython || !villageScript) fail('Run Install Encrypted Workspace.command before using institutional storage');
     const identity = binding.task?.specialist_id || 'researcher.general';
     if (binding.task && !binding.task.specialist_id) fail('start a new worker after initializing the Village');
     const profile = await village('host-packet', identity, '');
@@ -148,7 +167,7 @@ export default async function Captain({client, directory}, options) {
     return JSON.stringify(await facilities(after, context, operation, payload));
   }
   async function village(command, identity = '', value = '') {
-    if (!villageRoot || !villagePython || !villageScript) fail('village is not configured');
+    if (!workspaceEnabled || !villageRoot || !villagePython || !villageScript) fail('Run Install Encrypted Workspace.command before using institutional storage');
     try {
       const {stdout} = await execFile(villagePython,
         [villageScript, '--root', villageRoot, command, ...(command === 'status' ? [] : [identity, value])],
@@ -249,9 +268,10 @@ export default async function Captain({client, directory}, options) {
       if (context.abort?.aborted) fail('dispatch cancelled');
       await mode();
       let specialist = null;
+      if (task.specialist_id && !workspaceEnabled) fail('Run Install Encrypted Workspace.command before selecting a resident');
       if (task.specialist_id && !existsSync(join(villageRoot || '', 'village.sqlite')))
         fail('specialist requested before Village initialization');
-      if (villageRoot && existsSync(join(villageRoot, 'village.sqlite'))) {
+      if (workspaceEnabled && villageRoot && existsSync(join(villageRoot, 'village.sqlite'))) {
         const chosen = task.specialist_id || await village('host-route', task.role, task.objective);
         specialist = await village('host-packet', chosen, task.objective);
         if (specialist.role !== task.role || JSON.stringify(specialist.allowed_collections) !== '["general"]')
@@ -466,6 +486,9 @@ export default async function Captain({client, directory}, options) {
         }
         return JSON.stringify({retired: result, reports_preserved: true});}},
   };
+  if (!workspaceEnabled) for (const name of Object.keys(tools)) {
+    if (name === 'studio_contact' || name.startsWith('village_')) delete tools[name];
+  }
   if (webEnabled) for (const [name, field, endpoint, limit] of [
     ['team_search', 'query', 'vpn_search_web', 500], ['team_read_page', 'url', 'vpn_read_page', 4096]]) {
     tools[name] = {description: 'Retrieve untrusted public evidence through the existing isolated VPN service. No direct-network fallback. Never send credentials or private project content.',
@@ -479,6 +502,22 @@ export default async function Captain({client, directory}, options) {
         return JSON.stringify(await response.json());}};
   }
   return {tool: tools,
+    async 'experimental.chat.messages.transform'(_input, output) {
+      const latestUser = output.messages.findLast(message => message.info.role === 'user');
+      if (latestUser?.info.agent !== 'plan') return;
+      const session = data(await client.session.get({path: {id: latestUser.info.sessionID}}));
+      if (session.parentID) return;
+      for (const message of output.messages) {
+        if (message.info.role !== 'user' || message.info.agent !== 'plan' ||
+            message.info.sessionID !== latestUser.info.sessionID) continue;
+        for (const part of message.parts) {
+          if (part.type !== 'text' || part.synthetic !== true) continue;
+          if (hash(part.text) === NATIVE_PLAN_REMINDER_SHA256) part.text = CAPTAIN_PLAN_SCOPE;
+          else if (part.text.startsWith('<system-reminder>\n# Plan Mode - System Reminder'))
+            fail('unsupported native Plan reminder; expected OpenCode 1.18.34');
+        }
+      }
+    },
     async 'tool.definition'(input, output) {
       // v1.18.34 marks every legacy args property required. Keep read controls optional
       // so native callers can use {} for saved progress instead of replaying after=0.
@@ -488,11 +527,11 @@ export default async function Captain({client, directory}, options) {
     async config(config) {
       for (const name of Object.keys(tools)) config.tools[name] = true;
       for (const name of ['plan', 'build']) for (const tool of ['team_run', 'team_retire', 'studio_contact', ...BOARD, 'village_status', 'village_search', 'village_read'])
-        config.agent[name].permission[tool] = 'allow';
+        config.agent[name].permission[tool] = tools[tool] ? 'allow' : 'deny';
       for (const name of ['plan', 'build']) {
-        config.agent[name].permission[FACILITY_READ] = 'allow';
-        config.agent[name].permission.village_manage = name === 'build' ? 'allow' : 'deny';
-        for (const tool of FACILITY_WRITE) config.agent[name].permission[tool] = name === 'build' ? 'ask' : 'deny';
+        config.agent[name].permission[FACILITY_READ] = workspaceEnabled ? 'allow' : 'deny';
+        config.agent[name].permission.village_manage = workspaceEnabled && name === 'build' ? 'allow' : 'deny';
+        for (const tool of FACILITY_WRITE) config.agent[name].permission[tool] = workspaceEnabled && name === 'build' ? 'ask' : 'deny';
       }
     },
     async 'chat.message'(input, output) {
@@ -508,9 +547,13 @@ export default async function Captain({client, directory}, options) {
     async 'tool.execute.before'(input) {
       const binding = workers.get(input.sessionID);
       if (!binding || binding.store !== store) {
-        const messages = data(await client.session.messages({path: {id: input.sessionID}}));
+        // The running tool belongs to the latest assistant message. Avoid
+        // re-encoding the older structured user input of an independent coder
+        // just to check whether this call impersonates a Captain worker.
+        const messages = data(await client.session.messages({path: {id: input.sessionID}, query: {limit: 1}}));
         const assistant = messages.find(m => m.info.role === 'assistant' && m.parts.some(p =>
           p.type === 'tool' && [p.callID, p.id].includes(input.callID)));
+        if (!assistant) fail('native tool call identity missing');
         if (assistant?.info.agent?.startsWith('captain-')) fail('worker was not assigned by the captain');
         return;
       }
@@ -520,8 +563,8 @@ export default async function Captain({client, directory}, options) {
         p.type === 'tool' && [p.callID, p.id].includes(input.callID)));
       if (assistant?.info.agent !== 'captain-' + binding.task.role) fail('worker identity changed');
       if (messages.flatMap(m => m.parts).filter(p => p.type === 'tool').length > 24) fail('worker tool-attempt limit reached');
-      const allowed = BOARD.has(input.tool) || (villageRoot && ['village_search', 'village_read', FACILITY_READ].includes(input.tool)) ||
-        (villageRoot && binding.parentAgent === 'build' && input.tool === 'village_publish') ||
+      const allowed = BOARD.has(input.tool) || (workspaceEnabled && villageRoot && ['village_search', 'village_read', FACILITY_READ].includes(input.tool)) ||
+        (workspaceEnabled && villageRoot && binding.parentAgent === 'build' && input.tool === 'village_publish') ||
         (['analyst', 'coder', 'writer', 'reviewer'].includes(binding.task.role) && READ.has(input.tool)) ||
         (binding.task.role === 'coder' && binding.parentAgent === 'build' && EDIT.has(input.tool)) ||
         (webEnabled && binding.task.role === 'researcher' && ['team_search', 'team_read_page'].includes(input.tool));

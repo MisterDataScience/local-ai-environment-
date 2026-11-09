@@ -2,24 +2,100 @@
 
 ## Current source and package status
 
-The checked-in installer ZIP is an older release snapshot. Source bundles merged
-after it, including the reconciled Studio Lead workflow, smaller active prompts,
-incremental context and workflow usage counters, have not rebuilt that archive.
-The dated validation sections below describe their own snapshots, not current
-source or owner-Mac acceptance.
+The current consolidated release is `2026-11-09-mac-native-recovery-1`.
+See the [repair and acceptance record](MAC-REPAIR-CONSOLIDATION-2026-11-09.md)
+for the integrated fixes, owner-reported Mac result and exact limits of that
+result. The matching ZIP is rebuilt and verified against the current source.
+The earlier candidate and release sections below are historical records.
 
-The release workflow is manual-only. It publishes a replacement ZIP from `main`
-only when explicitly requested and after its Linux checks, native Captain runtime
-build and Apple PDF gates succeed. Hosted runner budget requires owner approval;
-a source merge does not dispatch the workflow. Earlier pull requests do not
-automatically have matching workflow artifacts. This documentation cleanup does
-not dispatch CI, rebuild a ZIP or establish native acceptance.
+## Consolidated repair authoring checks, 9 November 2026
 
-`python3 scripts/build_installer.py --check` compares the existing archive's
-contents, permissions and manifest with the checked-out source. Failure on a stale
-archive is expected and must not be bypassed. A local build can verify package
-construction, but does not replace the native release gates. Consult the ZIP's
-per-file hashes, not just its historical release identifier or input revisions.
+| Check | Result |
+| --- | --- |
+| Installer, Python 3.11.17 | 556 run, 541 passed, 15 skipped |
+| Gateway | 154 passed |
+| JavaScript with pinned Effect codec | 167 run, 165 passed, 2 skipped |
+| Release-script tests | 8 passed |
+| Python compilation and launcher shell syntax | Passed |
+| Exact archive/source hashes, modes and ZIP integrity | Passed |
+| Reproducible installer rebuild | Passed |
+| Pinned native Linux OpenCode executable | Verified download; SIGABRT before version; blocked here |
+| Owner-reported repaired Mac core and conversation check | Passed on the repaired installed copy |
+| Fresh rebuilt-archive installation, optional features and physical journeys | Not performed here |
+
+The skipped authoring fixtures require macOS PDFKit/Vision or explicit
+C/Wasmtime compiler/player dependencies. The optional Playwright browser
+fixture was excluded. The real format encoder test uses Effect 4.0.0-beta.83.
+No hosted Actions were dispatched. The publication workflow remains manual-only.
+
+The native conversation gate exercises both stopping and resumption. It uses
+one new tool-denied session, four forced compactions, a completed READY reply
+and a queued genuine request requiring DONE. A summary is not allowed to
+substitute for the original pending request. Local probe fixtures deliberately
+test failures as failures; the owner-Mac pass is recorded separately.
+
+## Historical modular candidate status
+
+The modular core candidate rebuilds the checked-in ZIP from its current source.
+The release identifier is `2026-11-03-modular-core-candidate-2`, with per-file
+SHA-256 hashes and executable launcher permissions. This establishes package
+freshness, not native acceptance on the owner's Mac. Historical validation
+sections below describe their own snapshots.
+
+Core and optional modules record native acceptance separately. See
+[modular installation](MODULAR-INSTALLER.md#native-acceptance-still-required).
+PRs #39 and #40 were inspected but are not merged by this work; their useful
+macOS path/xattr fixes are incorporated into the coherent implementation.
+Unfinished Pixel Art PR #38 is excluded.
+
+The release workflow remains manual-only. Hosted runner allowance was not used.
+A publication from main still requires its explicitly selected Linux and two
+macOS release gates. Local source tests and archive checks do not replace them.
+
+`python3 scripts/build_installer.py --check` compares exact contents, permissions
+and manifest against the checked-out source. Any stale archive must fail. Rebuild
+after source/documentation changes and verify again before delivering a package.
+
+## Launcher correction, 3 November 2026
+
+Named core, full and MiniCPM launchers invoke their common helper through
+`/bin/bash`, matching the existing Web/Remote aliases. A regression exercises all
+five aliases with a non-executable helper and a folder name/arguments containing
+spaces. The package includes Apple's per-item approval instructions for unsigned
+downloads. No quarantine attributes, Gatekeeper settings or binary verification
+rules are changed by this correction. Native Finder/Gatekeeper acceptance on
+the owner's Mac remains unverified.
+
+Validation: 30 installer tests, one package construction test, all launcher shell
+syntax checks and the current archive/source and reproducibility checks passed.
+The full 2 November suite below was not repeated for this launcher-only change.
+
+## Modular candidate authoring checks, 2 November 2026
+
+| Check | Result |
+| --- | --- |
+| Installer tests | 475 run, 459 passed, 16 skipped |
+| Gateway tests | 144 passed |
+| JavaScript policy/workflow tests | 110 run, 109 passed, 1 skipped |
+| Release-script tests | 7 passed |
+| Python compilation and shell launcher syntax | Passed |
+| Current ZIP contents, hashes, permissions and reproducible rebuild | Passed |
+| Pinned Linux OpenCode native protocol | Blocked: verified binary exits with SIGABRT before `web --help` in this authoring environment |
+| Owner Mac core, resumed installation and feature acceptance | Not run |
+
+The 17 skips cover four macOS PDFKit/Vision cases, the pinned WebUI-wheel
+compatibility fixture, eleven C/Wasmtime compiler fixtures and one exported C
+player fixture. The optional Playwright conversation-browser test was not run.
+No model weights, owner accounts or owner Mac were used to obtain the source
+results. Hosted Actions were not dispatched. The native OpenCode failure is
+separate from the passing synthetic protocol and JavaScript policy tests.
+
+New regressions cover minimal core and existing-settings recovery, missing WAV
+resumption, rejected Discord credentials, lock conflicts, unsafe/corrupt receipts,
+source-change invalidation, dependency gating, exact installer discovery, MCP
+session/response handling, interrupted VPN-test recovery and managed Discord
+bridge reuse. Core retains the real model/worker tests as installation gates;
+none of these unit fixtures satisfies those gates.
 
 ## C studio release, 20 October 2026
 

@@ -6,9 +6,9 @@ from pathlib import Path
 import stat
 import zipfile
 
-RELEASE = '2026-10-24-synod-1'
+RELEASE = '2026-11-09-mac-native-recovery-1'
 PREFIX = 'mac-local-ai-installer/'
-STAMP = (2026, 10, 24, 0, 0, 0)
+STAMP = (2026, 11, 9, 0, 0, 0)
 
 
 def contents(root):
@@ -32,7 +32,15 @@ def contents(root):
         'scoped_automation': 'b3439a7938811f4ec8efb98155fd953f35f83d4e'},
         'captain_inputs': {'base': 'ceb8ce6bcb229042b1cf957d974e2838616c6030',
                            'native_runtime': '1b70350c92563449576bcbbf552994b1d1ed847d'},
-        'owner_mac_acceptance': 'not_run',
+        'owner_mac_acceptance': 'not_run_for_rebuilt_archive',
+        'default_install_profile': 'core', 'feature_state_schema': 1,
+        'repair_inputs': {'integration_base': 'a0e035c179cc14e520a6cb011b758262f4f5fa5f',
+                          'working_baseline': '2026-11-08-analysis-contract-candidate',
+                          'thinking': 'enabled', 'native_conversation_gate': 'required'},
+        'owner_reported_validation': {
+            'date': '2026-11-09', 'core_install_and_first_use': 'reported_working',
+            'conversation_recovery': 'native_check_passed_on_repaired_installation',
+            'scope': 'Repaired installed copy; the rebuilt GitHub archive was not reinstalled here.'},
         'studio_inputs': {'base':'709047b7e921165a23346e43c43d623cfa7d754c','schema':1,'resolution':[320,180]},
         'synod_inputs': {'base':'ca1d04bc237650a8471791eaf83c2b1794bf1448','schema':1,'runtime_capabilities':['text'],'native_acceptance':'not_run'},
         'integrated_inputs': {'main':'1448677eb7b3442efd227b3e59e6446c8766f354', 'installer_hardening':'a79354a2df50aae43548163fb37494f753555ad7', 'village':'776cd9010790e8030f4ac4860eb62da6817c7e24'},

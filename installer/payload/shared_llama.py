@@ -5,13 +5,35 @@ import json
 import os
 from pathlib import Path
 import queue
+import signal
 import subprocess
 import threading
 import time
 from urllib.parse import urlsplit
 from urllib.error import URLError
-from backend_http import api, port_open
+from backend_http import api, port_open, backend_rejection
 from tool_protocol import tools_for_ollama, assistant_for_openai, messages_for_ollama
+
+MINICPM_REPOSITORY = 'openbmb/MiniCPM-V-4.7-35B-A3B-gguf'
+REASONING_PROTOCOL_INSTRUCTION = 'Always close your reasoning and then write the final answer as normal reply text.'
+STRUCTURED_REASONING_INSTRUCTION = ('Always close your reasoning before calling a tool. '
+    'Complete required inspection before submitting the final result through StructuredOutput. '
+    'Put explanations in that structured result, with no ordinary reply text before or after it. '
+    'Treat failed tool calls as errors, not file contents or successful execution.')
+
+
+def reasoning_protocol_messages(messages, instruction=REASONING_PROTOCOL_INSTRUCTION):
+    """Merge the measured protocol reminder without changing caller history."""
+    result = [dict(message) for message in messages]
+    if result and result[0]['role'] == 'system':
+        content = result[0]['content']
+        if not isinstance(content, str):
+            raise ValueError('Native system instructions must contain text')
+        if instruction not in content:
+            result[0]['content'] = content + ('\n\n' if content else '') + instruction
+    else:
+        result.insert(0, {'role': 'system', 'content': instruction})
+    return result
 
 
 def openai_messages(original, cleaned):
@@ -49,6 +71,7 @@ class SharedLlama:
         self.config = config
         self.process = None
         self.running_slots = None
+        self.running_thinking = None
         self.log_path = Path(log_path) if log_path is not None else None
         self.verified = {}
         self.base = 'http://127.0.0.1:11437'
@@ -83,7 +106,7 @@ class SharedLlama:
             raise ValueError('Shared GGUF parallel slots must be within the configured Captain limit')
         return slots
 
-    def command(self, context, thinking=False, parallel=None):
+    def command(self, context, thinking=True, parallel=None):
         slots = self.slots(parallel)
         files = self.files()
         command = [files['binary'], '--model', files['model'], '--host', '127.0.0.1', '--port', '11437',
@@ -91,7 +114,9 @@ class SharedLlama:
                    '--ctx-size', str(context * slots),
                    '--kv-unified-per-slot', str(context),
                    '--alias', 'local-ai-captain', '--jinja', '--cont-batching', '--no-context-shift',
-                   '--no-webui', '--chat-template-kwargs', json.dumps({'enable_thinking': thinking})]
+                   '--no-webui', '--reasoning', 'on' if thinking else 'off',
+                   '--reasoning-format', 'deepseek',
+                   '--chat-template-kwargs', json.dumps({'enable_thinking': thinking})]
         if 'mmproj' in files:
             command += ['--mmproj', files['mmproj']]
         if 'lora' in files:
@@ -100,11 +125,13 @@ class SharedLlama:
             command += ['--lora', files['lora']]
         return command
 
-    def start(self, context, thinking=False, parallel=None):
+    def start(self, context, thinking=True, parallel=None):
         slots = self.slots(parallel)
         if self.process and self.process.poll() is None:
             if self.running_slots != slots:
                 raise RuntimeError('Running shared GGUF slot count differs from requested resource mode')
+            if self.running_thinking != thinking:
+                raise RuntimeError('Stop the shared GGUF server before changing its thinking mode')
             return
         if port_open(11437):
             raise RuntimeError('Shared GGUF port is occupied; no unmanaged server was stopped')
@@ -122,6 +149,7 @@ class SharedLlama:
             with os.fdopen(fd, 'ab') as log:
                 self.process = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT)
         self.running_slots = slots
+        self.running_thinking = thinking
         deadline = time.monotonic() + 300
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
@@ -145,23 +173,39 @@ class SharedLlama:
                 process.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 process.kill()
-        process.wait(timeout=15)
+        returncode = process.wait(timeout=15)
         if port_open(11437):
             raise RuntimeError('Shared GGUF server did not release its port')
         self.process = None
         self.running_slots = None
+        self.running_thinking = None
+        if returncode not in (0, -signal.SIGTERM):
+            raise RuntimeError('Local GGUF server exited abnormally during shutdown '
+                               f'(status {returncode}); see control/logs/shared-llama.log')
 
     def chat(self, body, limit, messages=None, transport=None):
-        tools = tools_for_ollama(body)
+        tools = tools_for_ollama(body, allow_required=True)
         cleaned = messages if messages is not None else messages_for_ollama(body['messages'])
         stream = body.get('_stream')
         payload = {'model': 'local-ai-captain', 'messages': openai_messages(body['messages'], cleaned), 'stream': bool(stream),
                    'max_tokens': limit, 'cache_prompt': True}
+        model = self.config.get('llama', {}).get('model', {})
+        structured_output = any(tool['function']['name'] == 'StructuredOutput' for tool in tools)
+        if self.running_thinking is True and model.get('repository') == MINICPM_REPOSITORY:
+            instruction = STRUCTURED_REASONING_INSTRUCTION if structured_output else REASONING_PROTOCOL_INSTRUCTION
+            payload['messages'] = reasoning_protocol_messages(payload['messages'], instruction)
         if tools:
             payload['tools'] = tools
+        if body.get('tool_choice') is not None:
+            payload['tool_choice'] = body['tool_choice']
+        if structured_output:
+            # Inspection must finish before its receipt can be cited in the
+            # native structured final result. Keep those calls sequential.
+            payload['parallel_tool_calls'] = False
         if isinstance(body.get('temperature'), (int, float)):
             payload['temperature'] = body['temperature']
         if stream is not None:
+            payload['stream_options'] = {'include_usage': True}
             return self._stream_chat(payload, body, tools, stream)
         response = (transport or api)(self.base, '/v1/chat/completions', payload, timeout=1800)
         usage = response.get('usage') if isinstance(response.get('usage'), dict) else {}
@@ -234,8 +278,7 @@ class SharedLlama:
                         if not isinstance(part, str):
                             raise RuntimeError('Invalid shared GGUF streamed text')
                         message[dest] += part
-                        if source == 'content':
-                            stream.send({'content': part})
+                        stream.send({source: part})
                 fragments = delta.get('tool_calls', [])
                 if not isinstance(fragments, list):
                     raise RuntimeError('Invalid shared GGUF tool calls')
@@ -258,7 +301,7 @@ class SharedLlama:
                                headers={'Content-Type': 'application/json'})
             response = connection.getresponse()
             if response.status < 200 or response.status >= 300:
-                raise RuntimeError('Shared GGUF backend rejected streaming request: ' + str(response.status))
+                raise backend_rejection('/v1/chat/completions', response.status, response.read(8192))
             def read_response():
                 try:
                     while True:
@@ -310,11 +353,9 @@ class SharedLlama:
                     seen.add(identifier)
                     call['id'] = identifier
                 delta = {'tool_calls': [dict(call, index=i) for i, call in enumerate(result['tool_calls'])]}
-                if result.get('reasoning_content'):
-                    delta['reasoning_content'] = result['reasoning_content']
                 stream.send(delta)
             body['_streamed'] = True
-            body['_finish_reason'] = finish or ('tool_calls' if isinstance(result, dict) else 'stop')
+            body['_finish_reason'] = finish or ('tool_calls' if isinstance(result, dict) and result.get('tool_calls') else 'stop')
             if all(type(usage.get(k)) is int and usage[k] >= 0 for k in ('prompt_tokens', 'completion_tokens')):
                 body['_usage'] = {'prompt_tokens': usage['prompt_tokens'], 'completion_tokens': usage['completion_tokens'],
                                   'total_tokens': usage['prompt_tokens'] + usage['completion_tokens']}

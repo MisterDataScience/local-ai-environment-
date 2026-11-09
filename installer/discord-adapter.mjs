@@ -12,9 +12,11 @@ if(process.argv.includes('--check')){
   codec.delete();console.log('Discord Opus and DAVE dependencies verified');process.exit(0);
 }
 let raw='';for await(const part of process.stdin){raw+=part;if(raw.length>32768)throw Error('Invalid bootstrap');}
-const {token,config:c,bridgeKey}=JSON.parse(raw);raw='';
+const {token,config:c,bridgeKey,acceptance=false}=JSON.parse(raw);raw='';
 for(const name of ['owner_id','bot_id','guild_id','channel_id'])if(!/^[0-9]{15,22}$/.test(c[name]))throw Error('Invalid Discord configuration');
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildVoiceStates],allowedMentions:{parse:[]}});
+const observed={private_voice_connection:false,owner_speech_received:false,response_played:false,interruption:false};
+function observe(name){if(!acceptance)return;observed[name]=true;if(Object.values(observed).every(Boolean)){console.log(JSON.stringify({acceptance:'passed',checks:observed}));shutdown();}}
 let call=null,serial=Promise.resolve(),closing=false,cursor=0,disconnected=false,retryAfter=0;
 async function api(action,data={}){
   const r=await fetch('http://127.0.0.1:8003/api',{method:'POST',headers:{Authorization:'Bearer '+bridgeKey,'Content-Type':'application/json'},body:JSON.stringify({action,...data}),signal:AbortSignal.timeout(action==='transcribe'?90000:15000)});
@@ -24,9 +26,10 @@ const button=(id,label,style=ButtonStyle.Secondary)=>new ButtonBuilder().setCust
 async function say(s,text){if(call!==s)return;await s.channel.send({content:String(text).slice(0,1900),allowedMentions:{parse:[]}});}
 function silence(s){s.player.stop(true);s.stream?.destroy();s.stream=null;s.resource=null;s.ledger=null;}
 function interrupt(s){
+  const heard=!!(s.resource && s.resource.playbackDuration>0);
   if(s.interruptPromise)return s.interruptPromise;
   silence(s);s.generation+=1;s.interrupting=true;
-  s.interruptPromise=(async()=>{const v=await api('interrupt');s.generation=Math.max(s.generation,v.generation);})().finally(()=>{s.interrupting=false;s.interruptPromise=null;});
+  s.interruptPromise=(async()=>{const v=await api('interrupt');s.generation=Math.max(s.generation,v.generation);if(heard)observe('interruption');})().finally(()=>{s.interrupting=false;s.interruptPromise=null;});
   return s.interruptPromise;
 }
 async function stop(){const s=call;if(!s)return;call=null;silence(s);s.capture?.destroy();s.connection?.destroy();for(const message of s.permissions.values())message.edit({components:[]}).catch(()=>{});await api('stop').catch(()=>{});}
@@ -41,7 +44,7 @@ async function reconcile(){
     s.connection=joinVoiceChannel({channelId:c.channel_id,guildId:c.guild_id,adapterCreator:channel.guild.voiceAdapterCreator,selfDeaf:false,selfMute:false});
     s.connection.on('error',()=>fail(s));s.player.on('error',()=>fail(s));
     s.connection.on(VoiceConnectionStatus.Disconnected,()=>fail(s));
-    await entersState(s.connection,VoiceConnectionStatus.Ready,20000);
+    await entersState(s.connection,VoiceConnectionStatus.Ready,20000);observe('private_voice_connection');
     const started=await api('start',{voice:c.voice||'default'});s.generation=started.generation;s.connection.subscribe(s.player);
     await channel.send({content:'Local AI connected using your saved voice. Plan mode. Only your speech is processed. Utterances: up to 28 seconds.',components:[new ActionRowBuilder().addComponents(button(s.nonce+':stop','Stop answer'),button(s.nonce+':plan','Plan'),button(s.nonce+':build','Build'),button(s.nonce+':leave','Disconnect'))]});
     s.connection.receiver.speaking.on('start',id=>{if(id===c.owner_id && call===s && !s.busy)capture(s);});
@@ -52,7 +55,7 @@ async function fail(s){if(call===s){retryAfter=Date.now()+30000;await say(s,'Dis
 function schedule(){serial=serial.then(reconcile).catch(()=>console.error('Discord connection check failed'));}
 async function poll(s){
   while(call===s){
-    if(s.ledger && s.resource){for(const ack of s.ledger.advance(s.resource.playbackDuration))await api('played',ack);}
+    if(s.ledger && s.resource){for(const ack of s.ledger.advance(s.resource.playbackDuration)){await api('played',ack);observe('response_played');}}
     const data=await api('poll',{after:cursor});
     if(!data.active)throw Error('Conversation stopped');
     if(s.interrupting){await new Promise(r=>setTimeout(r,100));continue;}
@@ -107,7 +110,7 @@ function capture(s){
       if(!state.confirmed)return;
       const result=await api('transcribe',{pcm:state.pcm().toString('base64')});
       if(call!==s || !result.text?.trim())return;
-      await say(s,'You: '+result.text);await api('submit',{text:result.text,agent:s.agent});
+      observe('owner_speech_received');await say(s,'You: '+result.text);await api('submit',{text:result.text,agent:s.agent});
     }catch{await say(s,'Speech could not be processed. Please try again after specialist work finishes.').catch(()=>{});}
     finally{decoder.delete();s.capture=null;s.busy=false;}
   });

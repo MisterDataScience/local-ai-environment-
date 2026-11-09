@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp, rm, readFile, symlink, readdir, writeFile, mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import Captain, {validateTasks} from '../captain.mjs';
+import Captain from '../captain.mjs';
+import * as captainPlugin from '../captain.mjs';
 import {workers} from '../captain-runtime.mjs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -53,7 +54,7 @@ async function fixture(t, options = {}) {
   const villageOptions = await options.village?.(root) ?? {};
   const hooks = await Captain({client, directory: root}, {statePath, modeToken: 'gateway:0:max',
     model: 'local-ai-gateway/local-ai-captain', maxWorkers: 5, maxTasks: options.maxTasks ?? 12,
-    webEnabled: true, ...villageOptions});
+    webEnabled: true, ...villageOptions, ...(options.workspaceEnabled === undefined ? {} : {workspaceEnabled: options.workspaceEnabled})});
   await hooks['chat.message']({sessionID: root}, {message: {id: 'user'}, parts: messages.get(root)[0].parts});
   function context(callID, agent = 'build', parentID = 'user') {
     messages.get(root).push({info: {id: 'assistant-' + callID, role: 'assistant', agent, parentID},
@@ -69,6 +70,64 @@ async function fixture(t, options = {}) {
   return {root, hooks, context, workerContext, messages, sessions, client, statePath, aborted, deleted,
     status: value => {status = value;}, maximum: () => maximum};
 }
+
+test('the pinned native Plan reminder allows a read-only Captain cohort through retirement', async t => {
+  const f = await fixture(t);
+  const nativeReminder = await readFile(new URL('./fixtures/opencode-1.18.34-plan.txt', import.meta.url), 'utf8');
+  const ownerText = 'Dispatch the requested read-only team now.';
+  const output = {messages: [{info: {id: 'user', role: 'user', agent: 'plan', sessionID: f.root}, parts: [
+    {id: 'owner', type: 'text', text: ownerText},
+    {id: 'native', type: 'text', text: nativeReminder, synthetic: true}]}]};
+  await f.hooks['experimental.chat.messages.transform']({}, output);
+  assert.equal(output.messages[0].parts[0].text, ownerText);
+  const reminder = output.messages[0].parts[1];
+  assert.equal(reminder.id, 'native');
+  assert(reminder.text.includes('team_run'));
+  assert(reminder.text.includes('team_retire'));
+  assert(reminder.text.includes('Plan mode forbids project edits, commands, configuration changes and publication.'));
+  assert(!reminder.text.includes('The user indicated that they do not want you to execute yet'));
+  const cohort = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('arithmetic'), task('file-check', 'reviewer')]}, f.context('plan-run', 'plan')));
+  assert(cohort.tasks.every(row => row.status === 'completed'));
+  const children = [...f.sessions.values()].filter(session => session.parentID);
+  assert.equal(children.length, 2);
+  for (const session of children)
+    assert(session.permission.some(rule => rule.permission === 'edit' && rule.action === 'deny'));
+  await f.hooks.tool.team_retire.execute({ids: ['arithmetic', 'file-check']}, f.context('plan-retire', 'plan'));
+  assert.equal(f.deleted.length, 2);
+});
+
+test('Plan reminder adaptation preserves owner content and other synthetic instructions', async t => {
+  const f = await fixture(t);
+  const reminder = await readFile(new URL('./fixtures/opencode-1.18.34-plan.txt', import.meta.url), 'utf8');
+  const original = [
+    {type: 'text', text: reminder, synthetic: false},
+    {type: 'text', text: 'Preserve this native approval requirement.', synthetic: true},
+    {type: 'file', url: 'file:///project/evidence.txt', mime: 'text/plain'},
+  ];
+  const output = {messages: [{info: {role: 'user', agent: 'plan', sessionID: f.root}, parts: structuredClone(original)}]};
+  await f.hooks['experimental.chat.messages.transform']({}, output);
+  assert.deepEqual(output.messages[0].parts, original);
+});
+
+test('Build, specialist children and other native sessions keep their original reminders', async t => {
+  const f = await fixture(t);
+  const reminder = await readFile(new URL('./fixtures/opencode-1.18.34-plan.txt', import.meta.url), 'utf8');
+  f.sessions.set('child', {id: 'child', parentID: f.root});
+  for (const [agent, sessionID] of [['build', f.root], ['coder-plan', 'child'], ['plan', 'child']]) {
+    const output = {messages: [{info: {role: 'user', agent, sessionID},
+      parts: [{type: 'text', text: reminder, synthetic: true}]}]};
+    await f.hooks['experimental.chat.messages.transform']({}, output);
+    assert.equal(output.messages[0].parts[0].text, reminder);
+  }
+});
+
+test('an unknown native Plan reminder stops with a specific compatibility error', async t => {
+  const f = await fixture(t);
+  const reminder = await readFile(new URL('./fixtures/opencode-1.18.34-plan.txt', import.meta.url), 'utf8');
+  const output = {messages: [{info: {role: 'user', agent: 'plan', sessionID: f.root},
+    parts: [{type: 'text', text: reminder + 'Changed by a different runtime.', synthetic: true}]}]};
+  await assert.rejects(f.hooks['experimental.chat.messages.transform']({}, output), /unsupported native Plan reminder/);
+});
 
 test('native workers overlap, retain source packets, publish messages and preserve reports on retirement', async t => {
   let release;
@@ -111,11 +170,35 @@ test('team_run bounds combined cohort previews and requires reports for clipped 
   assert.equal(full.task.objective, tasks[0].objective);
 });
 
-test('duplicate work, invalid profiles, excess workers and overlapping writers fail before dispatch', () => {
-  assert.throws(() => validateTasks([task('a'), {...task('b'), objective: 'Investigate a'}]), /duplicate objective/);
-  assert.throws(() => validateTasks([task('a', 'coder'), task('b', 'coder')]), /one editing/);
-  assert.throws(() => validateTasks([task('a', 'admin')]), /invalid role/);
-  assert.throws(() => validateTasks(Array.from({length: 6}, (_, i) => task('t' + i))), /submit 1/);
+test('native plugin loader sees only the Captain initializer', () => {
+  assert.deepEqual(Object.keys(captainPlugin), ['default']);
+});
+
+test('independent native tool calls require current identity and cannot impersonate Captain workers', async t => {
+  const f = await fixture(t);
+  const call = {tool: 'read', sessionID: 'independent', callID: 'read-now'};
+  let current = {info: {role: 'assistant', agent: 'coder-plan'},
+    parts: [{type: 'tool', tool: 'read', callID: 'read-now', state: {status: 'running'}}]};
+  f.client.session.messages = async ({path, query}) => {
+    assert.equal(path.id, call.sessionID);
+    assert.equal(query.limit, 1);
+    return {data: [current]};
+  };
+  await f.hooks['tool.execute.before'](call);
+  current = {...current, info: {...current.info, agent: 'captain-coder'}};
+  await assert.rejects(f.hooks['tool.execute.before'](call), /not assigned by the captain/);
+  current = {...current, parts: []};
+  await assert.rejects(f.hooks['tool.execute.before'](call), /tool call identity missing/);
+});
+
+test('duplicate work, invalid profiles, excess workers and overlapping writers fail before dispatch', async t => {
+  const f = await fixture(t);
+  for (const [tasks, issue] of [
+    [[task('a'), {...task('b'), objective: 'Investigate a'}], /duplicate objective/],
+    [[task('a', 'coder'), task('b', 'coder')], /one editing/],
+    [[task('a', 'admin')], /invalid role/],
+    [Array.from({length: 6}, (_, i) => task('t' + i)), /submit 1/],
+  ]) await assert.rejects(f.hooks.tool.team_run.execute({tasks}, f.context('invalid-' + tasks.length)), issue);
 });
 
 test('board and inbox share bounded unread pages and explicit replay does not rewind progress', async t => {
@@ -525,3 +608,16 @@ test('Commons-style worker cannot access Captain lifecycle management', async t 
   assert.equal(result.tasks[0].status, 'completed');
 });
 
+
+
+test('core dispatch works without advertising or opening institutional storage', async t => {
+  const f = await fixture(t, {workspaceEnabled: false, village: async root => {
+    const villageRoot = join(root, 'locked-village');
+    await mkdir(villageRoot);
+    await writeFile(join(villageRoot, 'village.sqlite'), 'existing protected data');
+    return {villageRoot, villagePython: '/must-not-execute', villageScript: '/must-not-execute'};
+  }});
+  assert.ok(!Object.keys(f.hooks.tool).some(name => name === 'studio_contact' || name.startsWith('village_')));
+  const result = JSON.parse(await f.hooks.tool.team_run.execute({tasks: [task('core-worker')]}, f.context('core-worker-call')));
+  assert.equal(result.tasks[0].status, 'completed');
+});

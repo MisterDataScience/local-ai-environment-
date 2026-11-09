@@ -22,6 +22,27 @@ CALL = {"id": "call_first", "type": "function", "function": {"name": "view_note"
 
 
 class NativeToolsTests(unittest.TestCase):
+    def test_required_tool_choice_is_native_only_and_needs_supplied_functions(self):
+        body = {'model': 'local-ai-captain', 'messages': [{'role': 'user', 'content': 'Read the file'}],
+                'tools': [TOOL], 'tool_choice': 'required'}
+        self.assertEqual(routing.messages_and_route(body, {'local-ai-captain': {'backend': 'llama'}})[1], 'text')
+        for presets in ({'local-ai-captain': {'backend': 'ollama'}}, {'local-ai-captain'}):
+            with self.assertRaises(ValueError):
+                routing.messages_and_route(body, presets)
+        with self.assertRaises(ValueError):
+            routing.messages_and_route(dict(body, tools=[]), {'local-ai-captain': {'backend': 'llama'}})
+        with self.assertRaises(ValueError):
+            routing.messages_and_route(dict(body, messages=[{'role': 'user', 'content': '/image a tree'}]),
+                                       {'local-ai-captain': {'backend': 'llama'}})
+
+    def test_reasoning_only_or_reasoned_answers_keep_a_separate_channel(self):
+        for content in ('323.', ''):
+            message = {'role': 'assistant', 'content': content, 'thinking': 'Intermediate computation'}
+            result = protocol.assistant_for_openai(message, [])
+            self.assertEqual(result['content'], content)
+            self.assertEqual(result['reasoning_content'], 'Intermediate computation')
+            self.assertNotIn('Intermediate computation', result['content'])
+
     def test_openai_history_maps_ids_to_ollama_tool_names_without_mutation(self):
         messages = [{"role": "developer", "content": "Keep instructions"}, {"role": "user", "content": "Read note"},
                     {"role": "assistant", "content": None, "tool_calls": [CALL], "reasoning_content": "reason"},

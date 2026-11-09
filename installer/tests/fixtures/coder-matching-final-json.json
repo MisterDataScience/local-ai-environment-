@@ -1,0 +1,51 @@
+{
+  "contract": {
+    "objective": "Read coder-acceptance.txt and explain its arithmetic.",
+    "constraints": "Use the read tool. Do not edit or execute commands.",
+    "evidence": "Project file: coder-acceptance.txt",
+    "completed": "",
+    "remaining": "Explain the supplied arithmetic.",
+    "result": "A short explanation and an honest validation statement.",
+    "facts": [
+      "17 * 20 - 17 = 323."
+    ],
+    "assumptions": [],
+    "unknowns": [],
+    "references": [
+      {
+        "path": "coder-acceptance.txt",
+        "symbol": ""
+      }
+    ],
+    "acceptance": [
+      {
+        "id": "A1",
+        "requirement": "Explain the supplied arithmetic.",
+        "source_quote": "",
+        "verification": {
+          "kind": "inspection",
+          "command": ""
+        },
+        "source": {
+          "kind": "derived"
+        }
+      }
+    ],
+    "return_format": "For delegated work, return one JSON object (no markdown fence): {\"summary\":\"...\",\"acceptance\":[{\"id\":\"A1\",\"status\":\"met|unmet|blocked|unverified\",\"evidence\":\"...\",\"tool_call_ids\":[]}],\"changed_files\":[],\"tests\":[{\"tool_call_id\":\"native call ID or empty when not run\",\"command\":\"exact command\",\"status\":\"passed|failed|not_run\"}],\"assumptions\":[],\"unresolved\":[]}. Address every supplied acceptance ID exactly once. Do not rewrite the requirements. Test criteria need actual matching command execution; inspection criteria need actual read/grep/glob calls. If native tool IDs are unavailable, report unverified instead of inventing IDs. Analysis evidence is your claim, not independent verification. Keep full changes in project files."
+  },
+  "raw_result": "{\"summary\":\"The file coder-acceptance.txt contains the arithmetic expression 17 * 20 - 17 = 323. This evaluates as: 17 multiplied by 20 equals 340, and 340 minus 17 equals 323. The arithmetic is correct.\",\"acceptance\":[{\"id\":\"A1\",\"status\":\"met\",\"evidence\":\"The file reads: '17 * 20 - 17 = 323.' Verification: 17 * 20 = 340, and 340 - 17 = 323. The equation is arithmetically valid.\",\"tool_call_ids\":[\"LJY4GoHAYjTRTrUcSNBxDUL80TFKvVZ6\"]}],\"changed_files\":[],\"tests\":[],\"assumptions\":[],\"unresolved\":[]}",
+  "native_final_text": "{\n  \"summary\": \"The file coder-acceptance.txt contains the arithmetic expression 17 * 20 - 17 = 323. This evaluates as: 17 multiplied by 20 equals 340, and 340 minus 17 equals 323. The arithmetic is correct.\",\n  \"acceptance\": [\n    {\n      \"id\": \"A1\",\n      \"status\": \"met\",\n      \"evidence\": \"The file reads: '17 * 20 - 17 = 323.' Verification: 17 * 20 = 340, and 340 - 17 = 323. The equation is arithmetically valid.\",\n      \"tool_call_ids\": [\"LJY4GoHAYjTRTrUcSNBxDUL80TFKvVZ6\"]\n    }\n  ],\n  \"changed_files\": [],\n  \"tests\": [],\n  \"assumptions\": [],\n  \"unresolved\": []\n}\n\n",
+  "native_format_call_id": "H7AFFBxFAoFdvf9g6XlqQ54Oj04lTt18",
+  "observed_tools": [
+    {
+      "id": "LJY4GoHAYjTRTrUcSNBxDUL80TFKvVZ6",
+      "tool": "read",
+      "status": "completed"
+    },
+    {
+      "id": "H7AFFBxFAoFdvf9g6XlqQ54Oj04lTt18",
+      "tool": "StructuredOutput",
+      "status": "completed"
+    }
+  ]
+}

@@ -14,6 +14,31 @@ import installer
 
 
 class InstallerTests(unittest.TestCase):
+    def test_named_launchers_read_helper_through_bash_and_preserve_arguments(self):
+        launchers = {
+            'Install LOCAL AI Core.command': [],
+            'Install Everything.command': ['--everything'],
+            'Install Local AI with MiniCPM Captain.command': ['--minicpm-captain'],
+            'Install Local AI with Remote Access.command': ['--remote-access'],
+            'Install Local AI with Web Access.command': ['--web-access'],
+        }
+        with tempfile.TemporaryDirectory(prefix='local ai launchers ') as directory:
+            root = Path(directory)
+            helper = root / 'Install Local AI.command'
+            helper.write_text('#!/bin/bash\nprintf "%s\\n" "$@"\n')
+            # An interpreter handoff must not require direct execution of the
+            # downloaded helper. This is not a native Gatekeeper acceptance test.
+            helper.chmod(0o600)
+            arguments = ['--owner-setting', 'value with spaces', '$literal;unchanged']
+            for label, expected in launchers.items():
+                with self.subTest(launcher=label):
+                    launcher = root / label
+                    launcher.write_bytes((installer.SOURCE / label).read_bytes())
+                    result = subprocess.run(['/bin/bash', str(launcher), *arguments],
+                        capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), expected + arguments)
+
     def test_installed_studio_imports_without_repository_on_python_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

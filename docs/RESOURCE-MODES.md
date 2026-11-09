@@ -20,7 +20,11 @@ outside Gaming. Custom smaller contexts also cap output
 at half their context; client requests may ask for shorter replies. Native
 memory validation on the intended 32 GB M6 Mac mini remains required.
 
-Gaming caps context at 4,096 tokens, output at 1,024 tokens, thinking off, and idle
+Thinking is enabled for all configured text profiles, including Gaming. The
+installer migrates existing profiles to thinking enabled once. Reasoning and
+the final answer share the mode's output token limit; a cutoff remains a cutoff.
+
+Gaming caps context at 4,096 tokens, output at 1,024 tokens, and idle
 residency at 120 seconds. These are enforced request/model limits, **not an OS RAM
 quota** or a guarantee of game performance. macOS, Docker, WebUI and games share
 unified memory. Native memory and game-performance measurements remain necessary.

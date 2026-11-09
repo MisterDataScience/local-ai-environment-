@@ -1,48 +1,33 @@
 # Deploy LOCAL AI
 
-Use `main` as the source of truth. The sole package path is
-`downloads/Mac-Local-AI-Automated-Installer.zip`, but its checked-in contents are
-an older snapshot and do not include all current source changes. Merging source
-does not rebuild it. See [release validation](RELEASE-VALIDATION.md#current-source-and-package-status)
-for the manual release gates and package/source verification.
+Use source and an installer ZIP from the same revision. This branch rebuilds
+`downloads/Mac-Local-AI-Automated-Installer.zip` for the modular implementation;
+the owner-reported repaired installation passed its conversation recovery check.
+The rebuilt archive has not itself been reinstalled on the Mac. See [release validation](RELEASE-VALIDATION.md)
+and the [complete modular installer guide](MODULAR-INSTALLER.md).
 
 ## Installation or upgrade
 
-1. Stop LOCAL AI and the Work Agent. Leave Docker open if you use VPN web access.
-2. Obtain a validated installer matching the intended source revision and extract it.
-   Do not assume the checked-in ZIP includes later source fixes.
-3. Open `Install Local AI.command` inside `mac-local-ai-installer` to install
-   **the MiniCPM Captain profile** automatically, or run:
+1. Stop LOCAL AI and the Work Agent. Keep the existing installation and downloads.
+2. Extract the matching source package and run `Install LOCAL AI Core.command`.
+   The standard `Install Local AI.command` now has the same core-first default.
+3. Complete Apple Command Line Tools if requested, then rerun. Core downloads its
+   pinned model/runtime dependencies and verifies text, context protection, real
+   delegation/retirement, completed and pending conversation recovery through
+   compaction, and the authenticated local Captain interface.
+4. Core registers startup after macOS login and opens `http://127.0.0.1:4096`.
+   `Open Captain.command` displays its local private credentials. Ordinary chat
+   remains at `http://127.0.0.1:8081`. Both bind only to loopback.
+5. Use `Check LOCAL AI Setup.command` for state, missing work and physical checks.
+   Later, stop Local AI and run the named installer for the desired feature.
+   No optional account, recording, vault or network input is needed for core.
+6. `Install Everything.command` selects the same feature modules. Each incomplete
+   feature is reported separately; unrelated installation work can continue.
 
-   ```bash
-   /bin/bash "$HOME/Downloads/mac-local-ai-installer/Install Local AI.command"
-   ```
-
-4. Keep Terminal open during installation. The installer downloads dependencies
-   and models, resumes completed stages, preserves local configuration and runs
-   its native acceptance steps. Review failures and any `not_run` results.
-5. During installation Cryptomator opens for one-time secure vault creation or
-   unlock in its own GUI. Confirm the decrypted mounted volume in Terminal.
-   The installer registers and validates the encrypted workspace without
-   a second post-install setup helper.
-6. Still **inside this one installer**, Docker Desktop is installed/verified.
-   Approve its administrator permissions and accept Docker's published licence
-   within its app. Enter the Proton Free WireGuard private key through the
-   hidden Terminal prompt. The installer provisions the VPN reader and
-   VPN-only Playwright browser, starts them and performs live readiness checks.
-7. Tailscale installs and opens. Approve its macOS network extension, sign into
-   your personal tailnet and approve Tailscale HTTPS if prompted. The installer
-   configures three private routes, including the **actual Captain**
-   `https://MAC.TAILNET.ts.net:10000`. You may also provide a fine-grained
-   GitHub token during installation. Missing account credentials do not
-   silently turn into a configured connection.
-8. Once native and network acceptance passes, the installer registers login startup,
-   starts the managed Captain Work Agent at `http://127.0.0.1:4096`,
-   checks the authenticated agent endpoint and opens Safari. Local login
-   credentials are shown in Terminal; `Open Captain.command` displays them
-   again if needed. Ordinary Open WebUI chat remains available at
-   `http://127.0.0.1:8081`, but Captain worker delegation is in the Work Agent.
-   Launch `Local AI.app` on future logins.
+Speech, Discord, media, Office, encrypted storage, VPN web/browser, Tailscale and
+GitHub each have independent launchers. [The feature table](MODULAR-INSTALLER.md#independent-installers)
+records dependencies and acceptance. Discord uses the live-conversation bridge
+and needs a registered speech voice and STT/VAD. Its real call is tested separately.
 
 The installer uses a SHA-verified, versioned `uv` bootstrap, vendor-checked
 Docker Desktop 4.91.0, an immutable ComfyUI commit/archive checksum, and
@@ -62,7 +47,7 @@ and restores missing *owned* private routes on reconnect, refusing Funnel.
 Real Windows/iPad browsing and reboot/sleep recovery remain pending.
 See [headless/remote acceptance](HEADLESS-AND-REMOTE-ACCEPTANCE.md).
 
-Apple Silicon, macOS 15+, 32 GB unified memory and at least 100 GB free space are
+Apple Silicon, macOS 15+, 32 GB unified memory and at least 35 GB free space for core are
 required. Installation needs Internet access for initial dependencies and models.
 No model weights, personal files or account credentials are included in the ZIP.
 

@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 import uuid
 
 from backend_http import api, port_open
+from feature_state import require as require_feature
 from routing import messages_and_route
 from text_models import configured_text_models, output_ceiling
 from context_policy import compaction_policy, UsageCounters
@@ -88,6 +89,7 @@ class Engine:
         self.studios_lock = threading.Lock()
 
     def studios_controller(self):
+        require_feature(self.config, "workspace")
         with self.studios_lock:
             if self.studios is None:
                 from studios import Studios
@@ -95,6 +97,7 @@ class Engine:
             return self.studios
 
     def founding_controller(self):
+        require_feature(self.config, "workspace")
         with self.founding_lock:
             if self.founding is None:
                 from founding import Founding
@@ -102,6 +105,7 @@ class Engine:
             return self.founding
 
     def commons_controller(self):
+        require_feature(self.config, "workspace")
         with self.commons_lock:
             if self.commons is None:
                 from commons import Commons
@@ -228,6 +232,10 @@ class Engine:
         body.pop("_finish_reason", None)
         output_limit(body)  # Validate before admitting work or loading models.
         messages, route, prompt = messages_and_route(body, self.text_models)
+        feature = {"image": "media", "video": "media", "speak": "speech",
+                   "search": "web", "read": "web", "reverse": "web"}.get(route)
+        if feature:
+            require_feature(self.config, feature)
         if body.get('inference_only') and (route != 'text' or body.get('tools')):
             raise ValueError('This request permits text inference only; commands and tools are prohibited.')
         body['_vision'] = any(m.get('images') for m in messages)
@@ -511,18 +519,18 @@ class Engine:
             preset = dict(self.text_models[body['model']])
             if self.mode == 'gaming':
                 preset.update(num_ctx=min(preset['num_ctx'], 4096),
-                              keep_alive_seconds=min(preset['keep_alive_seconds'], 120), thinking=False)
+                              keep_alive_seconds=min(preset['keep_alive_seconds'], 120))
             if route in {"search", "read"}:
                 self.state = "retrieving-web"
                 budget = max(500, min(10000, (preset["num_ctx"] - 2600) * 2))
                 messages, links = retrieve(self.config, route, prompt, budget)
             if self.shared_llama and body['model'] == self.captain['model_id'] and route in {'text', 'search', 'read'}:
                 with self.prepare_lock:
-                    profile = ('llama', preset['model'], preset['num_ctx'], preset.get('thinking', False))
+                    profile = ('llama', preset['model'], preset['num_ctx'], preset.get('thinking', True))
                     if self.text_profile != profile:
                         self.unload_ollama()
                         self.text_profile = profile
-                    self.shared_llama.start(preset['num_ctx'], preset.get('thinking', False),
+                    self.shared_llama.start(preset['num_ctx'], preset.get('thinking', True),
                                             parallel=self.parallel_slots())
                     self.shared_last_used = time.monotonic()
                 self.check_policy(body, route)
@@ -539,10 +547,11 @@ class Engine:
                     for name in ('_usage', '_finish_reason'):
                         if name in request:
                             body[name] = request[name]
-                return result + links if isinstance(result, str) else result
+                return (result + links if isinstance(result, str) else
+                        dict(result, content=result.get('content', '') + links) if links else result)
             base = self.shared_ollama if (self.captain['enabled'] and self.mode != 'gaming'
                 and body['model'] == self.captain['model_id']) else self.ollama
-            profile = ((base,) if self.captain['enabled'] else ()) + (preset['model'], preset['num_ctx'], preset.get('thinking', False))
+            profile = ((base,) if self.captain['enabled'] else ()) + (preset['model'], preset['num_ctx'], preset.get('thinking', True))
             # A shared group prepares its model once. Never unload an active
             # sibling's runner because it has not yet returned its first token.
             with self.prepare_lock:
@@ -567,7 +576,7 @@ class Engine:
                 # Preserve the full rendered input, including tools. Oversized
                 # requests must fail rather than silently discard instructions.
                 "truncate": False, "shift": False,
-                "think": preset.get("thinking", False), "keep_alive": preset["keep_alive_seconds"],
+                "think": preset.get("thinking", True), "keep_alive": preset["keep_alive_seconds"],
             }
             tools = tools_for_ollama(body) if route == "text" else []
             if tools:
@@ -590,8 +599,6 @@ class Engine:
             if stream:
                 if isinstance(answer, dict) and answer.get('tool_calls'):
                     delta = {'tool_calls': [dict(call, index=i) for i, call in enumerate(answer['tool_calls'])]}
-                    if answer.get('reasoning_content'):
-                        delta['reasoning_content'] = answer['reasoning_content']
                     stream.send(delta)
                 body['_streamed'] = True
             # Preserve the backend's cutoff signal instead of calling every
@@ -600,7 +607,8 @@ class Engine:
                                       else 'tool_calls' if isinstance(answer, dict) and answer.get('tool_calls')
                                       else 'stop')
             result_for_usage, succeeded = answer, True
-            return answer + links if isinstance(answer, str) else answer
+            return (answer + links if isinstance(answer, str) else
+                    dict(answer, content=answer.get('content', '') + links) if links else answer)
         finally:
             if accounting is not None:
                 counts = accounting.get('counts', accounting.get('request', {}).get('_accounting_usage', {}))

@@ -4,6 +4,8 @@ Never describes a registered tool as granted, selected, or operational.
 No health probes, background discovery, model inference, or account data.
 """
 
+from feature_state import available, FEATURES
+
 KINDS = ("all", "web", "files", "workspace", "browser", "office", "coding",
          "media", "desktop", "delegation", "accounts")
 
@@ -47,7 +49,7 @@ def discover(config, arguments):
     entries = {
         "web": (web and not guarded, "Open WebUI: select Local AI VPN retrieval under Integrations"),
         "files": (not guarded, "Open WebUI: select Local AI file workflows under Integrations"),
-        "workspace": (bool(config.get("vault", {}).get("enabled")) and not guarded,
+        "workspace": (available(config, "workspace") and bool(config.get("vault", {}).get("enabled")) and not guarded,
                       "Open WebUI: select Encrypted AI Workspace; unlock vault separately"),
         "browser": (web and bool(config.get("browser", {}).get("enabled")) and not guarded,
                     "Open WebUI: select Playwright browser under Integrations"),
@@ -55,7 +57,7 @@ def discover(config, arguments):
                    "OpenCode: Plan can inspect; Build writes with approval"),
         "coding": (not guarded,
                    "OpenCode: Plan and Build with approvals; specialist coder if team enabled"),
-        "media": (True, "Open WebUI: explicit /image, /video and /speak commands; mode restrictions apply. OpenCode media requires the active team and permissions"),
+        "media": ((available(config, "media") or available(config, "speech")), "Open WebUI: explicit /image, /video and /speak commands; mode restrictions apply. OpenCode media requires the active team and permissions"),
         "desktop": (bool(config.get("desktop", {}).get("enabled")),
                     "Guarded OpenCode automation session only; explicit approval required"),
         "delegation": (bool(config.get("external_delegation", {}).get("enabled")),
@@ -71,7 +73,12 @@ def discover(config, arguments):
                    "actually exposed to this session and respect approvals."),
         "capabilities": [
             {"category": kind, "configured": bool(entries[kind][0]),
-             "access": entries[kind][1]}
+             "access": entries[kind][1],
+             **({"features": [{"feature": f, "status": config.get("_feature_status", {}).get(f, "not_installed"),
+                                "installer": FEATURES[f][0]} for f in {
+                 "web": ("web",), "workspace": ("workspace",), "browser": ("browser",),
+                 "office": ("office",), "media": ("media", "speech"), "accounts": ("github",)
+             }.get(kind, ())]} if config.get("feature_schema") == 1 else {})}
             for kind in chosen
         ],
     }

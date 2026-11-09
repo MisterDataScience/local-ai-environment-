@@ -221,6 +221,8 @@ class CaptainSetupTests(unittest.TestCase):
             self.assertEqual(installed['captain']['provider'], 'llama')
             self.assertEqual(installed['captain']['variant'], captain_setup.MODEL_VARIANT)
             self.assertIn('lora', installed['captain']['llama'])
+            self.assertTrue(installed['thinking'])
+            self.assertTrue(all(preset['thinking'] for preset in installed['text_models'].values()))
             self.assertIn('AtomicChat', installed['text_models']['local-ai-captain']['model'])
             self.assertNotIn(config['model_team']['roles']['coder'], installed['text_models'])
             self.assertNotIn(config['model_team']['roles']['analyst'], installed['text_models'])
