@@ -16,11 +16,11 @@ def output_ceiling(mode, preset=None):
 
 DEFAULT_TEXT_MODELS = {
     "local-ai": {"name": "Everyday · Qwen3 14B", "model": "qwen3:14b",
-                 "keep_alive_seconds": 300, "num_ctx": 16384, "thinking": False},
+                 "keep_alive_seconds": 300, "num_ctx": 16384, "thinking": True},
     "local-ai-small": {"name": "Small · Qwen3 4B", "model": "qwen3:4b",
-                       "keep_alive_seconds": 120, "num_ctx": 16384, "thinking": False},
+                       "keep_alive_seconds": 120, "num_ctx": 16384, "thinking": True},
     "local-ai-large": {"name": "Large · Qwen3 30B-A3B", "model": "qwen3:30b-a3b",
-                       "keep_alive_seconds": 60, "num_ctx": 16384, "thinking": False},
+                       "keep_alive_seconds": 60, "num_ctx": 16384, "thinking": True},
 }
 
 LEGACY_CONTEXTS = {"local-ai": 8192, "local-ai-small": 4096, "local-ai-large": 4096}
@@ -32,7 +32,7 @@ def configured_text_models(config):
         # Existing direct gateway configurations continue to work unchanged.
         presets = {"local-ai": {"name": "Local AI", "model": config.get("text_model", "qwen3:14b"),
                                 "keep_alive_seconds": 300, "num_ctx": 8192,
-                                "thinking": config.get("thinking", False)}}
+                                "thinking": config.get("thinking", True)}}
     if not isinstance(presets, dict) or not presets or "local-ai" not in presets:
         raise ValueError("text_models must include the default local-ai entry.")
     result = copy.deepcopy(presets)
@@ -58,7 +58,7 @@ def configured_text_models(config):
             value = preset.get(key)
             if type(value) is not int or not minimum <= value <= maximum:
                 raise ValueError(f"{key} must be an integer between {minimum} and {maximum}.")
-        if type(preset.get("thinking", False)) is not bool:
+        if type(preset.get("thinking", True)) is not bool:
             raise ValueError("thinking must be true or false.")
     return result
 
@@ -69,7 +69,7 @@ def upgrade_text_configuration(config):
     if "text_models" not in result:
         result["text_models"] = copy.deepcopy(DEFAULT_TEXT_MODELS)
         result["text_models"]["local-ai"]["model"] = config.get("text_model", "qwen3:14b")
-        result["text_models"]["local-ai"]["thinking"] = config.get("thinking", False)
+        result["text_models"]["local-ai"]["thinking"] = config.get("thinking", True)
         if result["text_models"]["local-ai"]["model"] != DEFAULT_TEXT_MODELS["local-ai"]["model"]:
             result["text_models"]["local-ai"]["num_ctx"] = 8192
     configured_text_models(result)
@@ -80,6 +80,13 @@ def upgrade_text_configuration(config):
                     and preset.get("num_ctx") == LEGACY_CONTEXTS[identifier]):
                 preset["num_ctx"] = default["num_ctx"]
         result["text_context_version"] = 2
+    # All existing profiles are opted in once, following the owner's policy.
+    # The version makes reruns idempotent and keeps later explicit edits intact.
+    if result.get("thinking_policy_version", 0) < 1:
+        result["thinking"] = True
+        for preset in result["text_models"].values():
+            preset["thinking"] = True
+        result["thinking_policy_version"] = 1
     configured_text_models(result)
     return result
 

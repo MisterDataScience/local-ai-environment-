@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import sys
 
-from file_transfer import transfer_local, audit
+from file_transfer import transfer_local, audit, project_path
 from vault_transfer import transfer_vault
 
 TOOLS = [{"name": "transfer_file",
@@ -84,9 +84,11 @@ def main():
     parser.add_argument("--project", type=Path, required=True)
     args = parser.parse_args()
     root = args.root.resolve(strict=True)
-    project = args.project.resolve(strict=True)
-    if (project.parent != (root / "work-agent/projects").resolve(strict=True)
-            or len(project.name) != 32 or any(c not in "0123456789abcdef" for c in project.name)):
+    try:
+        project = project_path(root, args.project.name)
+    except (ValueError, OSError):
+        raise SystemExit("Must run for an active Work Agent project") from None
+    if args.project.is_symlink() or project != args.project.resolve(strict=True):
         raise SystemExit("Must run for an active Work Agent project")
     for line in sys.stdin:
         try:

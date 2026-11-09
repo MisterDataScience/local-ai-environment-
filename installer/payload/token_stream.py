@@ -44,8 +44,8 @@ def chat(base, payload, stream):
                     if not isinstance(value, str):
                         raise RuntimeError('Invalid streamed text')
                     message[key] += value
-                    if value and key == 'content':
-                        stream.send({'content': value})
+                    if value:
+                        stream.send({'content' if key == 'content' else 'reasoning_content': value})
                 # Ollama supplies complete structured calls. Validate and emit once,
                 # after the stream completes, to preserve stable call IDs.
                 message['tool_calls'].extend(part.get('tool_calls', []))

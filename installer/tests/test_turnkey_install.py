@@ -25,7 +25,7 @@ class TurnkeyCaptainTests(unittest.TestCase):
                 'captain': {'enabled': True, 'provider': 'llama', 'model_id': 'local-ai-captain'}}
 
     def native_report(self):
-        names = list(BASE_CHECKS) + ['text-local-ai', 'text-local-ai-captain', 'native-captain-team']
+        names = list(BASE_CHECKS) + ['text-local-ai', 'text-local-ai-captain', 'native-captain-team', 'native-captain-conversation']
         return {'checks': [{'name': name, 'status': 'passed'} for name in names] +
                           [{'name': 'mic', 'status': 'not_run'}]}
 
@@ -72,7 +72,8 @@ class TurnkeyCaptainTests(unittest.TestCase):
                     return {'data': [{'id': 'local-ai-captain'}, {'id': 'local-ai'}]}
                 return {'mode': 'max', 'transitioning': False, 'error': None}
             with patch('turnkey_install.http', side_effect=http), \
-                 patch('turnkey_install.agent_status', return_value={'captain_agent_endpoint': 'passed'}):
+                 patch('turnkey_install.agent_status', return_value={'captain_agent_endpoint': 'passed'}), \
+                 patch('turnkey_install.ui_status', return_value={'captain_chat_page': 'passed', 'captain_sign_in': 'passed'}):
                 result = await_background(root, self.config(), timeout=2)
             self.assertEqual(result['captain_visible'], 'passed')
             self.assertEqual(result['mode'], 'max')
@@ -109,14 +110,14 @@ class TurnkeyCaptainTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'mandatory integration: browser'):
                 write_receipt(root, config, {}, verified, require_integrations=True)
 
-    def test_default_captain_installer_invokes_every_network_onboarding_stage(self):
-        installer = (ROOT / 'installer.py').read_text()
-        self.assertIn('install_docker(root, download)', installer)
-        self.assertIn('configure_web(root)', installer)
-        self.assertIn('configure_browser(root)', installer)
-        self.assertIn('configure_remote(root)', installer)
-        self.assertIn('configure_github(root)', installer)
-        self.assertIn('require_integrations=True', installer)
+    def test_default_install_is_core_and_full_install_reuses_feature_modules(self):
+        from feature_install import INSTALLERS
+        self.assertEqual(set(INSTALLERS), {'workspace', 'speech', 'conversation', 'discord',
+            'media', 'office', 'web', 'browser', 'remote', 'github'})
+        script = (ROOT / 'Install Everything.command').read_text()
+        self.assertIn('--everything', script)
+        core = (ROOT / 'Install LOCAL AI Core.command').read_text()
+        self.assertNotIn('--everything', core)
 
     def test_single_installer_selects_captain_and_runtime_contains_managed_agent(self):
         script = (ROOT / 'Install Local AI.command').read_text()

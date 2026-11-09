@@ -376,7 +376,12 @@ Perform these in a new `local-ai` chat, one at a time. Wait for each to finish.
 Write a Python function that returns the mean of a non-empty list of numbers. Explain how it works.
 ```
 
-Expected: a text answer. The default gateway disables Qwen's thinking output for responsiveness. To enable reasoning mode later, stop the gateway, change `"thinking": false` to `true` in `control/config.json`, then restart it. Context remains capped at 8,192 tokens and output at 2,048 tokens in this starter configuration.
+Expected: a final text answer, with supported reasoning carried separately.
+Thinking is enabled for all configured text profiles, including Gaming. The
+installer also upgrades existing profiles to thinking enabled once. The mode's
+output token limit covers both reasoning and the final answer; a truncated
+response is incomplete and must not be reported as success. See RESOURCE-MODES.md
+for current context and output limits.
 
 **B. Image**
 

@@ -19,7 +19,8 @@ class WorkAgentTests(unittest.TestCase):
         self.assertEqual(provider['models']['local-ai']['limit']['context'], 16384)
         self.assertEqual(provider['models']['local-ai']['limit']['output'], 4096)
         self.assertEqual(provider['models']['local-ai']['limit']['input'], 12288)
-        self.assertEqual(cfg['compaction']['reserved'], 2048)
+        self.assertEqual(cfg['compaction']['reserved'], 512)
+        self.assertEqual(cfg['compaction']['preserve_recent_tokens'], 2048)
         self.assertEqual(cfg['permission']['bash'], 'ask')
         self.assertEqual(cfg['permission']['edit'], 'ask')
         self.assertEqual(cfg['permission']['external_directory'], 'deny')
@@ -49,7 +50,8 @@ class WorkAgentTests(unittest.TestCase):
         from common import GLOBAL_BEHAVIOUR
         cfg = w.configuration({'text_models': DEFAULT_TEXT_MODELS}, ['local-ai'])
         for name in ('plan', 'build'):
-            self.assertEqual(cfg['agent'][name]['prompt'], GLOBAL_BEHAVIOUR)
+            self.assertTrue(cfg['agent'][name]['prompt'].startswith(GLOBAL_BEHAVIOUR))
+            self.assertIn('Synthetic continuation messages', cfg['agent'][name]['prompt'])
         self.assertIn('answer simple requests directly', GLOBAL_BEHAVIOUR)
         self.assertIn('Discover additional capabilities only when needed', GLOBAL_BEHAVIOUR)
         self.assertFalse(cfg['tools']['websearch'])
@@ -69,15 +71,39 @@ class WorkAgentTests(unittest.TestCase):
 
     def test_output_advertisement_matches_mode_and_custom_context(self):
         import copy
-        for mode, expected in [('normal', 4096), ('max', 8192)]:
+        for mode, expected in [('normal', 4096), ('max', 4096)]:
             cfg = w.configuration({'text_models': DEFAULT_TEXT_MODELS}, ['local-ai'], mode)
             self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['output'], expected)
         presets = copy.deepcopy(DEFAULT_TEXT_MODELS)
         presets['local-ai']['num_ctx'] = 4096
         cfg = w.configuration({'text_models': presets}, ['local-ai'], 'max')
-        self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['output'], 2048)
-        self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['input'], 2048)
-        self.assertEqual(cfg['compaction']['reserved'], 1024)
+        self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['output'], 1024)
+        self.assertEqual(cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']['input'], 3072)
+        self.assertEqual(cfg['compaction']['reserved'], 256)
+
+    def test_fixed_tool_overhead_fits_normal_and_max_without_changing_thinking(self):
+        import copy
+        for mode in ('normal', 'max'):
+            presets = copy.deepcopy(DEFAULT_TEXT_MODELS)
+            cfg = w.configuration({'text_models': presets}, ['local-ai'], mode)
+            limits = cfg['provider']['local-ai-gateway']['models']['local-ai']['limit']
+            # The pinned native usable() subtracts reserved from limit.input.
+            threshold = limits['input'] - cfg['compaction']['reserved']
+            self.assertEqual(threshold, 11776)
+            self.assertLess(7978, threshold)  # Observed fixed prompt overhead.
+            self.assertLess(7978 + cfg['compaction']['preserve_recent_tokens'] + 1024, threshold)
+            self.assertLessEqual(limits['input'] + limits['output'], limits['context'])
+            self.assertEqual(presets, DEFAULT_TEXT_MODELS)
+            self.assertTrue(presets['local-ai']['thinking'])
+
+    def test_large_document_context_retains_max_generation_budget(self):
+        import copy
+        from model_team import preset
+        presets = copy.deepcopy(DEFAULT_TEXT_MODELS)
+        presets['local-ai-analyst'] = preset('analyst')
+        cfg = w.configuration({'text_models': presets}, ['local-ai-analyst'], 'max')
+        limits = cfg['provider']['local-ai-gateway']['models']['local-ai-analyst']['limit']
+        self.assertEqual(limits, {'context': 32768, 'input': 24576, 'output': 8192})
 
     def test_project_copy_excludes_hooks_credentials_and_agent_config(self):
         with tempfile.TemporaryDirectory() as d:

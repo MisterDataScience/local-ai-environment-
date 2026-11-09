@@ -53,6 +53,7 @@ class NativeSlotTests(unittest.TestCase):
         shared.process = Mock()
         shared.process.poll.return_value = None
         shared.running_slots = 2
+        shared.running_thinking = True
         shared.start(8192, parallel=2)
         with self.assertRaisesRegex(RuntimeError, 'slot count'):
             shared.start(8192, parallel=5)

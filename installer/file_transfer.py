@@ -11,6 +11,7 @@ import time
 import fcntl
 
 MAX_BYTES = 50 * 1024 * 1024
+MANAGED_PROJECT_ID = 'captain-default'
 EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".txt", ".md",
               ".png", ".jpg", ".jpeg", ".webp", ".json", ".svg", ".html"}
 
@@ -47,7 +48,8 @@ def open_source(root, relative):
 
 
 def project_path(root, project_id):
-    if not isinstance(project_id, str) or len(project_id) != 32 or any(x not in '0123456789abcdef' for x in project_id):
+    if not isinstance(project_id, str) or (project_id != MANAGED_PROJECT_ID and
+            (len(project_id) != 32 or any(x not in '0123456789abcdef' for x in project_id))):
         raise ValueError('Invalid project session')
     project = contained(root, 'work-agent/projects/' + project_id)
     if not project.is_dir():

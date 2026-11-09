@@ -29,11 +29,16 @@ def verify(process, env, timeout=90):
         with urlopen(Request('http://127.0.0.1:4096' + path, headers={'Authorization': 'Basic ' + token}), timeout=5) as response:
             return json.load(response)
     deadline = time.monotonic() + timeout
+    last_status = {server: 'missing' for server in servers}
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError('Work Agent exited before capability validation')
         try:
             status = get('/mcp')
+            known = {'connected', 'failed', 'disabled', 'needs_auth', 'needs_client_registration'}
+            last_status = {server: status.get(server, {}).get('status', 'missing') for server in servers}
+            last_status = {server: value if value in known or value == 'missing' else 'unknown'
+                           for server, value in last_status.items()}
             if any(status.get(server, {}).get('status') != 'connected' for server in servers):
                 time.sleep(0.25)
                 continue
@@ -48,4 +53,5 @@ def verify(process, env, timeout=90):
             return
         except (URLError, TimeoutError, ConnectionError):
             time.sleep(0.25)
-    raise RuntimeError('Required PDF, transfer, vision or browser MCP connection not ready')
+    raise RuntimeError('Required MCP connections not ready: ' + ', '.join(
+        server + '=' + value for server, value in last_status.items()))

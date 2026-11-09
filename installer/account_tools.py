@@ -65,7 +65,7 @@ def configure(root):
         if os.path.exists(name):
             os.unlink(name)
     config = json.loads((root / 'control/config.json').read_text())
-    config['account_tools'] = {'github': True}
+    config.setdefault('account_tools', {})['github'] = True
     save_config(root, config)
     print('Connection configured, not yet authenticated/tested. Restart Local AI and enable GitHub in chat Integrations.')
     print('Use Ask for approval. Verify a read, a DENIED write, then an approved write in a test repository.')

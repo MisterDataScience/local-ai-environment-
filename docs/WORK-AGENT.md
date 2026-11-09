@@ -60,9 +60,10 @@ and unload rules remain in force.
 The role contexts (8K coordinator, 32K analyst/document, 16K coder) and local
 model tool reliability are constraints. Start
 with small, well-scoped tasks. OpenCode's automatic compaction is enabled with a
-2,048-token buffer; it does not make a small context unlimited or guarantee that
-all tool schemas fit. Advertised output is 4,096 in Normal or 8,192 in Max,
-bounded further to half a custom smaller context. Restart after a mode change
+buffer of up to 512 tokens and retains up to 2,048 recent tokens; it does not
+guarantee that all tool schemas fit. Advertised output is the mode ceiling capped
+at one quarter of the context: 4,096 for a 16K model in Normal or Max, and up to
+8,192 for a 32K model in Max. Thinking remains enabled. Restart after a mode change
 to refresh these limits. Real local-model task performance remains unverified.
 
 
@@ -246,7 +247,11 @@ Sources:
 - https://github.com/open-webui/open-webui/blob/v0.11.1/backend/open_webui/config.py
 
 
-Context budgeting now advertises input as context minus the mode's output ceiling. Native compaction then subtracts its reserve (up to 2,048 tokens, reduced for small contexts), leaving room for instructions and tool work. Gateway requests disable Ollama truncation and context shifting; oversized input returns context_length_exceeded instead of silently losing history. See [context management](CONTEXT-MANAGEMENT.md) for mode budgets and native acceptance.
+Context budgeting advertises input as context minus the bounded generation allowance. Native compaction subtracts a reserve of up to 512 tokens, reduced for small contexts. A 16K model has an 11,776-token trigger in Normal and Max. Gateway requests disable Ollama truncation and context shifting; oversized input returns context_length_exceeded. Streaming requests ask for native usage counts so the client can track the actual prompt size. See [context management](CONTEXT-MANAGEMENT.md) for mode budgets and native acceptance.
+
+After compaction, the team plugin checks native message state before allowing an automatic resume. Completed plain or structured replies wait for genuine new user input. Unfinished tool work and interrupted generation can resume once per progress checkpoint; maintenance summaries alone do not count as progress. Synthetic followups and overflow replays do not grant fresh turn budgets. Compaction keeps the upstream previous-summary mechanism and adds provenance instructions for synthetic input.
+
+An authorised resume carries a reference to its original genuine user message. Before inference, the plugin restores that request verbatim in the maintenance followup and checks native history for a newer request or completed answer. A summary cannot turn requested output into evidence of completion. Original requests over 12,000 characters require an explicit resume rather than silent truncation. The ledger stores message references and checkpoints, not copied request text.
 
 ## Optional essay editing
 

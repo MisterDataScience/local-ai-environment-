@@ -113,6 +113,7 @@ class ContextProtocolTests(unittest.TestCase):
                              {'message': {'content': 'essay'}, 'done_reason': 'length'}]) as backend:
                         engine.submit(body).result(2)
                     options = backend.call_args.args[2]['options']
+                    self.assertTrue(backend.call_args.args[2]['think'])
                     self.assertEqual(options['num_ctx'], context)
                     self.assertEqual(options['num_predict'], expected)
                     self.assertEqual(body['_finish_reason'], 'length')
@@ -172,6 +173,7 @@ class ContextProtocolTests(unittest.TestCase):
                             if failure:
                                 self.assertEqual(len(events), 1)
                                 self.assertNotIn('choices', result)
+                                self.assertEqual(result['type'], 'error')
                         else:
                             result = json.loads(text)
                             self.assertEqual(status, 400 if isinstance(failure, backend_http.ContextLengthError)

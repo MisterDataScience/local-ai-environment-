@@ -53,8 +53,44 @@ export const RESULT_INSTRUCTION = 'For delegated work, return one JSON object (n
   + '"status":"passed|failed|not_run"}],"assumptions":[],"unresolved":[]}. '
   + 'Address every supplied acceptance ID exactly once. Do not rewrite the requirements. '
   + 'Test criteria need actual matching command execution; inspection criteria need actual read/grep/glob calls. '
-  + 'If native tool IDs are unavailable, report unverified instead of inventing IDs. '
+  + 'For inspection or test criteria, report unverified if native tool IDs are unavailable; never invent IDs. '
+  + 'For analysis criteria, tool_call_ids may be omitted because tool execution is not required. '
   + 'Analysis evidence is your claim, not independent verification. Keep full changes in project files.';
+
+export const NATIVE_RESULT_INSTRUCTION = RESULT_INSTRUCTION.replace(
+  'For delegated work, return one JSON object (no markdown fence): ',
+  'For delegated work, finish by calling StructuredOutput once with this object: '
+) + ' The completed tool call is your final handoff. Put all explanations in summary and acceptance evidence; do not print a second answer.';
+
+export function resultSchema(contract, readOnly = false) {
+  const text = maxLength => ({type: 'string', maxLength});
+  const strings = (maxItems, maxLength = 2000) => ({type: 'array', maxItems, items: text(maxLength)});
+  const object = properties => ({type: 'object', additionalProperties: false,
+    required: Object.keys(properties), properties});
+  return object({
+    summary: {...text(10000), minLength: 1},
+    acceptance: {type: 'array', minItems: contract.acceptance.length, maxItems: contract.acceptance.length,
+      items: object({id: {type: 'string', enum: contract.acceptance.map(item => item.id)},
+        status: {type: 'string', enum: ['met', 'unmet', 'blocked', 'unverified']},
+        evidence: text(4000), tool_call_ids: strings(40, 200)})},
+    changed_files: strings(readOnly ? 0 : 40, 400),
+    tests: {type: 'array', maxItems: readOnly ? 0 : 24,
+      items: object({tool_call_id: text(200), command: text(2000),
+        status: {type: 'string', enum: ['passed', 'failed', 'not_run']}})},
+    assumptions: strings(40), unresolved: strings(40),
+  });
+}
+
+export function nativeResultFormat(contract, readOnly = false) {
+  const format = {type: 'json_schema', schema: resultSchema(contract, readOnly), retryCount: 0};
+  // OpenCode 1.18.34 encodes this hook's decoded message through Effect's
+  // OutputFormatJsonSchema class before saving it. Effect 4.0.0-beta.83
+  // recognises this shared class brand across bundles. Keep it non-enumerable
+  // so the wire format contains only the schema's normal fields. The native
+  // encoder still validates those fields; result/evidence checks are separate.
+  const brand = '~effect/Schema/Class/OutputFormatJsonSchema';
+  return Object.defineProperty(format, brand, {value: brand});
+}
 
 export function assessResult(contract, raw, toolParts, sourceIssues = []) {
   const issues = [...sourceIssues];
@@ -63,6 +99,8 @@ export function assessResult(contract, raw, toolParts, sourceIssues = []) {
   const observed = toolParts.filter(p => p.type === 'tool').map(p => ({
     id: p.callID, tool: p.tool, status: p.state?.status,
     command: p.state?.input?.command, exit: p.state?.metadata?.exit,
+    ...(p.state?.status === 'error' && typeof p.state.error === 'string'
+      ? {error: p.state.error.slice(0, 4000), error_truncated: p.state.error.length > 4000} : {}),
   }));
   const commandRun = (id, command, status) => observed.find(t => t.id === id && t.tool === 'bash' &&
     t.status === 'completed' && t.command === command && typeof t.exit === 'number' &&
@@ -92,9 +130,10 @@ export function assessResult(contract, raw, toolParts, sourceIssues = []) {
     const row = matches[0];
     let status = row?.status;
     let basis = 'specialist_claim';
+    const validToolIDs = (criterion.verification.kind === 'analysis' && row?.tool_call_ids === undefined) ||
+      (Array.isArray(row?.tool_call_ids) && row.tool_call_ids.every(id => typeof id === 'string'));
     if (matches.length !== 1 || !['met', 'unmet', 'blocked', 'unverified'].includes(status) ||
-        typeof row?.evidence !== 'string' || !Array.isArray(row?.tool_call_ids) ||
-        row.tool_call_ids.some(id => typeof id !== 'string')) {
+        typeof row?.evidence !== 'string' || !validToolIDs) {
       status = 'unverified'; issues.push('Missing or malformed criterion result: ' + criterion.id);
     } else if (status === 'met') {
       if (!row.evidence.trim()) {
@@ -135,6 +174,7 @@ export function reviewBrief(report) {
     return values.slice(0, count).map((value, i) => project(value, field + '[' + i + ']'));
   };
   if (report.status !== 'ready_for_review' || report.acceptance.some(c => c.status !== 'met')) mark('unresolved_review');
+  if (report.native_final_text_status === 'unverified_commentary') mark('native_commentary_unverified');
   let brief = {
     status: report.status,
     summary_excerpt: clip(report.summary, 1600, 'summary'), summary_shortened: report.summary.length > 1600,
@@ -148,6 +188,7 @@ export function reviewBrief(report) {
     assumptions: list(report.assumptions, 4, 'assumptions', (v, field) => clip(v, 240, field)),
     unresolved: list(report.unresolved, 4, 'unresolved', (v, field) => clip(v, 240, field)),
     issues: list(report.issues, 12, 'issues', (v, field) => clip(v, 240, field)),
+    ...(report.native_final_text_status ? {native_final_text_status: report.native_final_text_status} : {}),
   };
   // Bound the complete preview too; Unicode and several individually small lists can add up.
   if (Buffer.byteLength(JSON.stringify(brief)) > 8000) {

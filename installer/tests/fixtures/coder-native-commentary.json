@@ -1,0 +1,51 @@
+{
+  "contract": {
+    "acceptance": [
+      {
+        "id": "A1",
+        "requirement": "Explain the supplied arithmetic.",
+        "source": {
+          "kind": "derived"
+        },
+        "source_quote": "",
+        "verification": {
+          "command": "",
+          "kind": "inspection"
+        }
+      }
+    ],
+    "assumptions": [],
+    "completed": "",
+    "constraints": "Use the read tool. Do not edit or execute commands.",
+    "evidence": "Project file: coder-acceptance.txt",
+    "facts": [
+      "17 * 20 - 17 = 323."
+    ],
+    "objective": "Read coder-acceptance.txt and explain its arithmetic.",
+    "references": [
+      {
+        "path": "coder-acceptance.txt",
+        "symbol": ""
+      }
+    ],
+    "remaining": "Explain the supplied arithmetic.",
+    "result": "A short explanation and an honest validation statement.",
+    "return_format": "For delegated work, return one JSON object (no markdown fence): {\"summary\":\"...\",\"acceptance\":[{\"id\":\"A1\",\"status\":\"met|unmet|blocked|unverified\",\"evidence\":\"...\",\"tool_call_ids\":[]}],\"changed_files\":[],\"tests\":[{\"tool_call_id\":\"native call ID or empty when not run\",\"command\":\"exact command\",\"status\":\"passed|failed|not_run\"}],\"assumptions\":[],\"unresolved\":[]}. Address every supplied acceptance ID exactly once. Do not rewrite the requirements. Test criteria need actual matching command execution; inspection criteria need actual read/grep/glob calls. If native tool IDs are unavailable, report unverified instead of inventing IDs. Analysis evidence is your claim, not independent verification. Keep full changes in project files.",
+    "unknowns": []
+  },
+  "raw_result": "{\"summary\":\"The file coder-acceptance.txt contains the arithmetic expression 17 * 20 - 17 = 323. This is verified as correct: 17 * 20 = 340, and 340 - 17 = 323.\",\"acceptance\":[{\"id\":\"A1\",\"status\":\"met\",\"evidence\":\"The file coder-acceptance.txt reads: 'Acceptance evidence: 17 * 20 - 17 = 323.' The arithmetic is verified: 17 * 20 = 340, and 340 - 17 = 323.\",\"tool_call_ids\":[\"vRbQ2UIb30HxVR3pt1ynxGdkZW5h78Ra\"]}],\"changed_files\":[],\"tests\":[],\"assumptions\":[],\"unresolved\":[]}",
+  "native_final_text": "The file `coder-acceptance.txt` contains the arithmetic expression:\n\n**17 * 20 - 17 = 323**\n\n**Explanation:**\n1. Multiply 17 by 20: 17 × 20 = 340\n2. Subtract 17 from the result: 340 - 17 = 323\n\nThe arithmetic is correct.\n\n",
+  "native_format_call_id": "PMuxKQ6X0siy0QxC1ULL4UfOp8vVUWbC",
+  "observed_tools": [
+    {
+      "id": "vRbQ2UIb30HxVR3pt1ynxGdkZW5h78Ra",
+      "status": "completed",
+      "tool": "read"
+    },
+    {
+      "id": "PMuxKQ6X0siy0QxC1ULL4UfOp8vVUWbC",
+      "status": "completed",
+      "tool": "StructuredOutput"
+    }
+  ]
+}

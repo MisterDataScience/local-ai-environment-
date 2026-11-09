@@ -70,6 +70,7 @@ class StreamingTests(unittest.TestCase):
             def __iter__(self):
                 yield json.dumps(first).encode()
                 self_test.assertEqual(sink.events.get_nowait(), {'content': 'Hello '})
+                self_test.assertEqual(sink.events.get_nowait(), {'reasoning_content': 'private reasoning'})
                 yield json.dumps(last).encode()
         self_test = self
         with patch.object(token_stream, 'urlopen', return_value=Response()) as opening:

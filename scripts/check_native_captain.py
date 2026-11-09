@@ -52,11 +52,20 @@ class SyntheticGateway(ThreadingHTTPServer):
         self.document_model = document_model
         self.requests = []
 
-    def completion(self, body):
+    def completion(self, body, workflow=None):
         self.requests.append(body)
+        users = '\n'.join(content_text(m.get('content')) for m in body['messages'] if m['role'] == 'user')
+        if workflow == 'compaction' or any(m['role'] == 'user' and content_text(m.get('content')).startswith(
+                'Here is the conversation so far:') for m in body['messages']):
+            return {'role': 'assistant', 'content': 'Completed: READY and DONE delivered. Active: none. Next Move: none.'}
+        if 'Original user request, verbatim:' in users and 'Reply exactly DONE to this new request.' in users:
+            return {'role': 'assistant', 'content': 'DONE'}
+        if 'Reply exactly DONE to this new request.' in users:
+            return {'role': 'assistant', 'content': 'There are no pending next steps. DONE was already delivered.'}
+        if 'Reply exactly READY. This completes the test;' in users:
+            return {'role': 'assistant', 'content': 'READY'}
         if not body.get('tools'):
             return {'role': 'assistant', 'content': 'Local acceptance check'}
-        users = '\n'.join(content_text(m.get('content')) for m in body['messages'] if m['role'] == 'user')
         previous = [m for m in body['messages'] if m['role'] == 'tool']
         if 'Native essay profile probe.' in users or 'Native scaffold profile probe.' in users:
             if not previous:
@@ -136,7 +145,7 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
             if body['model'] not in ('local-ai-captain', self.server.document_model):
                 raise RuntimeError('Native worker/captain used the wrong model')
-            message = self.server.completion(body)
+            message = self.server.completion(body, self.headers.get('X-Local-AI-Workflow'))
             reason = 'tool_calls' if message.get('tool_calls') else 'stop'
             result = {'id': 'chatcmpl-native-ci', 'object': 'chat.completion', 'created': int(time.time()),
                       'model': body['model'], 'usage': {'prompt_tokens': 100, 'completion_tokens': 20, 'total_tokens': 120},
@@ -195,7 +204,7 @@ def check(binary):
                 headers={**(remote_headers if headers is None else headers), 'Content-Type': 'application/json'})
             with opener.open(request, timeout=60) as response:
                 return json.load(response)
-        def native(path, body=None):
+        def native(path, body=None, *, timeout=60):
             return api(path, body)
         def unauthorised(path, body=None, *, auth):
             headers = {k: v for k, v in remote_headers.items() if k != 'Authorization'}
@@ -303,6 +312,11 @@ def check(binary):
                         child_history = native('/session/' + child + '/message') if child else []
                         if not any(m['info'].get('agent') == expected for m in child_history if m['info']['role'] == 'assistant'):
                             raise RuntimeError('Native task created the wrong document agent')
+                from captain_conversation_check import verify_native
+                recovery = verify_native(root, native=native, model_id=config['captain']['model_id'], startup_timeout=0)
+                if recovery['status'] != 'passed':
+                    raise RuntimeError('Native compaction recovery failed: ' + json.dumps(recovery))
+                print('Real OpenCode: completed chat stops and original queued request survives misleading compaction summaries.')
                 if server.failures:
                     raise RuntimeError('Synthetic gateway failures: ' + str(server.failures))
                 print('Real OpenCode: two overlapping workers, native read/note tools, reports and retirement verified.')

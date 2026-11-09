@@ -23,7 +23,7 @@ def function_call(value):
     return {"name": name, "arguments": copy.deepcopy(arguments)}
 
 
-def tools_for_ollama(body):
+def tools_for_ollama(body, *, allow_required=False):
     tools = body.get("tools", [])
     if not isinstance(tools, list) or len(tools) > 128 or len(json.dumps(tools).encode()) > 262144:
         raise ValueError("Invalid or oversized tool definitions")
@@ -39,7 +39,10 @@ def tools_for_ollama(body):
             raise ValueError("Duplicate function definition")
         names.add(name)
     choice = body.get("tool_choice", "auto")
-    if choice not in ("auto", "none", None):
+    if choice == 'required' and allow_required:
+        if not tools:
+            raise ValueError('Required function calls need at least one supplied function')
+    elif choice not in ("auto", "none", None):
         raise ValueError("This native Ollama bridge supports tool_choice auto or none only")
     return copy.deepcopy(tools) if choice != "none" else []
 
@@ -105,6 +108,9 @@ def assistant_for_openai(message, tools):
     if not isinstance(calls, list) or len(calls) > 32:
         raise RuntimeError("Invalid tool calls from Ollama")
     if not calls:
+        if isinstance(message.get('thinking'), str) and message['thinking']:
+            return {'role': 'assistant', 'content': content,
+                    'reasoning_content': message['thinking']}
         return content
     names = {t["function"]["name"] for t in tools}
     output = {"role": "assistant", "content": content, "tool_calls": []}

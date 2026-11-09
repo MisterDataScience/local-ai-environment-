@@ -1,14 +1,138 @@
+import copy
 import tempfile
 import unittest
 import json
 import socket
 import threading
 from pathlib import Path
-from unittest.mock import patch
-from shared_llama import SharedLlama, digest
+from unittest.mock import Mock, patch
+from backend_http import ContextLengthError
+from shared_llama import (SharedLlama, digest, MINICPM_REPOSITORY,
+                          REASONING_PROTOCOL_INSTRUCTION, STRUCTURED_REASONING_INSTRUCTION)
 
 
 class SharedLlamaTests(unittest.TestCase):
+    def test_required_native_result_tool_is_forwarded_and_keeps_inspection_identities(self):
+        result_tool = {'type': 'function', 'function': {'name': 'StructuredOutput',
+            'parameters': {'type': 'object', 'properties': {'summary': {'type': 'string'}},
+                           'required': ['summary'], 'additionalProperties': False}}}
+        body = {'messages': [{'role': 'user', 'content': 'Read the supplied file.'},
+            {'role': 'assistant', 'content': '', 'tool_calls': [{'id': 'read-real', 'type': 'function',
+             'function': {'name': 'read', 'arguments': '{"filePath":"x.txt"}'}}]},
+            {'role': 'tool', 'tool_call_id': 'read-real', 'content': 'Actual file evidence'}],
+            'tools': [result_tool], 'tool_choice': 'required'}
+        response = {'choices': [{'message': {'role': 'assistant', 'content': '', 'reasoning_content': 'Summarise the read.',
+            'tool_calls': [{'id': 'format-real', 'type': 'function', 'function': {
+                'name': 'StructuredOutput', 'arguments': '{"summary":"Read the file."}'}}]}, 'finish_reason': 'tool_calls'}]}
+        with patch('shared_llama.api', return_value=response) as request:
+            result = SharedLlama({}).chat(body, 1024)
+        sent = request.call_args.args[2]
+        self.assertEqual(sent['tool_choice'], 'required')
+        self.assertFalse(sent['parallel_tool_calls'])
+        self.assertEqual(sent['tools'], [result_tool])
+        self.assertEqual(sent['messages'][-1]['tool_call_id'], 'read-real')
+        self.assertEqual(result['tool_calls'][0]['id'], 'format-real')
+        self.assertEqual(result['reasoning_content'], 'Summarise the read.')
+        self.assertEqual(request.call_count, 1)
+
+    def test_minicpm_protocol_is_merged_for_one_request_without_mutating_history(self):
+        backend = SharedLlama({'llama': {'model': {'repository': MINICPM_REPOSITORY}}})
+        backend.running_thinking = True
+        body = {'messages': [{'role': 'developer', 'content': 'Use British English.'},
+                            {'role': 'user', 'content': 'Explain the arithmetic.'}]}
+        history = copy.deepcopy(body['messages'])
+        response = {'choices': [{'message': {'role': 'assistant', 'content': '323',
+                    'reasoning_content': '17 * 20 - 17 = 340 - 17.'}, 'finish_reason': 'stop'}]}
+        with patch('shared_llama.api', return_value=response) as request:
+            result = backend.chat(body, 512)
+        sent = request.call_args.args[2]['messages']
+        self.assertEqual(sent[0], {'role': 'system', 'content': 'Use British English.\n\n' + REASONING_PROTOCOL_INSTRUCTION})
+        self.assertEqual(body['messages'], history)
+        self.assertEqual(result['content'], '323')
+        self.assertEqual(result['reasoning_content'], '17 * 20 - 17 = 340 - 17.')
+        self.assertEqual(request.call_count, 1)
+
+    def test_minicpm_protocol_is_inserted_once_and_is_limited_to_enabled_thinking(self):
+        response = {'choices': [{'message': {'role': 'assistant', 'content': 'Answer'}, 'finish_reason': 'stop'}]}
+        for thinking, repository, system in ((True, MINICPM_REPOSITORY, ''),
+                (True, MINICPM_REPOSITORY, REASONING_PROTOCOL_INSTRUCTION),
+                (False, MINICPM_REPOSITORY, ''), (True, 'another/model', '')):
+            with self.subTest(thinking=thinking, repository=repository, existing=bool(system)):
+                backend = SharedLlama({'llama': {'model': {'repository': repository}}})
+                backend.running_thinking = thinking
+                messages = ([{'role': 'system', 'content': system}] if system else [])
+                messages.append({'role': 'user', 'content': 'Question'})
+                with patch('shared_llama.api', return_value=response) as request:
+                    backend.chat({'messages': messages}, 512)
+                sent = request.call_args.args[2]['messages']
+                if thinking and repository == MINICPM_REPOSITORY:
+                    self.assertEqual(sum(item['role'] == 'system' for item in sent), 1)
+                    self.assertEqual(sent[0]['content'].count(REASONING_PROTOCOL_INSTRUCTION), 1)
+                else:
+                    self.assertEqual(sent, messages)
+
+    def test_minicpm_protocol_preserves_tool_receipts_in_both_transports(self):
+        for streaming in (False, True):
+            with self.subTest(streaming=streaming):
+                backend = SharedLlama({'llama': {'model': {'repository': MINICPM_REPOSITORY}}})
+                backend.running_thinking = True
+                body = {'messages': [{'role': 'user', 'content': 'Read the supplied file.'},
+                    {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'native-call-1',
+                     'type': 'function', 'function': {'name': 'read', 'arguments': '{"filePath":"x.txt"}'}}]},
+                    {'role': 'tool', 'tool_call_id': 'native-call-1', 'content': '17 * 20 - 17 = 323'}]}
+                original = copy.deepcopy(body['messages'])
+                response = {'choices': [{'message': {'role': 'assistant', 'content': '323'}, 'finish_reason': 'stop'}]}
+                if streaming:
+                    body['_stream'] = object()
+                    with patch.object(backend, '_stream_chat', return_value='323') as request:
+                        backend.chat(body, 512)
+                    payload = request.call_args.args[0]
+                else:
+                    with patch('shared_llama.api', return_value=response) as request:
+                        backend.chat(body, 512)
+                    payload = request.call_args.args[2]
+                self.assertEqual(payload['messages'][0]['content'], REASONING_PROTOCOL_INSTRUCTION)
+                self.assertEqual(payload['messages'][2]['tool_calls'][0]['id'], 'native-call-1')
+                self.assertEqual(payload['messages'][3]['tool_call_id'], 'native-call-1')
+                self.assertEqual(body['messages'], original)
+                self.assertEqual(request.call_count, 1)
+
+    def test_reusing_server_with_different_thinking_mode_is_rejected(self):
+        backend = SharedLlama({'max_parallel': 1})
+        backend.process = Mock()
+        backend.process.poll.return_value = None
+        backend.running_slots, backend.running_thinking = 1, True
+        with self.assertRaisesRegex(RuntimeError, 'before changing its thinking mode'):
+            backend.start(16384, thinking=False, parallel=1)
+
+    def test_structured_tool_protocol_keeps_thinking_without_requesting_plain_final_prose(self):
+        for streaming in (False, True):
+            with self.subTest(streaming=streaming):
+                backend = SharedLlama({'llama': {'model': {'repository': MINICPM_REPOSITORY}}})
+                backend.running_thinking = True
+                body = {'messages': [{'role': 'system', 'content': 'Follow the saved contract.'},
+                    {'role': 'user', 'content': 'Inspect the arithmetic.'}], 'tool_choice': 'required',
+                    'tools': [{'type': 'function', 'function': {'name': name, 'parameters': {'type': 'object'}}}
+                              for name in ('read', 'StructuredOutput')]}
+                original = copy.deepcopy(body['messages'])
+                if streaming:
+                    body['_stream'] = object()
+                    with patch.object(backend, '_stream_chat', return_value='323') as request:
+                        backend.chat(body, 512)
+                    payload = request.call_args.args[0]
+                else:
+                    response = {'choices': [{'message': {'role': 'assistant', 'content': '323'}, 'finish_reason': 'stop'}]}
+                    with patch('shared_llama.api', return_value=response) as request:
+                        backend.chat(body, 512)
+                    payload = request.call_args.args[2]
+                self.assertIn(STRUCTURED_REASONING_INSTRUCTION, payload['messages'][0]['content'])
+                self.assertNotIn(REASONING_PROTOCOL_INSTRUCTION, payload['messages'][0]['content'])
+                self.assertTrue(payload['messages'][0]['content'].startswith('Follow the saved contract.'))
+                self.assertEqual(payload['tool_choice'], 'required')
+                self.assertFalse(payload['parallel_tool_calls'])
+                self.assertTrue(backend.running_thinking)
+                self.assertEqual(body['messages'], original)
+
     def test_streaming_preserves_tool_call_usage_and_finish_reason(self):
         class Response:
             status = 200
@@ -31,6 +155,7 @@ class SharedLlamaTests(unittest.TestCase):
 
         def event(value): return ('data: ' + json.dumps(value) + '\n').encode()
         lines = [
+            event({'choices': [{'delta': {'reasoning_content': 'Inspect first.'}}]}),
             event({'choices': [{'delta': {'content': 'Checking '}}]}),
             event({'choices': [{'delta': {'content': 'the file'}}]}),
             event({'choices': [{'delta': {'tool_calls': [{'index': 0, 'id': 'native-1', 'type': 'function',
@@ -47,14 +172,41 @@ class SharedLlamaTests(unittest.TestCase):
         with patch('shared_llama.http.client.HTTPConnection', return_value=connection):
             result = backend.chat(body, 100)
         self.assertTrue(connection.request_body['stream'])
+        self.assertEqual(connection.request_body['stream_options'], {'include_usage': True})
         self.assertEqual(''.join(event['content'] for event in stream.events if 'content' in event), 'Checking the file')
         self.assertEqual(result['tool_calls'][0]['id'], 'native-1')
+        self.assertEqual(result['reasoning_content'], 'Inspect first.')
+        self.assertEqual([event['reasoning_content'] for event in stream.events if 'reasoning_content' in event], ['Inspect first.'])
         self.assertEqual(result['tool_calls'][0]['function']['arguments'], '{"filePath": "x.py"}')
         self.assertEqual(stream.events[-1]['tool_calls'][0]['id'], 'native-1')
         self.assertTrue(body['_streamed'])
         self.assertEqual(body['_usage'], {'prompt_tokens': 17, 'completion_tokens': 6, 'total_tokens': 23})
         self.assertEqual(body['_finish_reason'], 'tool_calls')
         self.assertTrue(connection.closed)
+
+    def test_streaming_reports_explicit_overflow_and_preserves_other_rejections(self):
+        for status, message, expected in [
+            (400, 'request (22391 tokens) exceeds the available context size (16384 tokens)', ContextLengthError),
+            (400, 'invalid tool call history', RuntimeError),
+            (503, 'backend unavailable', RuntimeError),
+        ]:
+            with self.subTest(status=status, message=message):
+                response = Mock(status=status)
+                response.read.return_value = json.dumps({'error': {'message': message}}).encode()
+                connection = Mock(sock=None)
+                connection.getresponse.return_value = response
+                stream = Mock(cancelled=threading.Event())
+                body = {'messages': [{'role': 'user', 'content': 'Inspect files'}], '_stream': stream}
+                with patch('shared_llama.http.client.HTTPConnection', return_value=connection):
+                    with self.assertRaises(expected) as caught:
+                        SharedLlama({}).chat(body, 512)
+                self.assertIs(type(caught.exception), expected)
+                if expected is RuntimeError:
+                    self.assertIn(message, str(caught.exception))
+                response.read.assert_called_once_with(8192)
+                connection.close.assert_called_once()
+                stream.send.assert_not_called()
+                self.assertNotIn('_usage', body)
 
     def test_disconnect_closes_backend_stream_and_joins_reader(self):
         class Response:
@@ -158,6 +310,9 @@ class SharedLlamaTests(unittest.TestCase):
             self.assertEqual(command[command.index('--kv-unified-per-slot') + 1], '8192')
             self.assertEqual(command[command.index('--host') + 1], '127.0.0.1')
             self.assertIn('--no-context-shift', command)
+            self.assertEqual(command[command.index('--reasoning') + 1], 'on')
+            self.assertEqual(command[command.index('--reasoning-format') + 1], 'deepseek')
+            self.assertTrue(json.loads(command[command.index('--chat-template-kwargs') + 1])['enable_thinking'])
             self.assertIn('true', backend.command(8192, thinking=True)[-1])
             model.write_bytes(b'changed weights')
             with self.assertRaisesRegex(RuntimeError, 'artifact changed'):

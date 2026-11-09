@@ -5,7 +5,8 @@ import os
 from pathlib import Path
 import secrets
 import tempfile
-from urllib.request import Request, build_opener, ProxyHandler
+from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
+from urllib.error import HTTPError
 import time
 import logging
 
@@ -127,3 +128,34 @@ def wait_for_agent(root, process, timeout=120):
             last = error
         time.sleep(1)
     raise RuntimeError('Captain UI did not become ready: ' + str(last))
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def ui_status(root, timeout=5):
+    """Check HTML and Basic sign-in without inference, redirects or proxies.
+
+    This does not claim browser rendering or a human sign-in has been tested.
+    """
+    opener = build_opener(ProxyHandler({}), _NoRedirect())
+    try:
+        with opener.open(Request(URL + '/'), timeout=timeout):
+            raise RuntimeError('Captain chat page is accessible without authentication')
+    except HTTPError as error:
+        if error.code != 401 or 'basic' not in error.headers.get('WWW-Authenticate', '').lower():
+            raise RuntimeError('Captain chat page did not request Basic sign-in') from None
+    auth = credentials(root)
+    token = base64.b64encode((auth['username'] + ':' + auth['password']).encode()).decode()
+    request = Request(URL + '/', headers={'Authorization': 'Basic ' + token})
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            content = response.read(2 * 1024 * 1024).lower()
+            if (response.status != 200 or 'text/html' not in response.headers.get('Content-Type', '')
+                    or b'<html' not in content or b'<script' not in content):
+                raise RuntimeError('Captain chat page did not return the web application')
+    except HTTPError:
+        raise RuntimeError('Captain chat page rejected its saved sign-in or redirected') from None
+    return {'captain_chat_page': 'passed', 'captain_sign_in': 'passed'}

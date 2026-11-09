@@ -10,6 +10,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import installer
 
 class ContextAcceptanceTests(unittest.TestCase):
+    def test_32k_schema_probe_passes_real_gateway_envelope_validation(self):
+        from tool_protocol import tools_for_ollama
+        from model_team import PROFILES
+        self.assertLessEqual(max(profile[1] for profile in PROFILES.values()), 32768)
+        calls = []
+        def reject(url, body, **kwargs):
+            # Use the real validator: the old 4x schema fails here before a
+            # backend can return the context error required by acceptance.
+            tools_for_ollama(body)
+            calls.append(body)
+            raise HTTPError(url, 400, 'overflow', {}, io.BytesIO(b'{"error":{"code":"context_length_exceeded"}}'))
+        with patch.object(installer, 'http', side_effect=reject):
+            result = installer.verify_context_rejection('test', 'local-ai-team-document', 32768)
+        self.assertEqual(len(result), 4)
+        description = calls[-1]['tools'][0]['function']['description']
+        self.assertEqual(description.count(' x'), 32768 * 3)
+        self.assertTrue(all(row['status'] == 'passed' for row in result))
+
     def test_upgrade_verifies_candidate_before_preserving_old_app(self):
         for fail_candidate in (False, True):
             with self.subTest(fail_candidate=fail_candidate), tempfile.TemporaryDirectory() as directory:

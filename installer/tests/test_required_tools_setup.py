@@ -44,6 +44,17 @@ class RequiredToolsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'permission mismatch'):
                 required.verify(Mock(poll=lambda: None), env, timeout=1)
 
+    def test_connection_timeout_names_the_failed_server_without_copying_its_error(self):
+        status = {'projectpdf': {'status': 'connected'}, 'projectvision': {'status': 'connected'},
+                  'projectfiles': {'status': 'failed', 'error': 'PRIVATE_CHILD_ENVIRONMENT'}}
+        env = {'OPENCODE_SERVER_PASSWORD': 'temporary', 'OPENCODE_CONFIG_CONTENT': '{}'}
+        with patch.object(required, 'urlopen', return_value=io.BytesIO(json.dumps(status).encode())), \
+             patch.object(required.time, 'monotonic', side_effect=[0, 0, 2]), \
+             patch.object(required.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, 'projectfiles=failed') as raised:
+                required.verify(Mock(poll=lambda: None), env, timeout=1)
+        self.assertNotIn('PRIVATE_CHILD_ENVIRONMENT', str(raised.exception))
+
 
 if __name__ == '__main__':
     unittest.main()

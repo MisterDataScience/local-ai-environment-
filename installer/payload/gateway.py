@@ -4,6 +4,7 @@ import fcntl
 from http.server import ThreadingHTTPServer
 import json
 import logging
+import os
 from pathlib import Path
 import signal
 import threading
@@ -53,7 +54,9 @@ def main():
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         raise SystemExit("Another copy of this gateway is already running.")
-    config = json.loads((ROOT / "config.json").read_text())
+    from feature_state import effective_config
+    config = effective_config(ROOT.parent, json.loads((ROOT / "config.json").read_text()),
+        testing=tuple(filter(None, os.environ.get("LOCAL_AI_ACCEPTANCE_FEATURES", "").split(","))))
     try:
         require_backend_version(api(config.get('ollama_url', 'http://127.0.0.1:11434'), '/api/version').get('version'))
     except Exception:
@@ -95,6 +98,9 @@ def main():
     except KeyboardInterrupt:
         LOG.info("Waiting for queued work before shutdown; do not force-close this window.")
     finally:
+        # Preserve the owned cleanup sequence even after repeated stop requests.
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(signum, signal.SIG_IGN)
         stopping.set()
         cleanup(server.engine, server, media_server, lock_file)
 

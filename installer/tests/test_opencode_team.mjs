@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import LocalTeam from '../opencode-team.mjs';
 
-async function fixture(t) {
+async function fixture(t, capabilities, nativeStructuredResults = false) {
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ instance_id: 'backend', epoch: 0, mode: 'normal' }) });
   t.after(() => { globalThis.fetch = previousFetch; });
@@ -18,7 +18,7 @@ async function fixture(t) {
   const client = { session: {
     get: async () => ({ data: session }), messages: async () => ({ data: messages }),
   }};
-  const options = { ledgerPath, modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code', document: 'doc', essay_document: 'doc', scaffold_document: 'doc' } };
+  const options = { ledgerPath, nativeStructuredResults, ...(capabilities ? {capabilities} : {}), modeToken: 'backend:0:normal', roles: { coordinator: 'coord', analyst: 'analysis', coder: 'code', document: 'doc', essay_document: 'doc', scaffold_document: 'doc' } };
   const hooks = await LocalTeam({ client, directory: root }, options);
   await hooks['chat.message']({ sessionID: 'session1' }, { message: messages[0].info, parts: messages[0].parts });
   function call(id, role = 'analyst', extra = {}, parent = 'user1') {
@@ -40,6 +40,16 @@ async function fixture(t) {
   return { hooks, call, before, after, client, options, messages, session, ledgerPath, directory: root };
 }
 
+test('native evidence exposes actual call identity without changing result metadata', async t => {
+  const f = await fixture(t);
+  for (const tool of ['read', 'glob', 'grep', 'bash']) {
+    const output = {output: 'original evidence', metadata: {exit: 0}};
+    await f.hooks['tool.execute.after']({tool, sessionID: 'child', callID: 'call_123'}, output);
+    assert.equal(output.output, 'Native tool evidence: ' + JSON.stringify({tool, tool_call_id: 'call_123'}) + '\noriginal evidence');
+    assert.deepEqual(output.metadata, {exit: 0});
+  }
+});
+
 test('workflow headers use bounded agent labels without carrying session content', async t => {
   const f = await fixture(t);
   for (const [agent, expected] of [['plan', 'captain'], ['build', 'captain'], ['analyst', 'analyst'],
@@ -50,6 +60,30 @@ test('workflow headers use bounded agent labels without carrying session content
     assert.equal(output.headers['X-Local-AI-Workflow'], expected);
     assert.equal(output.headers.existing, 'retained');
     assert(!JSON.stringify(output).includes('PRIVATE SESSION'));
+  }
+});
+
+test('Plan selects inspection profile from native parent; Build keeps approved coder', async t => {
+  const f = await fixture(t);
+  const plan = f.call('plan-code', 'coder');
+  await f.before(plan);
+  assert.equal(plan[1].args.subagent_type, 'coder-plan');
+  const saved = JSON.parse(await readFile(f.ledgerPath));
+  assert.equal(Object.values(saved.turns)[0].calls[0].role, 'coder');
+  await f.after(plan);
+  const build = f.call('build-code', 'coder', {retry_failure: 'Need an approved edit'});
+  f.messages.at(-1).info.agent = 'build';
+  await f.before(build);
+  assert.equal(build[1].args.subagent_type, 'coder');
+  await f.hooks['chat.params']({agent: 'coder-plan', model: {providerID: 'local-ai-gateway', id: 'code'}});
+  await assert.rejects(f.hooks['chat.params']({agent: 'coder-plan', model: {providerID: 'cloud', id: 'code'}}), /model changed/);
+});
+
+test('inspection profile denies effectful tools even under a Build parent', async t => {
+  const f = await coderFixture(t);
+  await f.use('read', 'coder-plan');
+  for (const tool of ['bash', 'edit', 'write', 'apply_patch']) {
+    await assert.rejects(f.use(tool, 'coder-plan'), /read-only/);
   }
 });
 
@@ -122,6 +156,234 @@ test('compaction continuation does not reset budget', async t => {
   await assert.rejects(f.before(f.call('four', 'coder', {}, 'replay')), /two specialist attempts/);
 });
 
+async function compactResume(f, overflow = false) {
+  const output = {enabled: true};
+  await f.hooks['experimental.compaction.autocontinue']({sessionID: 'session1', overflow}, output);
+  return output.enabled;
+}
+
+function assistantState(f, id, finish, parts = [], extra = {}) {
+  f.messages.push({info: {id, role: 'assistant', agent: 'plan', parentID: 'user1', finish, ...extra}, parts});
+}
+
+test('completed conversational reply stays finished through repeated compaction', async t => {
+  const f = await fixture(t);
+  assistantState(f, 'answer', 'stop', [{type: 'text', text: 'Here are five suggestions.'}]);
+  for (let i = 0; i < 3; i++) {
+    assistantState(f, 'summary-' + i, 'stop', [{type: 'text', text: 'Objective: suggestions. Next Move: none.'}],
+      {agent: 'compaction', summary: true});
+    f.messages.push({info: {role: 'user', id: 'synthetic-' + i},
+      parts: [{type: 'text', synthetic: true, metadata: {compaction_continue: true}, text: 'Continue if you have next steps'}]});
+    assert.equal(await compactResume(f), false);
+  }
+  const ledger = JSON.parse(await readFile(f.ledgerPath));
+  assert.equal(Object.keys(ledger.turns).length, 1);
+  assert.equal(Object.values(ledger.turns)[0].compaction_checkpoint, undefined);
+});
+
+test('unfinished tool work resumes once per actual progress checkpoint', async t => {
+  const f = await fixture(t);
+  assistantState(f, 'read-1', 'tool-calls', [{type: 'tool', callID: 'r1', tool: 'read', state: {status: 'completed'}}]);
+  assert.equal(await compactResume(f), true);
+  assert.equal(await compactResume(f), false);
+  // A new summary is maintenance, not progress on the user's objective.
+  assistantState(f, 'summary', 'stop', [{type: 'text', text: 'Still investigating.'}], {agent: 'compaction', summary: true});
+  assert.equal(await compactResume(f), false);
+  assistantState(f, 'read-2', 'tool-calls', [{type: 'tool', callID: 'r2', tool: 'read', state: {status: 'completed'}}]);
+  assert.equal(await compactResume(f), true);
+  assistantState(f, 'done', 'stop', [{type: 'text', text: 'The requested result.'}]);
+  assert.equal(await compactResume(f), false);
+});
+
+test('new genuine user input can continue after an earlier completed answer', async t => {
+  const f = await fixture(t);
+  assistantState(f, 'done', 'stop', [{type: 'text', text: 'Finished.'}]);
+  assert.equal(await compactResume(f), false);
+  const user = {info: {id: 'user2', role: 'user'}, parts: [{type: 'text', text: 'Please expand on the result.'}]};
+  f.messages.push(user);
+  await f.hooks['chat.message']({sessionID: 'session1'}, {message: user.info, parts: user.parts});
+  assert.equal(await compactResume(f), true); // Compaction before answering the real new request.
+  assert.equal(await compactResume(f), false);
+});
+
+test('synthetic input and plain native replay do not create continuation authority', async t => {
+  const f = await fixture(t);
+  assistantState(f, 'done', 'stop', [{type: 'text', text: 'Finished.'}]);
+  for (const [id, synthetic] of [['auto', true], ['replay', false]]) {
+    f.messages.push({info: {id, role: 'user'}, parts: [{type: 'text', text: 'Task', synthetic}]});
+    assert.equal(await compactResume(f, true), false);
+  }
+});
+
+test('pending tools, terminal errors and missing native identity never auto resume', async t => {
+  for (const state of ['pending', 'running', 'failed-request']) {
+    const f = await fixture(t);
+    assistantState(f, 'unfinished', 'tool-calls', state === 'failed-request' ? []
+      : [{type: 'tool', callID: 'read', state: {status: state}}],
+      state === 'failed-request' ? {error: {name: 'APIError'}} : {});
+    assert.equal(await compactResume(f, true), false);
+  }
+  const f = await fixture(t);
+  f.client.session.get = async () => ({error: 'unavailable'});
+  const output = {enabled: true};
+  await assert.rejects(f.hooks['experimental.compaction.autocontinue']({sessionID: 'session1'}, output), /identity/);
+  assert.equal(output.enabled, false);
+});
+
+test('overflow before a reply resumes once; a completed answer stays terminal on overflow', async t => {
+  const f = await fixture(t);
+  assistantState(f, 'request', undefined);
+  assert.equal(await compactResume(f, true), true);
+  assert.equal(await compactResume(f, true), false);
+  assistantState(f, 'finished', 'stop', [{type: 'text', text: 'Answer.'}]);
+  assert.equal(await compactResume(f, true), false);
+});
+
+test('worker compaction preserves unfinished work but never repeats a completed answer', async t => {
+  const f = await fixture(t);
+  f.session.parentID = 'parent-session';
+  assistantState(f, 'worker-read', 'tool-calls', [{type: 'tool', callID: 'r', state: {status: 'completed'}}]);
+  assert.equal(await compactResume(f), true);
+  assert.equal(await compactResume(f), false);
+  assistantState(f, 'worker-answer', 'stop', [{type: 'text', text: 'Complete.'}]);
+  assert.equal(await compactResume(f), false);
+});
+
+test('structured specialist final is terminal even when provider finishes with tool calls', async t => {
+  const f = await fixture(t);
+  f.session.parentID = 'parent-session';
+  assistantState(f, 'structured', 'tool-calls', [{type: 'tool', callID: 'result',
+    tool: 'StructuredOutput', state: {status: 'completed'}}], {structured: {summary: 'Complete'}});
+  assert.equal(await compactResume(f), false);
+});
+
+test('concurrent compaction cannot issue two resumes or reset the existing attempt budget', async t => {
+  const f = await fixture(t);
+  const call = f.call('first');
+  await f.before(call); await f.after(call);
+  f.messages.at(-1).parts[0].state.status = 'completed';
+  f.messages.at(-1).info.finish = 'tool-calls';
+  const results = await Promise.all([compactResume(f), compactResume(f)]);
+  assert.deepEqual(results.sort(), [false, true]);
+  const reconnected = await LocalTeam({client: f.client, directory: f.directory}, f.options);
+  const output = {enabled: true};
+  await reconnected['experimental.compaction.autocontinue']({sessionID: 'session1'}, output);
+  assert.equal(output.enabled, false);
+  const turn = Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0];
+  assert.equal(turn.calls.length, 1);
+  assert.equal(turn.calls[0].id, 'first');
+});
+
+test('compaction keeps upstream prompt and adds provenance for synthetic input', async t => {
+  const f = await fixture(t);
+  const output = {context: ['Existing context'], prompt: undefined};
+  await f.hooks['experimental.session.compacting']({sessionID: 'session1'}, output);
+  assert.equal(output.prompt, undefined); // Upstream still includes the previous summary.
+  assert.equal(output.context[0], 'Existing context');
+  assert(output.context[1].includes('not requested by the user'));
+  assert(output.context[1].includes('Completed conversational answers have no next action'));
+});
+
+test('outbound maintenance input is labelled without changing genuine user text or stored parts', async t => {
+  const f = await fixture(t);
+  const text = 'Continue if you have next steps';
+  const genuine = {info: {id: 'genuine', role: 'user'}, parts: [{type: 'text', text}]};
+  const synthetic = {info: {id: 'synthetic', role: 'user'},
+    parts: [{type: 'text', text, synthetic: true, metadata: {compaction_continue: true}}]};
+  const unmarked = {info: {id: 'unmarked', role: 'user'}, parts: [{type: 'text', text, synthetic: true}]};
+  const output = {messages: [genuine, synthetic, unmarked]};
+  await f.hooks['experimental.chat.messages.transform']({}, output);
+  assert.equal(output.messages[0], genuine);
+  assert.equal(output.messages[0].parts[0].text, text);
+  assert.equal(output.messages[2], unmarked);
+  assert.equal(synthetic.parts[0].text, text);
+  assert.equal(output.messages[1].parts[0].text, '[OpenCode maintenance; not a new user request]\n' + text);
+  await f.hooks['experimental.chat.messages.transform']({}, output);
+  assert.equal(output.messages[1].parts[0].text, '[OpenCode maintenance; not a new user request]\n' + text);
+});
+
+test('queued request is restored verbatim despite a summary claiming its requested output was delivered', async t => {
+  const f = await fixture(t);
+  assistantState(f, 'first-answer', 'stop', [{type: 'text', text: 'READY'}]);
+  const request = 'Reply exactly DONE to this new request. Do not use tools or include maintenance summaries.';
+  const user = {info: {id: 'queued-user', role: 'user', sessionID: 'session1'}, parts: [{type: 'text', text: request}]};
+  f.messages.push(user);
+  await f.hooks['chat.message']({sessionID: 'session1'}, {message: user.info, parts: user.parts});
+  assistantState(f, 'bad-summary', 'stop', [{type: 'text', text: 'The previous interaction completed with DONE. No pending next steps.'}],
+    {agent: 'compaction', summary: true});
+  assert.equal(await compactResume(f), true);
+  const followup = {info: {id: 'maintenance', role: 'user', sessionID: 'session1'},
+    parts: [{type: 'text', text: 'Continue if you have next steps', synthetic: true, metadata: {compaction_continue: true}}]};
+  f.messages.push(followup);
+  // Native inference may already have recorded its empty assistant placeholder.
+  assistantState(f, 'placeholder', undefined);
+  const output = {messages: [f.messages.at(-3), followup]};
+  await f.hooks['experimental.chat.messages.transform']({}, output);
+  const restored = output.messages[1].parts[0].text;
+  assert(restored.includes('remains unanswered'));
+  assert(restored.includes('Original user request, verbatim:\n' + JSON.stringify(request)));
+  assert(restored.includes('not evidence of a delivered answer'));
+  assert.equal(followup.parts[0].text, 'Continue if you have next steps');
+  const ledger = JSON.parse(await readFile(f.ledgerPath));
+  const turn = Object.values(ledger.turns).find(turn => turn.compaction_resume);
+  assert.equal(turn.compaction_resume.userID, 'queued-user');
+  assert.equal(Object.keys(ledger.turns).length, 2);
+  assert.equal(turn.calls.length, 0);
+  assert(!JSON.stringify(ledger).includes(request)); // Store references, not copied user text.
+});
+
+test('a completed native reply or a newer genuine user request invalidates a stale resume anchor', async t => {
+  for (const newer of ['answer', 'user']) {
+    const f = await fixture(t);
+    assert.equal(await compactResume(f), true);
+    const followup = {info: {id: 'maintenance', role: 'user', sessionID: 'session1'},
+      parts: [{type: 'text', text: 'Continue if you have next steps', synthetic: true, metadata: {compaction_continue: true}}]};
+    f.messages.push(followup);
+    if (newer === 'answer') assistantState(f, 'complete', 'stop', [{type: 'text', text: 'Finished.'}]);
+    else {
+      const user = {info: {id: 'new-real', role: 'user'}, parts: [{type: 'text', text: 'Different task'}]};
+      f.messages.push(user);
+      await f.hooks['chat.message']({sessionID: 'session1'}, {message: user.info, parts: user.parts});
+    }
+    const output = {messages: [followup]};
+    await f.hooks['experimental.chat.messages.transform']({}, output);
+    assert.equal(output.messages[0].parts[0].text, '[OpenCode maintenance; not a new user request]\nContinue if you have next steps');
+  }
+});
+
+test('partial tool work resumes with its original objective and unchanged authority', async t => {
+  const f = await fixture(t);
+  assistantState(f, 'read', 'tool-calls', [{type: 'tool', callID: 'read-id', state: {status: 'completed'}}]);
+  assert.equal(await compactResume(f), true);
+  const followup = {info: {id: 'maintenance', role: 'user', sessionID: 'session1'},
+    parts: [{type: 'text', text: 'Continue', synthetic: true, metadata: {compaction_continue: true}}]};
+  f.messages.push(followup);
+  const output = {messages: [followup]};
+  await f.hooks['experimental.chat.messages.transform']({}, output);
+  assert(output.messages[0].parts[0].text.includes('remains unfinished'));
+  assert(output.messages[0].parts[0].text.endsWith(JSON.stringify('Task')));
+  assert.equal(await compactResume(f), false); // Replaying the objective earns no new checkpoint.
+});
+
+test('oversized original request blocks literal replay without truncation or new budget', async t => {
+  const f = await fixture(t);
+  f.messages[0].parts[0].text = 'x'.repeat(12001);
+  await assert.rejects(compactResume(f), /12000-character resume bound/);
+  const turn = Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0];
+  assert.equal(turn.compaction_resume, undefined);
+  assert.equal(turn.compaction_checkpoint, undefined);
+  assert.equal(turn.calls.length, 0);
+});
+
+test('compaction is given the native fact that a queued request has no assistant answer', async t => {
+  const f = await fixture(t);
+  const output = {context: [], prompt: undefined};
+  await f.hooks['experimental.session.compacting']({sessionID: 'session1'}, output);
+  assert(output.context.at(-1).includes('unanswered: there is no ordinary assistant reply after it'));
+  assert(output.context.at(-1).includes('Request text is not completion evidence'));
+  assert.equal(output.prompt, undefined);
+});
+
 test('nested delegation, child tools and implicit attachments are blocked', async t => {
   const f = await fixture(t); f.session.parentID = 'parent';
   await assert.rejects(f.before(f.call('one')), /cannot use tools/);
@@ -151,7 +413,7 @@ test('configuration enables only named specialists and rejects role model change
   assert.equal(config.tools.task, true);
   assert.equal(config.tools.local_video, false);
   assert.equal(config.agent.plan.permission.local_video, 'deny');
-  assert.deepEqual(config.agent.plan.permission.task, { '*': 'deny', analyst: 'allow', coder: 'allow', document: 'allow', essay_document: 'allow', scaffold_document: 'allow' });
+  assert.deepEqual(config.agent.plan.permission.task, { '*': 'deny', analyst: 'allow', coder: 'allow', 'coder-plan': 'allow', document: 'allow', essay_document: 'allow', scaffold_document: 'allow' });
   await f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'local-ai-gateway', id: 'code' } });
   await assert.rejects(f.hooks['chat.params']({ agent: 'coder', model: { providerID: 'cloud', id: 'code' } }), /model changed/);
 });
@@ -201,9 +463,10 @@ test('mode changes, gateway restarts and unavailable status block delegation', a
   assert.equal(Object.values(JSON.parse(await readFile(f.ledgerPath)).turns)[0].calls.length, 0);
 });
 
-async function coderFixture(t, parentAgent = 'build') {
-  const f = await fixture(t);
-  const handoff = f.call('delegate', 'coder');
+async function coderFixture(t, parentAgent = 'build', nativeStructuredResults = false, verification = 'analysis') {
+  const f = await fixture(t, undefined, nativeStructuredResults);
+  const handoff = f.call('delegate', 'coder', {acceptance: [{id: 'A1', requirement: 'Task',
+    source_quote: 'Task', verification: {kind: verification, command: ''}}]});
   f.messages.at(-1).info.agent = parentAgent;
   await f.before(handoff);
   f.messages.at(-1).parts[0].state.metadata = { sessionId: 'child' };
@@ -247,6 +510,144 @@ test('native child return produces a complete source-bound review artifact', asy
   assert.equal(report.raw_result, raw);
   assert.equal(report.acceptance[0].source.message_id, 'user1');
   assert.equal(report.acceptance[0].requirement, 'Task');
+});
+
+test('native coder format is bound to the reserved profile and acceptance IDs', async t => {
+  const f = await coderFixture(t, 'plan', true);
+  const output = {message: {agent: 'coder-plan'}, parts: [{type: 'text', text: 'Bound brief'}]};
+  await f.hooks['chat.message']({sessionID: 'child', agent: 'coder-plan'}, output);
+  assert.equal(output.message.format.type, 'json_schema');
+  assert.deepEqual(output.message.format.schema.properties.acceptance.items.properties.id.enum, ['A1']);
+  assert.equal(output.message.format.schema.properties.tests.maxItems, 0);
+  assert.equal(output.message.format.schema.properties.changed_files.maxItems, 0);
+  assert.equal(output.message.format.schema.additionalProperties, false);
+  f.messages.at(-1).parts[0].state.metadata.sessionId = 'another-child';
+  await assert.rejects(f.hooks['chat.message']({sessionID: 'child', agent: 'coder-plan'},
+    {message: {}, parts: [{type: 'text', text: 'Unbound child'}]}), /active native task child/);
+  f.messages.at(-1).parts[0].state.metadata.sessionId = 'child';
+  await assert.rejects(f.hooks['chat.message']({sessionID: 'child', agent: 'coder'},
+    {message: {}, parts: [{type: 'text', text: 'Wrong profile'}]}), /reserved execution profile/);
+  const analyst = {message: {}, parts: [{type: 'text', text: 'Analysis'}]};
+  await f.hooks['chat.message']({sessionID: 'child', agent: 'analyst'}, analyst);
+  assert.equal(analyst.message.format, undefined);
+});
+
+test('native coder contract requests the formatter while text profiles keep their JSON contract', async t => {
+  for (const native of [false, true]) {
+    const f = await coderFixture(t, 'plan', native, 'inspection');
+    const ledger = JSON.parse(await readFile(f.ledgerPath));
+    const call = Object.values(ledger.turns)[0].calls[0];
+    const contract = JSON.parse(await readFile(call.contract_file));
+    if (native) {
+      assert(contract.return_format.includes('finish by calling StructuredOutput once'));
+      assert(!contract.return_format.includes('return one JSON object (no markdown fence)'));
+    } else assert(contract.return_format.startsWith('For delegated work, return one JSON object'));
+  }
+});
+
+test('native structured final owns result data and requires real submissions and evidence', async t => {
+  for (const fault of [null, 'same-json', 'reordered-json', 'conflicting-json', 'fenced-json', 'multiple-json',
+    'same-json-missing-format', 'same-json-mismatched-format', 'same-json-cutoff', 'same-json-repeated-submission',
+    'prose-missing-format', 'prose-mismatched-format', 'prose-forged-read', 'prose-failed-read', 'prose-unrun-test',
+    'missing-format', 'mismatched-format', 'extra-prose', 'forged-read', 'object-acceptance']) {
+    await t.test(String(fault), async t => {
+      const f = await coderFixture(t, 'plan', true, 'inspection');
+      const result = {summary: 'Reviewed', acceptance: [{id: 'A1', status: 'met',
+        evidence: 'Read the supplied file', tool_call_ids: [fault?.includes('forged-read') ? 'fake' : 'read-real']}],
+        tests: [], changed_files: [], assumptions: [], unresolved: []};
+      if (fault === 'prose-unrun-test') result.tests = [{tool_call_id: 'never-run', command: 'npm test', status: 'passed'}];
+      if (fault === 'object-acceptance') result.acceptance = result.acceptance[0];
+      f.childMessages.push({info: {id: 'inspect', role: 'assistant', agent: 'coder-plan'},
+        parts: [{type: 'tool', tool: 'read', callID: 'read-real',
+          state: {status: fault === 'prose-failed-read' ? 'error' : 'completed'}}]});
+      const missing = ['missing-format', 'same-json-missing-format', 'prose-missing-format'].includes(fault);
+      const submitted = ['mismatched-format', 'same-json-mismatched-format', 'prose-mismatched-format'].includes(fault) ? {...result, summary: 'Different submission'} : result;
+      const printed = fault?.startsWith('same-json') ? JSON.stringify(result, null, 2) + '\n\n' :
+        fault === 'reordered-json' ? JSON.stringify(Object.fromEntries(Object.entries(result).reverse())) :
+        fault === 'conflicting-json' ? JSON.stringify({...result, summary: 'Different final text'}) :
+        fault === 'fenced-json' ? '```json\n' + JSON.stringify(result) + '\n```' :
+        fault === 'multiple-json' ? JSON.stringify(result) + '\n' + JSON.stringify(result) :
+        fault === 'extra-prose' || fault?.startsWith('prose-') ? 'Tests passed without running.' : '';
+      f.childMessages.push({info: {id: 'final', role: 'assistant', finish: fault === 'same-json-cutoff' ? 'length' : 'tool-calls',
+        ...(missing ? {} : {structured: result})}, parts: [
+        ...(printed ? [{type: 'text', text: printed}] : []),
+        ...(missing ? [] : [{type: 'tool', tool: 'StructuredOutput', callID: 'format-real',
+          state: {status: 'completed', input: submitted}}]),
+        ...(fault === 'same-json-repeated-submission' ? [{type: 'tool', tool: 'StructuredOutput', callID: 'second-format',
+          state: {status: 'completed', input: submitted}}] : []),
+      ]});
+      const output = {output: 'Native wrapper', metadata: {sessionId: 'child'}};
+      await f.hooks['tool.execute.after']({tool: 'task', sessionID: 'session1', callID: 'delegate'}, output);
+      const brief = JSON.parse(output.output), report = JSON.parse(await readFile(brief.full_report));
+      const commentary = ['fenced-json', 'multiple-json', 'extra-prose'].includes(fault) || fault?.startsWith('prose-');
+      const valid = !fault || ['same-json', 'reordered-json', 'fenced-json', 'multiple-json', 'extra-prose'].includes(fault);
+      assert.equal(brief.status, valid ? 'ready_for_review' : 'needs_attention');
+      assert.equal(report.result_transport, 'native_structured_output');
+      if (valid) {
+        assert.equal(report.native_format_call_id, 'format-real');
+        assert.equal(report.acceptance[0].basis, 'native_inspection_recorded');
+      }
+      if (fault === 'extra-prose') assert.equal(report.native_final_text, 'Tests passed without running.');
+      if (printed) assert.equal(report.native_final_text, printed);
+      if (commentary) {
+        assert.equal(report.native_final_text_status, 'unverified_commentary');
+        assert.equal(brief.full_report_required, true);
+        assert(brief.report_read_reasons.includes('native_commentary_unverified'));
+        assert(!JSON.stringify(brief).includes('Tests passed without running.'));
+      }
+      if (fault === 'extra-prose') assert.deepEqual(report.tests, []);
+      if (fault === 'prose-missing-format') assert.equal(report.raw_result, '', 'Prose must never substitute for a native result');
+    });
+  }
+});
+
+test('the exact rejected native JSON copy retains its verified read evidence', async t => {
+  const saved = JSON.parse(await readFile(new URL('./fixtures/coder-matching-final-json.json', import.meta.url)));
+  const result = JSON.parse(saved.raw_result);
+  assert.deepEqual(JSON.parse(saved.native_final_text), result);
+  const f = await coderFixture(t, 'plan', true, 'inspection');
+  const read = saved.observed_tools.find(record => record.tool === 'read');
+  f.childMessages.push({info: {id: 'inspection', role: 'assistant', agent: 'coder-plan'}, parts: [
+    {type: 'tool', tool: 'read', callID: read.id, state: {status: read.status,
+      input: {filePath: 'coder-acceptance.txt'}, output: '17 * 20 - 17 = 323.'}}]});
+  f.childMessages.push({info: {id: 'final', role: 'assistant', agent: 'coder-plan', finish: 'tool-calls', structured: result},
+    parts: [{type: 'text', text: saved.native_final_text},
+      {type: 'tool', tool: 'StructuredOutput', callID: saved.native_format_call_id,
+        state: {status: 'completed', input: result}}]});
+  const output = {output: 'Native wrapper', metadata: {sessionId: 'child'}};
+  await f.hooks['tool.execute.after']({tool: 'task', sessionID: 'session1', callID: 'delegate'}, output);
+  const report = JSON.parse(await readFile(JSON.parse(output.output).full_report));
+  assert.equal(report.status, 'ready_for_review');
+  assert.deepEqual(report.issues, []);
+  assert.equal(report.acceptance[0].basis, 'native_inspection_recorded');
+  assert.equal(report.native_format_call_id, saved.native_format_call_id);
+  assert.equal(report.native_final_text, saved.native_final_text);
+  assert.deepEqual(JSON.parse(report.raw_result), result);
+});
+
+test('the exact native explanation is retained for review without changing the structured result', async t => {
+  const saved = JSON.parse(await readFile(new URL('./fixtures/coder-native-commentary.json', import.meta.url)));
+  const result = JSON.parse(saved.raw_result);
+  const f = await coderFixture(t, 'plan', true, 'inspection');
+  const read = saved.observed_tools.find(record => record.tool === 'read');
+  f.childMessages.push({info: {id: 'inspection', role: 'assistant', agent: 'coder-plan'}, parts: [
+    {type: 'tool', tool: 'read', callID: read.id, state: {status: read.status}}]});
+  f.childMessages.push({info: {id: 'final', role: 'assistant', agent: 'coder-plan', finish: 'tool-calls', structured: result},
+    parts: [{type: 'text', text: saved.native_final_text},
+      {type: 'tool', tool: 'StructuredOutput', callID: saved.native_format_call_id,
+        state: {status: 'completed', input: result}}]});
+  const output = {output: 'Native wrapper', metadata: {sessionId: 'child'}};
+  await f.hooks['tool.execute.after']({tool: 'task', sessionID: 'session1', callID: 'delegate'}, output);
+  const brief = JSON.parse(output.output), report = JSON.parse(await readFile(brief.full_report));
+  assert.equal(report.status, 'ready_for_review');
+  assert.deepEqual(report.issues, []);
+  assert.deepEqual(JSON.parse(report.raw_result), result);
+  assert.equal(report.native_final_text, saved.native_final_text);
+  assert.equal(report.native_final_text_status, 'unverified_commentary');
+  assert.equal(report.acceptance[0].basis, 'native_inspection_recorded');
+  assert.equal(brief.full_report_required, true);
+  assert(brief.report_read_reasons.includes('native_commentary_unverified'));
+  assert(!JSON.stringify(brief).includes(saved.native_final_text));
 });
 
 test('Plan coder can inspect but cannot mutate through edit write patch or shell', async t => {
@@ -516,4 +917,17 @@ test('Office cannot bypass essay workflow restrictions', async t => {
     {type:'tool',callID:'essay-office',state:{status:'running'}}]});
   await assert.rejects(f.before([{tool:'aioffice_office_edit',sessionID:'session1',callID:'essay-office'},
     {args:{file:'essay.docx',ops:[]}}]), /separate request/);
+});
+
+
+test('unaccepted media and speech have no schemas or callable permissions', async t => {
+  const f = await fixture(t, {media: false, speech: false});
+  assert.deepEqual(Object.keys(f.hooks.tool), []);
+  const config = {tools: {}, agent: {plan: {permission: {}}, build: {permission: {}}}};
+  await f.hooks.config(config);
+  for (const name of ['local_image', 'local_video', 'local_speech']) {
+    assert.equal(config.tools[name], false);
+    assert.equal(config.agent.plan.permission[name], 'deny');
+    assert.equal(config.agent.build.permission[name], 'deny');
+  }
 });

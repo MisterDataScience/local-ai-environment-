@@ -72,10 +72,6 @@ def transfer_vault(config, root, project_id, name, direction):
 def _transfer_vault(config, root, project_id, name, direction):
     root = Path(root).resolve(strict=True)
     project = project_path(root, project_id)
-    if (not isinstance(project_id, str) or len(project_id) != 32 or
-        any(x not in '0123456789abcdef' for x in project_id) or
-        not project.is_dir() or project.is_symlink()):
-        raise ValueError("Unknown project session")
     if direction not in {'vault-import', 'vault-export'}:
         raise ValueError("Expected vault-import or vault-export")
     if direction == 'vault-import':

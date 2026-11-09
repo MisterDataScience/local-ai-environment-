@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'payload'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from model_team import upgrade_team, team_roles, PROFILES, QWEN4, CODER, REGISTRY_DIGESTS
 from text_models import upgrade_text_configuration, configured_text_models, output_ceiling
 from resource_modes import allowed
@@ -21,6 +22,32 @@ def config():
 
 
 class TeamTests(unittest.TestCase):
+    def test_native_shared_coder_enables_only_the_host_result_formatter(self):
+        from captain_config import upgrade
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); (root / 'control').mkdir()
+            for name in ('opencode-team.mjs', 'captain.mjs', 'essay-edit-prompt.txt', 'reverse-scaffold-prompt.txt'):
+                (root / 'control' / name).write_text('fixture')
+            cfg = upgrade(config())
+            cfg['captain'].update(provider='llama', single_model=True)
+            cfg['text_models'][cfg['captain']['model_id']]['backend'] = 'llama'
+            settings = work_agent.configuration(cfg, cfg['text_models'], root=root)
+            self.assertTrue(settings['plugin'][0][1]['nativeStructuredResults'])
+            for role in ('coder', 'coder-plan'):
+                self.assertEqual(settings['agent'][role]['permission']['StructuredOutput'], 'allow')
+                self.assertIn('calling StructuredOutput once', settings['agent'][role]['prompt'])
+                self.assertNotIn('entire delegated reply must be one JSON object', settings['agent'][role]['prompt'])
+                self.assertNotIn('Return exactly one JSON object', settings['agent'][role]['prompt'])
+            self.assertEqual(settings['agent']['coder-plan']['permission']['*'], 'deny')
+            self.assertNotIn('StructuredOutput', settings['agent']['analyst']['permission'])
+            cfg['captain']['provider'] = 'ollama'
+            cfg['text_models'][cfg['captain']['model_id']]['backend'] = 'ollama'
+            settings = work_agent.configuration(cfg, cfg['text_models'], root=root)
+            self.assertFalse(settings['plugin'][0][1]['nativeStructuredResults'])
+            self.assertNotIn('StructuredOutput', settings['agent']['coder']['permission'])
+            self.assertIn('entire delegated reply must be one JSON object', settings['agent']['coder']['prompt'])
+            self.assertIn('Return exactly one JSON object', settings['agent']['coder-plan']['prompt'])
+
     def test_stock_upgrade_and_custom_preservation(self):
         original = upgrade_text_configuration({'api_key': 'secret', 'vault': {'enabled': False}})
         old = copy.deepcopy(original)
@@ -82,7 +109,18 @@ class TeamTests(unittest.TestCase):
             self.assertEqual(settings['agent']['build']['permission']['task'], 'deny')
             self.assertFalse(settings['tools']['task'])
             self.assertEqual(settings['agent']['analyst']['permission'], {'*': 'deny'})
+            for role in ('analyst', 'document', 'essay_document', 'scaffold_document'):
+                agent = settings['agent'][role]
+                self.assertEqual(agent['steps'], 2)
+                self.assertLess(1, agent['steps'])  # First turn must avoid MAX_STEPS_PROMPT.
+                self.assertEqual(agent['permission'], {'*': 'deny'})
             self.assertEqual(settings['agent']['coder']['steps'], 12)
+            plan_coder = settings['agent']['coder-plan']
+            self.assertEqual(plan_coder['mode'], 'subagent')
+            self.assertTrue(plan_coder['hidden'])
+            self.assertEqual(plan_coder['model'], settings['agent']['coder']['model'])
+            self.assertEqual(plan_coder['permission'], {'*': 'deny',
+                'read': {'*': 'allow', '*.env': 'deny', '*.env.*': 'deny'}, 'glob': 'allow', 'grep': 'allow'})
             self.assertEqual(settings['agent']['coder']['permission']['edit'], 'ask')
             self.assertEqual(settings['agent']['coder']['permission']['bash'], 'ask')
             self.assertEqual(settings['agent']['coder']['permission']['task'], 'deny')
@@ -151,23 +189,42 @@ class TeamTests(unittest.TestCase):
         response.__exit__ = Mock(return_value=False)
         agents.extend({'name': name, 'permission': [{'permission': '*', 'pattern': '*', 'action': 'deny'}]}
                       for name in ('document', 'essay_document', 'scaffold_document'))
+        agents.append({'name': 'coder-plan', 'permission': [
+            {'permission': '*', 'pattern': '*', 'action': 'deny'},
+            *[{'permission': name, 'pattern': '*', 'action': 'allow'} for name in ('read', 'glob', 'grep')],
+            {'permission': 'read', 'pattern': '*.env', 'action': 'deny'},
+            {'permission': 'read', 'pattern': '*.env.*', 'action': 'deny'}]})
         response.read.return_value = json.dumps(agents).encode()
         with patch.object(team_setup, 'urlopen', return_value=response):
-            with self.assertRaisesRegex(RuntimeError, 'policy did not load'):
+            from turnkey_install import ReadinessError
+            with self.assertRaisesRegex(ReadinessError, 'policy did not load'):
                 team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
             for agent in agents[2:4]:
                 agent['permission'].extend({'permission': 'task', 'pattern': r, 'action': 'allow'}
-                                           for r in ('analyst', 'coder', 'document', 'essay_document', 'scaffold_document'))
+                                           for r in ('analyst', 'coder', 'coder-plan', 'document', 'essay_document', 'scaffold_document'))
                 agent['permission'].extend({'permission': r, 'pattern': '*', 'action': 'ask'} for r in ('local_image', 'local_video', 'local_speech'))
             response.read.return_value = json.dumps(agents).encode()
             team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
+            # Native OpenCode appends plugin denials after the global deny.
+            agents[0]['permission'].extend([
+                {'permission': 'studio_contact', 'pattern': '*', 'action': 'deny'},
+                {'permission': 'village_*', 'pattern': '*', 'action': 'deny'}])
+            response.read.return_value = json.dumps(agents).encode()
+            team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
+            for action in ('allow', 'ask'):
+                agents[0]['permission'].append({'permission': 'village_*', 'pattern': '*', 'action': action})
+                response.read.return_value = json.dumps(agents).encode()
+                with self.assertRaisesRegex(ReadinessError, 'Specialist'):
+                    team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
+                agents[0]['permission'].pop()
             agents[1]['permission'].append({'permission': 'edit', 'pattern': '*', 'action': 'allow'})
             response.read.return_value = json.dumps(agents).encode()
-            with self.assertRaisesRegex(RuntimeError, 'approval permissions'):
+            with self.assertRaisesRegex(ReadinessError, 'approval permissions'):
                 team_setup.verify_work_agent(Mock(poll=lambda: None), {'OPENCODE_SERVER_PASSWORD': 'local'}, True)
 
     def test_native_acceptance_requires_real_child_model_and_tool_result(self):
-        for fault in (None, 'shared', 'no-task', 'wrong-model', 'child-tool', 'coder-no-read'):
+        for fault in (None, 'shared', 'native', 'native-schema-recovery', 'native-no-format', 'native-no-read',
+                      'no-task', 'task-error', 'wrong-model', 'child-tool', 'coder-no-read'):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as d:
                 root = Path(d)
                 (root / 'control').mkdir()
@@ -176,14 +233,24 @@ class TeamTests(unittest.TestCase):
                 (root / 'control/essay-edit-prompt.txt').write_text('Essay prompt')
                 (root / 'control/reverse-scaffold-prompt.txt').write_text('Scaffold prompt')
                 cfg = config()
-                if fault == 'shared':
+                native_format = bool(fault and fault.startswith('native'))
+                if fault == 'shared' or native_format:
                     from captain_config import upgrade
                     cfg = upgrade(cfg)
                     cfg['captain']['single_model'] = True
+                    if native_format:
+                        cfg['captain']['provider'] = 'llama'
+                        cfg['text_models'][cfg['captain']['model_id']]['backend'] = 'llama'
                     (root / 'control/captain.mjs').write_text('// test')
                     for role in ('analyst', 'coder'):
                         del cfg['text_models'][cfg['model_team']['roles'][role]]
                 expected_roles = team_roles(cfg, cfg['text_models'])
+                if fault == 'native-schema-recovery':
+                    from test_native_session_store import create_history
+                    database = root / 'work-agent/state/data/opencode/opencode.db'
+                    database.parent.mkdir(parents=True)
+                    create_history(database, parent_id='2', call_id='actual-native-task',
+                        model_id=expected_roles['coder'], task_status='completed', read_status='completed', final=True)
                 state = {'number': 0}
                 def native(request, **kwargs):
                     url = request.full_url
@@ -195,15 +262,26 @@ class TeamTests(unittest.TestCase):
                     else:
                         role = 'analyst' if state['number'] == 1 else 'coder'
                         if '/child/' in url:
+                            if fault == 'native-schema-recovery' and role == 'coder':
+                                from urllib.error import HTTPError
+                                raise HTTPError(url, 400, 'Bad request', {},
+                                    io.BytesIO(json.dumps({'data': {'message': 'Expected OutputFormatJsonSchema'}}).encode()))
+                            use_format = native_format and role == 'coder' and fault != 'native-no-format'
                             result = [{'info': {'role': 'assistant', 'providerID': 'local-ai-gateway',
-                                'modelID': 'wrong' if fault == 'wrong-model' else expected_roles[role]},
-                                'parts': [{'type': 'text', 'text': 'Result'}] +
+                                'modelID': 'wrong' if fault == 'wrong-model' else expected_roles[role],
+                                **({'structured': {'summary': 'Fixture result'}} if use_format else {})},
+                                'parts': ([] if use_format else [{'type': 'text', 'text': 'Result'}]) +
+                                         ([{'type': 'tool', 'tool': 'StructuredOutput', 'state': {'status': 'completed'}}]
+                                          if use_format else []) +
                                          ([{'type': 'tool', 'tool': 'bash'}] if fault == 'child-tool' else
                                           [{'type': 'tool', 'tool': 'read', 'state': {'status': 'completed'}}]
-                                          if role == 'coder' and fault != 'coder-no-read' else [])}]
+                                          if role == 'coder' and fault not in ('coder-no-read', 'native-no-read') else [])}]
                         else:
                             result = [] if fault == 'no-task' else [{'parts': [{'type': 'tool', 'tool': 'task',
-                                'state': {'status': 'completed', 'input': {'subagent_type': role},
+                                'callID': 'actual-native-task',
+                                'state': {'status': 'error' if fault == 'task-error' else 'completed',
+                                          **({'error': 'SchemaError(Expected OutputFormatJsonSchema)'} if fault == 'task-error' else {}),
+                                          'input': {'subagent_type': 'coder-plan' if role == 'coder' else role},
                                           'metadata': {'sessionId': 'child', 'localTeamReview': 'ready_for_review'}}}]}]
                     return io.BytesIO(json.dumps(result).encode())
                 status = {'mode': 'max', 'instance_id': 'backend', 'epoch': 0}
@@ -213,10 +291,22 @@ class TeamTests(unittest.TestCase):
                      patch.object(team_setup.subprocess, 'Popen', return_value=Mock()), \
                      patch.object(team_setup, 'stop_process') as stop, \
                      patch.object(team_setup, 'urlopen', side_effect=native):
-                    if fault and fault != 'shared':
-                        with self.assertRaises(RuntimeError): team_setup.verify_native_handoffs(root, cfg)
+                    if fault and fault not in ('shared', 'native', 'native-schema-recovery'):
+                        with self.assertRaises(team_setup.ReadinessError) as raised:
+                            team_setup.verify_native_handoffs(root, cfg)
+                        if fault in ('no-task', 'task-error'):
+                            diagnostic = root / 'logs/native-acceptance/opencode-handoff-analyst-failure.json'
+                            saved = json.loads(diagnostic.read_text())
+                            self.assertEqual(saved['task_count'], 0 if fault == 'no-task' else 1)
+                            self.assertIn('diagnostic=' + str(diagnostic), str(raised.exception))
+                            if fault == 'task-error':
+                                self.assertIn('SchemaError(Expected OutputFormatJsonSchema)', str(raised.exception))
+                                self.assertEqual(saved['tasks'][0]['call_id'], 'actual-native-task')
                     else:
-                        self.assertEqual(len(team_setup.verify_native_handoffs(root, cfg)), 2)
+                        checks = team_setup.verify_native_handoffs(root, cfg)
+                        self.assertEqual(len(checks), 2)
+                        if fault == 'native-schema-recovery':
+                            self.assertEqual(checks[1]['history_source'], 'native_sqlite_readonly')
                     stop.assert_called_once()
 
 

@@ -49,3 +49,40 @@ class DiscordTests(unittest.TestCase):
         s.epoch=('one',1,'normal');s.process=Mock();s.process.poll.return_value=1
         with patch.object(runtime.time,'monotonic',return_value=100),patch.object(runtime,'launch') as launch:
             s.tick({'mode':'normal','instance_id':'one','epoch':1});launch.assert_not_called();self.assertEqual(s.retry_at,130)
+
+class ManagedDiscordBridgeTests(unittest.TestCase):
+    def test_ready_managed_captain_is_reused_instead_of_binding_a_second_worker(self):
+        from unittest.mock import Mock, patch
+        from managed_captain import READY_NAME
+        from discord_runtime import DiscordSupervisor
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / 'control').mkdir()
+            (root / 'control' / READY_NAME).write_text('{}')
+            config = {'discord': {'enabled': True}}
+            supervisor = DiscordSupervisor(root, config)
+            bridge, process = Mock(), Mock()
+            process.poll.return_value = None
+            bridge.app.key = 'private-bridge-key'
+            with patch('discord_runtime.port_open', side_effect=lambda port: port == 4096), \
+                 patch('managed_captain.agent_status'), \
+                 patch('managed_captain.credentials', return_value={'password': 'private-password'}), \
+                 patch('conversation.launch', return_value=(bridge, 'local')) as conversation, \
+                 patch('discord_runtime.start_adapter', return_value=process) as adapter, \
+                 patch('discord_runtime.launch') as worker:
+                supervisor.tick({'mode': 'normal', 'instance_id': 'instance', 'epoch': 1})
+                conversation.assert_called_once_with(root, 'private-password', config)
+                adapter.assert_called_once_with(root, config, 'private-bridge-key')
+                worker.assert_not_called()
+                self.assertIs(supervisor.process, process)
+                process.poll.return_value = 1
+                with patch('discord_runtime.stop_process'), patch('discord_runtime.close_bridge') as crashed_bridge:
+                    supervisor.tick({'mode': 'normal', 'instance_id': 'instance', 'epoch': 1})
+                    crashed_bridge.assert_called_once_with(bridge)
+                    self.assertIsNone(supervisor.bridge)
+                    self.assertIsNone(supervisor.process)
+                supervisor.process, supervisor.bridge = process, bridge
+            with patch('discord_runtime.stop_process') as stop, patch('discord_runtime.close_bridge') as close:
+                supervisor.stop()
+                stop.assert_called_once_with(process, timeout=30)
+                close.assert_called_once_with(bridge)

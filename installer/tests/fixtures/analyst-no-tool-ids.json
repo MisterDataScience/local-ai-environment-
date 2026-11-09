@@ -1,0 +1,32 @@
+{
+  "contract": {
+    "acceptance": [
+      {
+        "id": "A1",
+        "requirement": "Explain the supplied arithmetic.",
+        "source": {
+          "kind": "derived"
+        },
+        "source_quote": "",
+        "verification": {
+          "command": "",
+          "kind": "analysis"
+        }
+      }
+    ],
+    "assumptions": [],
+    "completed": "",
+    "constraints": "Short answer. Do not execute tools.",
+    "evidence": "17 * 20 - 17 = 323.",
+    "facts": [
+      "17 * 20 - 17 = 323."
+    ],
+    "objective": "Explain why 17 * 19 equals 323.",
+    "references": [],
+    "remaining": "Explain the supplied arithmetic.",
+    "result": "A short explanation and an honest validation statement.",
+    "return_format": "For delegated work, return one JSON object (no markdown fence): {\"summary\":\"...\",\"acceptance\":[{\"id\":\"A1\",\"status\":\"met|unmet|blocked|unverified\",\"evidence\":\"...\",\"tool_call_ids\":[]}],\"changed_files\":[],\"tests\":[{\"tool_call_id\":\"native call ID or empty when not run\",\"command\":\"exact command\",\"status\":\"passed|failed|not_run\"}],\"assumptions\":[],\"unresolved\":[]}. Address every supplied acceptance ID exactly once. Do not rewrite the requirements. Test criteria need actual matching command execution; inspection criteria need actual read/grep/glob calls. If native tool IDs are unavailable, report unverified instead of inventing IDs. Analysis evidence is your claim, not independent verification. Keep full changes in project files.",
+    "unknowns": []
+  },
+  "raw_result": "{\n  \"summary\": \"17 * 19 equals 323 because 19 can be expressed as 20 - 1. Using the distributive property: 17 * 19 = 17 * (20 - 1) = 17 * 20 - 17 * 1 = 340 - 17 = 323. This matches the supplied evidence that 17 * 20 - 17 = 323.\",\n  \"acceptance\": [\n    {\n      \"id\": \"A1\",\n      \"status\": \"met\",\n      \"evidence\": \"17 * 19 = 17 * (20 - 1) = 17 * 20 - 17 = 340 - 17 = 323.\"\n    }\n  ],\n  \"changed_files\": [],\n  \"tests\": [],\n  \"assumptions\": [],\n  \"unresolved\": []\n}"
+}

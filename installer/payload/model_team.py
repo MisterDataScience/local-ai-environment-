@@ -24,7 +24,7 @@ def preset(role):
     return {'name': role.title() + ' · ' + ('Qwen3.5 4B' if role in ('coordinator', 'document')
             else 'Qwen3.5 9B' if role == 'analyst' else 'Gemma4 12B Coder'),
             'model': model, 'num_ctx': context, 'keep_alive_seconds': 120,
-            'thinking': False, 'role': role}
+            'thinking': True, 'role': role}
 
 
 def valid_profile(value):
@@ -44,7 +44,7 @@ def upgrade_team(config):
     for role, old_id in [('coordinator', 'local-ai'), ('analyst', 'local-ai-large')]:
         old = models.get(old_id)
         stock = DEFAULT_TEXT_MODELS[old_id]
-        if old and old['model'] == stock['model'] and old['num_ctx'] == stock['num_ctx'] and not old.get('thinking'):
+        if old and old['model'] == stock['model'] and old['num_ctx'] == stock['num_ctx'] and old.get('thinking', True) is True:
             replacement = preset(role)
             replacement['keep_alive_seconds'] = old['keep_alive_seconds']
             models[old_id] = replacement
@@ -56,7 +56,7 @@ def upgrade_team(config):
             models[identifier] = preset(role)
             roles[role] = identifier
     old = models.get('local-ai-small')
-    if old and old['model'] == DEFAULT_TEXT_MODELS['local-ai-small']['model'] and old['num_ctx'] == 16384 and not old.get('thinking'):
+    if old and old['model'] == DEFAULT_TEXT_MODELS['local-ai-small']['model'] and old['num_ctx'] == 16384 and old.get('thinking', True) is True:
         replacement = preset('coordinator')
         replacement['keep_alive_seconds'] = old['keep_alive_seconds']
         models['local-ai-small'] = replacement

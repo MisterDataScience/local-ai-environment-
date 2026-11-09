@@ -25,7 +25,7 @@ from commons import Commons
 class GatewayCommonsTests(unittest.TestCase):
     def test_foreground_request_pauses_four_real_gateway_admissions(self):
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder)/'control';root.mkdir()
+            root=Path(folder).resolve()/'control';root.mkdir()
             config=upgrade(upgrade_team(upgrade_text_configuration({'text_model':'qwen3:14b'})))
             engine=Engine(config,root)
             c=Commons(engine,connector=lambda path:village.connect(path,test_encrypted=True));engine.commons=c
@@ -104,7 +104,7 @@ class GatewayCommonsTests(unittest.TestCase):
         base='http://127.0.0.1:'+str(server.server_port)
         try:
             with urlopen(base+'/institutions',timeout=3) as response:
-                page=response.read().decode();self.assertIn('Lead Designer',page);self.assertNotIn('fixture-key',page)
+                page=response.read().decode();self.assertIn('Studio Lead',page);self.assertNotIn('fixture-key',page)
             for path in ('/control/studios','/control/studio-upload?token=test&offset=0'):
                 with self.assertRaises(HTTPError) as caught:urlopen(Request(base+path,data=b'{}'),timeout=3)
                 self.assertEqual(caught.exception.code,401)
