@@ -10,8 +10,13 @@ from scheduled_tasks import atomic_json
 
 
 def fingerprint(pid):
+    # LaunchAgents and interactive shells can use different locales. Without a
+    # fixed locale, macOS ps formats lstart differently and rejects the same
+    # process when Stop compares this value with the stored owner identity.
+    environment = os.environ.copy()
+    environment['LC_ALL'] = 'C'
     result = subprocess.run(['/bin/ps', '-p', str(pid), '-o', 'lstart=', '-o', 'command='],
-                            capture_output=True, text=True, timeout=5)
+                            capture_output=True, text=True, timeout=5, env=environment)
     return result.stdout.strip() if result.returncode == 0 else ''
 
 
