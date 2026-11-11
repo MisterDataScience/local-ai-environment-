@@ -62,10 +62,28 @@ def speech(root, config):
             'listening_quality': 'not_run'}
 
 
+class MediaImageAssetFailure(RuntimeError):
+    pass
+
+
+class MediaVideoAssetFailure(RuntimeError):
+    pass
+
+
+class MediaImageTextHandoffFailure(RuntimeError):
+    pass
+
+
+class MediaVideoTextHandoffFailure(RuntimeError):
+    pass
+
+
 def media(root):
     from installer import verify_text_residency
     from text_models import configured_text_models
     results = {}
+    asset_failures = {'image': MediaImageAssetFailure, 'video': MediaVideoAssetFailure}
+    handoff_failures = {'image': MediaImageTextHandoffFailure, 'video': MediaVideoTextHandoffFailure}
     with services(root, ('media',)) as config:
         presets = configured_text_models(config)
         for kind, prompt, extension in (
@@ -75,14 +93,22 @@ def media(root):
                 {'model': 'local-ai', 'messages': [{'role': 'user', 'content': prompt}]},
                 key=config['api_key'], timeout=4000)
             content = answer['choices'][0]['message']['content']
-            if extension not in content:
-                raise RuntimeError('Native media generation did not return a saved asset')
+            if not isinstance(content, str) or extension not in content:
+                raise asset_failures[kind]('Native media generation did not return a saved asset')
             verify_text_residency(config, presets, None)
-            answer = http('http://127.0.0.1:8001/v1/chat/completions',
-                {'model': 'local-ai', 'messages': [{'role': 'user', 'content': 'Reply with one sentence about art.'}]},
-                key=config['api_key'], timeout=4000)
-            if not answer['choices'][0]['message']['content'].strip():
-                raise RuntimeError('Text generation failed after media handoff')
+            text_payload = {'model': 'local-ai', 'messages': [{'role': 'user', 'content': 'Reply with one sentence about art.'}]}
+            # Retry only the text handoff once if it returns an empty 200 response.
+            # Never repeat an image or video generation attempt.
+            text = ''
+            for _ in range(2):
+                answer = http('http://127.0.0.1:8001/v1/chat/completions',
+                    text_payload, key=config['api_key'], timeout=4000)
+                message = answer.get('choices', [{}])[0].get('message', {})
+                text = message.get('content', '') if isinstance(message, dict) else ''
+                if isinstance(text, str) and text.strip():
+                    break
+            if not isinstance(text, str) or not text.strip():
+                raise handoff_failures[kind]('Text generation returned empty content after media handoff')
             verify_text_residency(config, presets, 'local-ai')
             results[kind + '_and_text_handoff'] = 'passed'
     return results
