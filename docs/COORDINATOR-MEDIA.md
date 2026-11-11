@@ -21,7 +21,9 @@ remain available through the original chat interface.
 - The existing single-worker queue controls model loading. Text models unload
   before rendering; ComfyUI stops before text work resumes.
 - At most two media attempts per explicit user turn, separate from the two
-  specialist attempts. No automatic retries. Denied approvals consume no attempt.
+  specialist attempts. Media jobs are never automatically retried. An empty
+  text-only handoff after a completed media job may be retried once by native
+  acceptance; denied approvals consume no attempt.
 - Only native top-level Plan/Build sessions can execute these tools. Coder,
   analyst and document sessions cannot invoke them through the policy.
 - Prompts cannot select arbitrary workflows, checkpoints, filesystem paths,
